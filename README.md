@@ -249,22 +249,32 @@ Measured in a browser against the production setup (gunicorn, one worker):
 
 ## Deployment on Render
 
-The repository is a ready Blueprint:
+The app runs on Render as the web service **edc-report** (project *edc-report*, environment
+*Production*, free plan, Frankfurt). `render.yaml` is the Blueprint of that service: it is
+based on Render's export of the live service, plus the settings the app relies on.
 
-1. Render → **New → Blueprint** → pick this repository → **Apply**.
-2. Render installs `requirements.txt` on Python 3.11 and starts
-   `gunicorn app:server -c gunicorn.conf.py`, with health check `/healthz`. Every push to
-   `main` redeploys.
-3. Optionally set `BASIC_AUTH_USER` and `BASIC_AUTH_PASSWORD` to password-protect the app.
+| Setting | Value |
+|---|---|
+| Build | `pip install -r requirements.txt` (Python 3.11 from `.python-version`) |
+| Start | `gunicorn app:server -c gunicorn.conf.py` |
+| Health check | `/healthz` |
+| Auto-deploy | every commit to `main` |
+| Environment | `EDC_CACHE_MAX=6`, `EDC_MAX_UPLOAD_MB=25`, `EDC_MAX_JOBS=2`; optionally `BASIC_AUTH_USER` and `BASIC_AUTH_PASSWORD` |
+
+To set it up from scratch, use Render → **New → Blueprint** → this repository → **Apply**.
 
 Notes:
+
+* **Existing service:** the live service was created in the dashboard with the start command
+  `gunicorn app:app`. That works too: Dash 4 is a WSGI app, and gunicorn loads
+  `gunicorn.conf.py` from the repository root on its own. Changes to `render.yaml` reach a
+  service only when it is managed by a Blueprint; otherwise set the health check and the
+  environment variables in the service settings.
 
 * **Free plan:** 512 MB, and it sleeps after 15 minutes without traffic. The first visit then
   waits about a minute, and uploaded reports are gone; the page says so and asks for the file
   again. The *0.5c-512mb* plan ($7/month) stays up.
 * **Memory:** both plans have 512 MB. Keep `EDC_CACHE_MAX` about 6.
-* **Changing the Blueprint:** if you created the service before `gunicorn.conf.py` existed,
-  update its start command to the one above (or re-sync the Blueprint).
 * **Keep one worker.** Do not add `--workers N`, and do not rely on `WEB_CONCURRENCY` (see
   *Architecture*).
 
