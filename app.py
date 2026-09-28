@@ -313,6 +313,18 @@ def _source_rows(data: SharingData, lang: str) -> list:
     ]
 
 
+def _upload_content(lang: str, loaded: bool) -> html.Div:
+    """Text inside the upload box: big prompt before a report is loaded, one line after."""
+    if loaded:
+        return html.Div([html.Span("⤒ "), t("upload_other", lang)],
+                        className="upload-small-text")
+    return html.Div([
+        html.Div("⤒", className="upload-icon"),
+        html.Div(t("upload_prompt", lang), className="upload-main"),
+        html.Div(t("upload_hint", lang), className="upload-hint"),
+    ])
+
+
 def _static_panel() -> html.Div:
     """Source names + ONE grid for all destinations (tick, name, key).
 
@@ -429,7 +441,10 @@ app.layout = html.Div(className="page", children=[
     dcc.Upload(
         id="upload", multiple=False, accept=".csv,text/csv",
         className="upload upload-big",
-        children=html.Div(id="upload-text"),
+        # static content in the layout: the box is never empty, even before the
+        # label callback answers; the callback replaces Upload.children as a whole
+        # (a nested child's update was sometimes lost inside dcc.Upload)
+        children=_upload_content("cs", False),
     ),
     # spinner only next to the upload: wrapping the report in dcc.Loading would hide
     # (unmount) it while the upload callback runs and drop updates arriving meanwhile
@@ -557,7 +572,7 @@ app.clientside_callback(
 
 
 @app.callback(
-    Output("upload-text", "children"),
+    Output("upload", "children"),
     Output("lbl-display", "children"),
     Output("lbl-yscale", "children"),
     Output("yscale", "options"),
@@ -586,18 +601,8 @@ app.clientside_callback(
     Input("data-key", "data"),
 )
 def _labels(lang, key):
-    loaded = _cache_get(key) is not None
-    upload_text = (
-        html.Div([html.Span("⤒ "), t("upload_other", lang)], className="upload-small-text")
-        if loaded else
-        html.Div([
-            html.Div("⤒", className="upload-icon"),
-            html.Div(t("upload_prompt", lang), className="upload-main"),
-            html.Div(t("upload_hint", lang), className="upload-hint"),
-        ])
-    )
     return (
-        upload_text,
+        _upload_content(lang, _cache_get(key) is not None),
         t("panel_display", lang),
         t("yscale", lang),
         [{"label": t("linear", lang), "value": "linear"},
