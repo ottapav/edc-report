@@ -22,7 +22,11 @@ from __future__ import annotations
 
 import io
 import re
+import threading
+import weakref
+from collections import OrderedDict
 from dataclasses import dataclass, field
+from functools import wraps
 
 import numpy as np
 import pandas as pd
@@ -37,6 +41,46 @@ _RE_CONS_OUT = re.compile(r"^OUT-(\d+)-O$")
 # ---------------------------------------------------------------------------
 # Column-key helpers
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Memoisation of derived data
+# ---------------------------------------------------------------------------
+# One page render needs the same filtered frame, aggregates and totals several
+# times (tiles, tables, several figures, both reports). They are cached per
+# source object (held by weak reference, so evicting an upload frees it) and
+# per the remaining hashable arguments.
+
+_MEMO: "OrderedDict[tuple, tuple]" = OrderedDict()
+_MEMO_MAX = 48
+_MEMO_LOCK = threading.Lock()
+
+
+def _freeze(v):
+    if isinstance(v, (set, frozenset)):
+        return frozenset(v)
+    if isinstance(v, (list, tuple)):
+        return tuple(_freeze(x) for x in v)
+    return v
+
+
+def memoized(fn):
+    """Cache ``fn(obj, *args)`` by the identity of ``obj`` and the value of args."""
+    @wraps(fn)
+    def wrapper(obj, *args, **kwargs):
+        key = (fn.__qualname__, id(obj), _freeze(args), _freeze(tuple(sorted(kwargs.items()))))
+        with _MEMO_LOCK:
+            hit = _MEMO.get(key)
+            if hit is not None and hit[0]() is obj:
+                _MEMO.move_to_end(key)
+                return hit[1]
+        value = fn(obj, *args, **kwargs)
+        with _MEMO_LOCK:
+            _MEMO[key] = (weakref.ref(obj), value)
+            while len(_MEMO) > _MEMO_MAX:
+                _MEMO.popitem(last=False)
+        return value
+    return wrapper
 
 
 def key_shared(src: str, dst: str) -> str:
@@ -254,15 +298,17 @@ def load_report(content: bytes) -> SharingData:
             continue
     if text is None:  # pragma: no cover - latin-1 never fails
         raise ValueError("Could not decode the file.")
+    text_cols = {"Datum": str, "Cas od": str, "Cas do": str}
     raw = pd.read_csv(
         io.StringIO(text), sep=";", decimal=",", skipinitialspace=True,
-        index_col=False, dtype=str,
+        index_col=False, dtype=text_cols,
     )
     raw.columns = [str(c).strip() for c in raw.columns]
-    # numeric columns were read as str to keep 'Datum' / 'Cas od' intact
+    # numbers are parsed by read_csv (decimal comma); only odd columns need help
     for c in raw.columns:
-        if c not in ("Datum", "Cas od", "Cas do"):
-            raw[c] = pd.to_numeric(raw[c].str.replace(",", ".", regex=False), errors="coerce")
+        if c not in text_cols and raw[c].dtype == object:
+            raw[c] = pd.to_numeric(raw[c].astype(str).str.replace(",", ".", regex=False),
+                                   errors="coerce")
     raw = raw.dropna(subset=["Datum"]) if "Datum" in raw.columns else raw
     fmt = _detect_format(list(raw.columns))
     return _load_part(raw) if fmt == "part" else _load_all(raw)
@@ -273,6 +319,7 @@ def load_report(content: bytes) -> SharingData:
 # ---------------------------------------------------------------------------
 
 
+@memoized
 def filter_dests(data: SharingData, enabled: set[str]) -> pd.DataFrame:
     """Keep columns of checked destinations; producer-side columns always stay."""
     keep = [c for c in data.frame.columns
@@ -284,6 +331,7 @@ def shared_cols(df: pd.DataFrame) -> list[str]:
     return [c for c in df.columns if key_kind(c) == "shared"]
 
 
+@memoized
 def aggregate_grid_flows(df: pd.DataFrame) -> pd.DataFrame:
     """Shared pair columns + one ``GRID_UNSHARED`` + one ``GRID_UNMET`` column."""
     parts: dict[str, pd.Series] = {c: df[c] for c in shared_cols(df)}
@@ -305,6 +353,7 @@ class WastedSplit:
     unmet_total: float
 
 
+@memoized
 def compute_wasted_split(df: pd.DataFrame) -> WastedSplit:
     """Shared / wasted overlap ``min(unshared, unmet)`` per interval / unshared-only."""
     agg = aggregate_grid_flows(df)
@@ -351,6 +400,7 @@ class Summary:
     days_with_sharing: int
 
 
+@memoized
 def summarize(data: SharingData, enabled: set[str]) -> Summary:
     df = filter_dests(data, enabled)
     idx = data.frame.index
@@ -386,6 +436,7 @@ def summarize(data: SharingData, enabled: set[str]) -> Summary:
     )
 
 
+@memoized
 def per_destination(data: SharingData) -> pd.DataFrame:
     """One row per destination EAN (all destinations, ignoring selection)."""
     rows = []

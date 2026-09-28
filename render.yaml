@@ -9,9 +9,9 @@ services:
     plan: free
     region: frankfurt
     buildCommand: pip install -r requirements.txt
-    # ONE worker process: uploads, recompute jobs and progress live in its memory.
-    # Threads serve the progress polling while a recompute runs.
-    startCommand: gunicorn app:server --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:$PORT
+    # gunicorn.conf.py pins ONE worker: uploads, key estimates, jobs and their
+    # progress live in its memory. Threads serve the progress polling.
+    startCommand: gunicorn app:server -c gunicorn.conf.py
     healthCheckPath: /healthz
     autoDeployTrigger: commit
     envVars:
@@ -19,6 +19,8 @@ services:
         value: "6"
       - key: SHAREL_MAX_UPLOAD_MB
         value: "25"
+      - key: SHAREL_MAX_JOBS          # computations at once (instance has < 1 CPU)
+        value: "2"
       - key: BASIC_AUTH_USER          # optional: set both to password-protect the app
         sync: false
       - key: BASIC_AUTH_PASSWORD

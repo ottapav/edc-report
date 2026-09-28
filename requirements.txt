@@ -1,5 +1,6 @@
 # versions tested together (Python 3.11)
 dash==4.4.1
+dash-ag-grid==35.3.0
 plotly==7.1.0
 pandas==3.0.2
 numpy==2.4.4

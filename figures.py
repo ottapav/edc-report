@@ -1,9 +1,16 @@
-"""Plotly versions of Figure 1 (subplots 1 & 2) and Figure 2 (pie).
+"""Plotly versions of the figures of ``plot_energy_sharing.py``.
 
-Colours follow ``plot_energy_sharing.py``: tab10 per destination (fixed by
-destination order, so unticking one never repaints the others), greys for
-grid flows, green for the source, black for summary rows, red for "could
-have been shared".
+* Figure 1, subplot 1 - total energy by flow      (:func:`fig_total_by_flow`)
+* Figure 1, subplot 2 - daily energy               (:func:`fig_daily`)
+* Figure 1, subplot 3 - heatmap hour × month       (:func:`fig_heatmap`)
+* Figure 1, subplot 4 - sharing on one day         (:func:`fig_intraday`)
+* Figure 2            - shared / wasted pie        (:func:`fig_wasted_pie`)
+
+Colours follow the script: tab10 per destination (fixed by destination order, so
+unticking one never repaints the others), greys for grid flows, green for the
+source, black for summary rows, red for "could have been shared". Every figure
+takes a theme (:data:`THEMES`); the dark theme uses its own greys, summary colour
+and heatmap scale rather than an inverted light one.
 """
 
 from __future__ import annotations
@@ -15,24 +22,104 @@ import plotly.graph_objects as go
 from i18n import fmt_num, month_label, plotly_separators, t
 from sharel_core import (
     SharingData, WastedSplit, aggregate_grid_flows, key_dest, key_kind,
-    key_source, key_unmet, shared_cols,
+    key_source, key_unmet, memoized, shared_cols,
 )
 
 TAB10 = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
          "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
-GREY_UNSHARED = "#8c8c8c"   # (0.55, 0.55, 0.55)
-GREY_UNMET = "#c7c7c7"      # (0.78, 0.78, 0.78)
-RED_WASTED = "#cc3326"      # (0.80, 0.20, 0.15)
-SOURCE_GREEN = "#339933"    # (0.20, 0.60, 0.20)
-TOTAL_BLACK = "rgba(0,0,0,0.9)"
+FONT_FAMILY = "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
 
-FONT = dict(family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif", size=12,
-            color="#1f2328")
+THEMES: dict[str, dict] = {
+    "light": dict(
+        paper="#ffffff", ink="#1f2328", muted="#57606a", grid="#ececec",
+        unshared="#8c8c8c", unmet="#c7c7c7", total="rgba(0,0,0,0.9)",
+        source="#339933", wasted="#cc3326", marker="#000000",
+        label_bg="rgba(255,255,255,0.85)", hover_bg="#ffffff", hover_border="#d0d7de",
+        heat="YlOrRd", area_alpha=0.75,
+    ),
+    "dark": dict(
+        paper="#161b22", ink="#e6edf3", muted="#9da7b3", grid="#2a313c",
+        unshared="#7d8590", unmet="#3d444d", total="#e6edf3",
+        source="#3da63d", wasted="#e5534b", marker="#e6edf3",
+        label_bg="rgba(22,27,34,0.85)", hover_bg="#1c2128", hover_border="#3d444d",
+        # dark surface: low values stay near the surface, high values glow
+        heat=[[0.0, "#1c2128"], [0.2, "#4a1d1a"], [0.45, "#a52a22"],
+              [0.7, "#e8742a"], [1.0, "#ffe08a"]],
+        area_alpha=0.85,
+    ),
+}
 
 
-def colour_map(data: SharingData) -> dict[str, str]:
-    """Destination EAN -> tab10 colour, fixed by file order."""
-    return {e: TAB10[i % 10] for i, e in enumerate(data.dest_eans)}
+MAX_SERIES = 10            # tab10 has 10 hues; more destinations fold into "Others"
+OTHER = "__other__"        # pseudo destination EAN of the folded rest
+OTHER_COLOUR = TAB10[9]
+
+
+def theme(name: str | None) -> dict:
+    return THEMES.get(name or "light", THEMES["light"])
+
+
+def top_dests(df: pd.DataFrame, data: SharingData) -> tuple[str, ...] | None:
+    """Destinations shown individually when there are more than MAX_SERIES.
+
+    The 9 with the most shared energy in ``df`` (pass today's report, so the
+    recomputed column folds the same members and keeps the same colours); the
+    rest is drawn as one "Others" series. ``None`` = no folding needed.
+    """
+    if len(data.dest_eans) <= MAX_SERIES:
+        return None
+    totals: dict[str, float] = {}
+    for c in shared_cols(df):
+        totals[key_dest(c)] = totals.get(key_dest(c), 0.0) + float(df[c].sum())
+    ranked = sorted(totals, key=lambda e: -totals[e])
+    return tuple(ranked[:MAX_SERIES - 1])
+
+
+def colour_map(data: SharingData, top: tuple[str, ...] | None = None) -> dict[str, str]:
+    """Destination EAN -> tab10 colour: by file order for up to 10 destinations;
+    for larger groups by rank among the shown ones, the rest share OTHER_COLOUR
+    (hues are never cycled)."""
+    if top is None:
+        return {e: TAB10[i % 10] for i, e in enumerate(data.dest_eans)}
+    cmap = {e: OTHER_COLOUR for e in data.dest_eans}
+    cmap.update({e: TAB10[i] for i, e in enumerate(top)})
+    cmap[OTHER] = OTHER_COLOUR
+    return cmap
+
+
+@memoized
+def _fold(df: pd.DataFrame, top: tuple[str, ...]) -> tuple[pd.DataFrame, int]:
+    """Sum shared / unmet of the destinations outside ``top`` into OTHER columns."""
+    keep, other_shared, other_unmet, rest = [], [], [], set()
+    src = None
+    for c in df.columns:
+        d = key_dest(c)
+        if d is None or d in top:
+            keep.append(c)
+        elif key_kind(c) == "shared":
+            other_shared.append(c)
+            src = src or key_source(c)
+            rest.add(d)
+        else:
+            other_unmet.append(c)
+            rest.add(d)
+    out = df[keep].copy()
+    if other_shared:
+        out[f"shared|{src}|{OTHER}"] = df[other_shared].sum(axis=1)
+    if other_unmet:
+        out[f"unmet|{OTHER}"] = df[other_unmet].sum(axis=1)
+    return out, len(rest)
+
+
+def _folded(df: pd.DataFrame, data: SharingData, names: dict[str, str], lang: str,
+            top: tuple[str, ...] | None):
+    """(frame, names, colours) for plotting, with the rest folded when needed."""
+    if top is None:
+        return df, names, colour_map(data)
+    out, n_rest = _fold(df, top)
+    names = dict(names)
+    names[OTHER] = t("others", lang).format(n=n_rest)
+    return out, names, colour_map(data, top)
 
 
 def _rgba(hex_colour: str, alpha: float) -> str:
@@ -54,33 +141,52 @@ def series_label(key: str, names: dict[str, str], lang: str) -> str:
     return f"{names[key_source(key)]} → {t('grid', lang)} {t('unshared_paren', lang)}"
 
 
-def series_colour(key: str, cmap: dict[str, str]) -> str:
+def series_colour(key: str, cmap: dict[str, str], th: dict) -> str:
     if key == "GRID_UNSHARED" or key_kind(key) == "unshared":
-        return GREY_UNSHARED
+        return th["unshared"]
     if key == "GRID_UNMET" or key_kind(key) == "unmet":
-        return GREY_UNMET
+        return th["unmet"]
     return cmap.get(key_dest(key), TAB10[0])
 
 
-def _base_layout(fig: go.Figure, title: str, lang: str, height: int) -> None:
-    fig.update_layout(
+def _figure(title: str, lang: str, height: int, th: dict) -> go.Figure:
+    """Empty figure with the common layout, set in one validated call."""
+    return go.Figure(layout=dict(
         title=dict(text=title, x=0.01, xanchor="left", font=dict(size=15)),
         height=height,
         margin=dict(l=10, r=20, t=50, b=10),
-        font=FONT,
-        paper_bgcolor="white",
-        plot_bgcolor="white",
+        font=dict(family=FONT_FAMILY, size=12, color=th["ink"]),
+        paper_bgcolor=th["paper"],
+        plot_bgcolor=th["paper"],
         separators=plotly_separators(lang),
-        hoverlabel=dict(font=dict(family=FONT["family"], size=12)),
-    )
+        hoverlabel=dict(font=dict(family=FONT_FAMILY, size=12, color=th["ink"]),
+                        bgcolor=th["hover_bg"], bordercolor=th["hover_border"]),
+        legend=dict(bgcolor="rgba(0,0,0,0)"),
+        xaxis=dict(gridcolor=th["grid"], linecolor=th["grid"], zerolinecolor=th["grid"]),
+        yaxis=dict(gridcolor=th["grid"], linecolor=th["grid"], zerolinecolor=th["grid"]),
+        meta=dict(marker=th["marker"]),   # read by the clientside day-marker callback
+    ))
 
 
-def _no_data(fig: go.Figure, lang: str) -> go.Figure:
+def _no_data(fig: go.Figure, lang: str, th: dict) -> go.Figure:
     fig.add_annotation(text=t("no_data", lang), x=0.5, y=0.5, xref="paper",
-                       yref="paper", showarrow=False, font=dict(size=14, color="#666"))
-    fig.update_xaxes(visible=False)
-    fig.update_yaxes(visible=False)
+                       yref="paper", showarrow=False, font=dict(size=14, color=th["muted"]))
+    fig.update_layout(xaxis_visible=False, yaxis_visible=False)
     return fig
+
+
+@memoized
+def grid_flows(df: pd.DataFrame, show_unshared: bool, show_unmet: bool) -> pd.DataFrame:
+    """Shared pairs + aggregated grid flows, without the hidden grid columns."""
+    agg = aggregate_grid_flows(df)
+    drop = [c for c, on in (("GRID_UNSHARED", show_unshared), ("GRID_UNMET", show_unmet))
+            if not on and c in agg.columns]
+    return agg.drop(columns=drop) if drop else agg
+
+
+@memoized
+def daily_totals(df: pd.DataFrame, show_unshared: bool, show_unmet: bool) -> pd.DataFrame:
+    return grid_flows(df, show_unshared, show_unmet).resample("D").sum().fillna(0)
 
 
 # ---------------------------------------------------------------------------
@@ -96,16 +202,18 @@ def fig_total_by_flow(
     show_unshared: bool = True,
     show_unmet: bool = True,
     lang: str = "cs",
+    th: dict | None = None,
+    top: tuple[str, ...] | None = None,
 ) -> go.Figure:
     """Stacked horizontal bars, bottom-to-top: destinations (shared | unmet,
     ascending by shared), source (shared | unshared), gap, summary rows."""
-    fig = go.Figure()
-    _base_layout(fig, t("total_by_flow_title", lang), lang, 420)
+    th = th or THEMES["light"]
+    fig = _figure(t("total_by_flow_title", lang), lang, 420, th)
+    df, names, cmap = _folded(df, data, names, lang, top)
     totals = df.sum()
-    cmap = colour_map(data)
     sc = shared_cols(df)
     if not sc:
-        return _no_data(fig, lang)
+        return _no_data(fig, lang, th)
 
     unshared_cols = [c for c in df.columns if key_kind(c) == "unshared"]
     unmet_cols = [c for c in df.columns if key_kind(c) == "unmet"]
@@ -114,20 +222,20 @@ def fig_total_by_flow(
     show_total_source = show_unshared and n_sources > 1
     show_total_dest = show_unmet and n_dests > 1
 
-    rows: list[dict] = []  # label, shared, second, c1, c2, second_label, summary
+    rows: list[dict | None] = []
     for col in totals[sc].sort_values(ascending=True).index:
         dst = key_dest(col)
         label = names[dst] if n_sources == 1 else series_label(col, names, lang)
         u = float(totals.get(key_unmet(dst), 0.0)) if show_unmet else 0.0
         rows.append(dict(label=label, s=float(totals[col]), u=u,
-                         c1=cmap.get(dst, TAB10[0]), c2=GREY_UNMET,
+                         c1=cmap.get(dst, TAB10[0]), c2=th["unmet"],
                          u_lab=t("unmet", lang), summary=False))
 
     total_shared = float(totals[sc].sum())
     total_unshared = float(totals[unshared_cols].sum()) if show_unshared and unshared_cols else 0.0
     src_label = names[key_source(sc[0])] if n_sources == 1 else t("source", lang)
     rows.append(dict(label=src_label, s=total_shared, u=total_unshared,
-                     c1=SOURCE_GREEN, c2=GREY_UNSHARED,
+                     c1=th["source"], c2=th["unshared"],
                      u_lab=t("unshared", lang), summary=False))
 
     total_unmet = float(totals[unmet_cols].sum()) if show_unmet and unmet_cols else 0.0
@@ -135,11 +243,11 @@ def fig_total_by_flow(
         rows.append(None)  # visual gap
     if show_total_source:
         rows.append(dict(label=t("total_source", lang), s=total_shared, u=total_unshared,
-                         c1=TOTAL_BLACK, c2=GREY_UNSHARED,
+                         c1=th["total"], c2=th["unshared"],
                          u_lab=t("unshared", lang), summary=True))
     if show_total_dest:
         rows.append(dict(label=t("total_destination", lang), s=total_shared, u=total_unmet,
-                         c1=TOTAL_BLACK, c2=GREY_UNMET,
+                         c1=th["total"], c2=th["unmet"],
                          u_lab=t("unmet", lang), summary=True))
 
     y = list(range(len(rows)))
@@ -148,7 +256,7 @@ def fig_total_by_flow(
 
     fig.add_bar(
         y=[i for i, _ in real], x=[r["s"] for _, r in real], orientation="h",
-        marker=dict(color=[r["c1"] for _, r in real], line=dict(color="white", width=1)),
+        marker=dict(color=[r["c1"] for _, r in real], line=dict(color=th["paper"], width=1)),
         name=t("shared", lang),
         customdata=[r["label"] for _, r in real],
         hovertemplate="%{customdata}<br>" + t("shared", lang) + ": %{x:,.1f} kWh<extra></extra>",
@@ -156,11 +264,12 @@ def fig_total_by_flow(
     fig.add_bar(
         y=[i for i, _ in real], x=[r["u"] for _, r in real], orientation="h",
         base=[r["s"] for _, r in real],
-        marker=dict(color=[r["c2"] for _, r in real], line=dict(color="white", width=1)),
+        marker=dict(color=[r["c2"] for _, r in real], line=dict(color=th["paper"], width=1)),
         name=f"{t('unmet', lang)} / {t('unshared', lang)}",
         customdata=[[r["label"], r["u_lab"]] for _, r in real],
         hovertemplate="%{customdata[0]}<br>%{customdata[1]}: %{x:,.1f} kWh<extra></extra>",
     )
+    annotations = []
     for i, r in real:
         width = r["s"] + r["u"]
         if r["u"] > 0:
@@ -170,26 +279,26 @@ def fig_total_by_flow(
             txt = f"{fmt_num(width, lang, 2)} kWh"
         if r["summary"]:
             txt = f"<b>{txt}</b>"
-        # long bars: label inside the (light grey) second segment, else after the bar
+        # long bars: label inside the (grey) second segment, else after the bar
         inside = width > 0.55 * max_val
-        fig.add_annotation(
+        annotations.append(dict(
             x=width - max_val * 0.01 if inside else width + max_val * 0.01, y=i,
             text=txt, showarrow=False, xanchor="right" if inside else "left",
-            font=dict(size=11, color="#1f2328"),
-            bgcolor="rgba(255,255,255,0.8)" if inside else None, borderpad=2,
-        )
-
-    fig.update_layout(barmode="overlay", showlegend=False, bargap=0.25)
-    fig.update_xaxes(title=t("total_energy_xlabel", lang), range=[0, max_val * 1.35],
-                     showgrid=True, gridcolor="#e8e8e8", zeroline=False,
-                     tickformat=",.0f")
-    fig.update_yaxes(
-        tickvals=y,
-        ticktext=[("" if r is None else (f"<b>{r['label']}</b>" if r["summary"] else r["label"]))
-                  for r in rows],
-        range=[-0.6, len(rows) - 0.4], showgrid=False, ticklabelstandoff=8,
+            font=dict(size=11, color=th["ink"]),
+            bgcolor=th["label_bg"] if inside else None, borderpad=2,
+        ))
+    fig.update_layout(
+        annotations=annotations, barmode="overlay", showlegend=False, bargap=0.25,
+        height=max(320, 90 + 38 * len(rows)),
+        xaxis=dict(title=t("total_energy_xlabel", lang), range=[0, max_val * 1.35],
+                   showgrid=True, zeroline=False, tickformat=",.0f"),
+        yaxis=dict(
+            tickvals=y,
+            ticktext=[("" if r is None else (f"<b>{r['label']}</b>" if r["summary"] else r["label"]))
+                      for r in rows],
+            range=[-0.6, len(rows) - 0.4], showgrid=False, ticklabelstandoff=8,
+        ),
     )
-    fig.update_layout(height=max(320, 90 + 38 * len(rows)))
     return fig
 
 
@@ -205,6 +314,15 @@ def _month_ticks(index: pd.DatetimeIndex, lang: str) -> tuple[list, list]:
     return list(months), [month_label(m, lang) for m in months]
 
 
+def day_marker(day: str | None, th: dict | None = None) -> list[dict]:
+    """Dashed vertical line on the daily plot at the selected day (script: axvline)."""
+    if not day:
+        return []
+    colour = (th or THEMES["light"])["marker"]
+    return [dict(type="line", xref="x", yref="paper", x0=day, x1=day, y0=0, y1=1,
+                 line=dict(color=colour, width=1.5, dash="dash"), layer="above")]
+
+
 def fig_daily(
     df: pd.DataFrame,
     data: SharingData,
@@ -215,31 +333,24 @@ def fig_daily(
     show_unmet: bool = True,
     lang: str = "cs",
     sel_day: str | None = None,
+    th: dict | None = None,
+    top: tuple[str, ...] | None = None,
 ) -> go.Figure:
     """Stacked areas of daily kWh (linear) or unstacked lines (log).
     ``sel_day`` draws the dashed selected-day marker; click a day to select it."""
-    agg = aggregate_grid_flows(df)
-    if not show_unshared:
-        agg = agg.drop(columns="GRID_UNSHARED", errors="ignore")
-    if not show_unmet:
-        agg = agg.drop(columns="GRID_UNMET", errors="ignore")
+    th = th or THEMES["light"]
     log = yscale == "log"
-    fig = go.Figure()
-    _base_layout(fig, t("daily_title_lines" if log else "daily_title", lang), lang, 420)
-    if agg.empty or len(agg.columns) == 0:
-        return _no_data(fig, lang)
+    fig = _figure(t("daily_title_lines" if log else "daily_title", lang), lang, 460, th)
+    df, names, cmap = _folded(df, data, names, lang, top)
+    daily = daily_totals(df, show_unshared, show_unmet)
+    if daily.empty or len(daily.columns) == 0:
+        return _no_data(fig, lang, th)
 
-    daily = agg.resample("D").sum().fillna(0)
-    cmap = colour_map(data)
-    date_txt = daily.index.strftime("%d.%m.%Y" if lang == "cs" else "%Y-%m-%d")
     for col in daily.columns:
-        colour = series_colour(col, cmap)
+        colour = series_colour(col, cmap, th)
         vals = daily[col].to_numpy()
-        common = dict(
-            x=daily.index, name=series_label(col, names, lang),
-            hovertemplate="%{y:,.2f} kWh",
-            customdata=date_txt,
-        )
+        common = dict(x=daily.index, name=series_label(col, names, lang),
+                      hovertemplate="%{y:,.2f} kWh")
         if log:
             fig.add_scatter(y=np.where(vals > 0, vals, np.nan), mode="lines",
                             line=dict(color=colour, width=1.2), opacity=0.9,
@@ -247,25 +358,22 @@ def fig_daily(
         else:
             fig.add_scatter(y=vals, mode="lines", stackgroup="one",
                             line=dict(color=colour, width=0.6),
-                            fillcolor=_rgba(colour, 0.75), **common)
+                            fillcolor=_rgba(colour, th["area_alpha"]), **common)
 
     tickvals, ticktext = _month_ticks(daily.index, lang)
-    fig.update_xaxes(tickvals=tickvals, ticktext=ticktext, tickangle=-30,
-                     showgrid=True, gridcolor="#ececec",
-                     hoverformat="%d.%m.%Y" if lang == "cs" else "%Y-%m-%d")
-    fig.update_yaxes(title=t("daily_ylabel", lang), showgrid=True, gridcolor="#ececec",
-                     type="log" if log else "linear", zeroline=False)
+    yaxis = dict(title=t("daily_ylabel", lang), showgrid=True,
+                 type="log" if log else "linear", zeroline=False)
     if log:
         ymax = float(np.nanmax(daily.to_numpy())) if daily.size else 1.0
-        fig.update_yaxes(range=[-2, np.log10(max(ymax, 0.1)) + 0.1], dtick=1,
-                         tickformat=",.2~f")
+        yaxis.update(range=[-2, np.log10(max(ymax, 0.1)) + 0.1], dtick=1, tickformat=",.2~f")
     fig.update_layout(
+        xaxis=dict(tickvals=tickvals, ticktext=ticktext, tickangle=-30, showgrid=True,
+                   hoverformat="%d.%m.%Y" if lang == "cs" else "%Y-%m-%d"),
+        yaxis=yaxis,
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="left", x=0,
                     font=dict(size=11)),
-        margin=dict(l=10, r=20, t=50, b=10),
-        height=460,
-        shapes=day_marker(sel_day),
+        shapes=day_marker(sel_day, th),
         clickmode="event",
     )
     return fig
@@ -276,23 +384,23 @@ def fig_daily(
 # ---------------------------------------------------------------------------
 
 
-def fig_wasted_pie(split: WastedSplit, lang: str = "cs") -> go.Figure:
-    fig = go.Figure()
-    _base_layout(fig, t("pie_title", lang), lang, 440)
+def fig_wasted_pie(split: WastedSplit, lang: str = "cs", th: dict | None = None) -> go.Figure:
+    th = th or THEMES["light"]
+    fig = _figure(t("pie_title", lang), lang, 500, th)
     total = split.shared_total + split.unshared_only + split.overlap
     if total <= 0:
-        return _no_data(fig, lang)
+        return _no_data(fig, lang, th)
     slices = [
-        (t("pie_shared", lang), split.shared_total, SOURCE_GREEN),
-        (t("pie_wasted", lang), split.overlap, RED_WASTED),
-        (t("pie_unshared_only", lang), split.unshared_only, GREY_UNSHARED),
+        (t("pie_shared", lang), split.shared_total, th["source"]),
+        (t("pie_wasted", lang), split.overlap, th["wasted"]),
+        (t("pie_unshared_only", lang), split.unshared_only, th["unshared"]),
     ]
     slices = [s for s in slices if s[1] > 0]
     wasted = t("pie_wasted", lang)
     fig.add_pie(
         labels=[s[0] for s in slices],
         values=[s[1] for s in slices],
-        marker=dict(colors=[s[2] for s in slices], line=dict(color="white", width=2)),
+        marker=dict(colors=[s[2] for s in slices], line=dict(color=th["paper"], width=2)),
         pull=[0.06 if s[0] == wasted else 0 for s in slices],
         sort=False, direction="clockwise", rotation=0,
         texttemplate="%{label}<br>%{value:,.0f} kWh<br>%{percent:.1%}",
@@ -303,43 +411,28 @@ def fig_wasted_pie(split: WastedSplit, lang: str = "cs") -> go.Figure:
     note = [t("pie_union", lang).format(total=fmt_num(total, lang)), t("pie_subtitle", lang)]
     if split.overlap <= 0:
         note.append(t("pie_no_overlap", lang))
-    fig.add_annotation(text="<br>".join(note), x=0.5, y=0, yshift=-58, xref="paper",
-                       yref="paper", yanchor="top", showarrow=False,
-                       font=dict(size=11, color="#555"))
-    fig.update_layout(margin=dict(l=40, r=40, t=60, b=100 + 14 * (len(note) - 2)),
-                      height=500)
+    fig.update_layout(
+        annotations=[dict(text="<br>".join(note), x=0.5, y=0, yshift=-58, xref="paper",
+                          yref="paper", yanchor="top", showarrow=False,
+                          font=dict(size=11, color=th["muted"]))],
+        margin=dict(l=40, r=40, t=60, b=100 + 14 * (len(note) - 2)),
+    )
     return fig
 
 
 # ---------------------------------------------------------------------------
-# Selected-day marker (subplot 2), subplot 4: single day, subplot 3: heatmap
+# Subplot 4: one day; subplot 3: heatmap
 # ---------------------------------------------------------------------------
 
 INTRADAY_XSTART_HOUR = 6
 INTRADAY_XEND_HOUR = 21
 
 
-def day_marker(day: str | None) -> list[dict]:
-    """Dashed vertical line on the daily plot at the selected day (script: axvline)."""
-    if not day:
-        return []
-    return [dict(type="line", xref="x", yref="paper", x0=day, x1=day, y0=0, y1=1,
-                 line=dict(color="black", width=1.5, dash="dash"), layer="above")]
-
-
-def _grid_filtered(df: pd.DataFrame, show_unshared: bool, show_unmet: bool) -> pd.DataFrame:
-    agg = aggregate_grid_flows(df)
-    if not show_unshared:
-        agg = agg.drop(columns="GRID_UNSHARED", errors="ignore")
-    if not show_unmet:
-        agg = agg.drop(columns="GRID_UNMET", errors="ignore")
-    return agg
-
-
+@memoized
 def intraday_ymax(df: pd.DataFrame, show_unshared: bool, show_unmet: bool,
                   stacked: bool = True) -> float:
     """Peak kWh per 15 min over the whole dataset (same scale for every day)."""
-    agg = _grid_filtered(df, show_unshared, show_unmet).fillna(0)
+    agg = grid_flows(df, show_unshared, show_unmet).fillna(0)
     if agg.empty or len(agg.columns) == 0:
         return 1.0
     peak = float(agg.sum(axis=1).max()) if stacked else float(agg.to_numpy().max())
@@ -357,32 +450,38 @@ def fig_intraday(
     show_unshared: bool = True,
     show_unmet: bool = True,
     lang: str = "cs",
+    th: dict | None = None,
+    top: tuple[str, ...] | None = None,
 ) -> go.Figure:
     """Stacked areas per 15 min for one calendar day (lines on a log axis)."""
+    th = th or THEMES["light"]
     log = yscale == "log"
-    agg = _grid_filtered(df, show_unshared, show_unmet)
+    df, names, cmap = _folded(df, data, names, lang, top)
+    agg = grid_flows(df, show_unshared, show_unmet)
     day_ts = pd.Timestamp(day).normalize() if day else agg.index.normalize().max()
     date_txt = day_ts.strftime("%d.%m.%Y" if lang == "cs" else "%Y-%m-%d")
     title = t("sharing_on", lang).format(date=date_txt) + (t("lines_suffix", lang) if log else "")
-    fig = go.Figure()
-    _base_layout(fig, title, lang, 440)
+    fig = _figure(title, lang, 440, th)
     if y_max is None:
-        y_max = intraday_ymax(df, show_unshared, show_unmet, stacked=not log)
-    day_df = agg.loc[agg.index.normalize() == day_ts].fillna(0)
-    x0 = day_ts + pd.Timedelta(hours=INTRADAY_XSTART_HOUR)
-    x1 = day_ts + pd.Timedelta(hours=INTRADAY_XEND_HOUR)
-    fig.update_xaxes(range=[x0, x1], dtick=3 * 3600 * 1000, tickformat="%H:%M",
-                     hoverformat="%H:%M", showgrid=True, gridcolor="#ececec")
-    fig.update_yaxes(title=t("intraday_ylabel", lang), showgrid=True, gridcolor="#ececec",
-                     zeroline=False, type="log" if log else "linear",
-                     range=([-3, np.log10(y_max) + 0.05] if log else [0, y_max * 1.02]))
+        y_max = intraday_ymax(df, show_unshared, show_unmet, not log)
+    lo, hi = day_ts, day_ts + pd.Timedelta(days=1)
+    day_df = agg.loc[(agg.index >= lo) & (agg.index < hi)].fillna(0)
+    fig.update_layout(
+        xaxis=dict(range=[day_ts + pd.Timedelta(hours=INTRADAY_XSTART_HOUR),
+                          day_ts + pd.Timedelta(hours=INTRADAY_XEND_HOUR)],
+                   dtick=3 * 3600 * 1000, tickformat="%H:%M", hoverformat="%H:%M",
+                   showgrid=True),
+        yaxis=dict(title=t("intraday_ylabel", lang), showgrid=True, zeroline=False,
+                   type="log" if log else "linear",
+                   range=([-3, np.log10(y_max) + 0.05] if log else [0, y_max * 1.02])),
+    )
     if day_df.empty or len(agg.columns) == 0:
         fig.add_annotation(text=t("no_data", lang), x=0.5, y=0.5, xref="paper",
-                           yref="paper", showarrow=False, font=dict(size=14, color="#666"))
+                           yref="paper", showarrow=False,
+                           font=dict(size=14, color=th["muted"]))
         return fig
-    cmap = colour_map(data)
     for col in day_df.columns:
-        colour = series_colour(col, cmap)
+        colour = series_colour(col, cmap, th)
         vals = day_df[col].to_numpy()
         common = dict(x=day_df.index, name=series_label(col, names, lang),
                       hovertemplate="%{y:,.2f} kWh")
@@ -392,7 +491,7 @@ def fig_intraday(
         else:
             fig.add_scatter(y=vals, mode="lines", stackgroup="one",
                             line=dict(color=colour, width=0.6),
-                            fillcolor=_rgba(colour, 0.75), **common)
+                            fillcolor=_rgba(colour, th["area_alpha"]), **common)
     fig.update_layout(
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="top", y=-0.12, xanchor="left", x=0,
@@ -404,6 +503,7 @@ def fig_intraday(
 HEAT_METRICS = ("production", "shared", "unmet")
 
 
+@memoized
 def heat_pivot(df: pd.DataFrame, metric: str = "production") -> pd.DataFrame:
     """Mean kWh per 15-min interval, hour-of-day x month.
 
@@ -425,20 +525,23 @@ def heat_pivot(df: pd.DataFrame, metric: str = "production") -> pd.DataFrame:
 
 
 def fig_heatmap(pivot: pd.DataFrame, metric: str = "production", *,
-                z_max: float | None = None, lang: str = "cs") -> go.Figure:
-    fig = go.Figure()
-    _base_layout(fig, t(f"heatmap_title_{metric}", lang), lang, 440)
+                z_max: float | None = None, lang: str = "cs",
+                th: dict | None = None) -> go.Figure:
+    th = th or THEMES["light"]
+    fig = _figure(t(f"heatmap_title_{metric}", lang), lang, 440, th)
     if pivot.empty:
-        return _no_data(fig, lang)
+        return _no_data(fig, lang, th)
     months = [month_label(p.to_timestamp(), lang) for p in pivot.columns]
     fig.add_heatmap(
-        z=pivot.to_numpy(), x=months, y=list(pivot.index), colorscale="YlOrRd",
+        z=pivot.to_numpy(), x=months, y=list(pivot.index), colorscale=th["heat"],
         zmin=0, zmax=z_max if z_max else float(np.nanmax(pivot.to_numpy()) or 1.0),
         colorbar=dict(title=dict(text=t("heatmap_cbar", lang), side="right"),
-                      thickness=12, tickformat=",.2f"),
+                      thickness=12, tickformat=",.2f", outlinewidth=0),
         hovertemplate="%{x}, %{y}:00<br>%{z:,.3f} kWh<extra></extra>",
         xgap=1, ygap=1,
     )
-    fig.update_yaxes(title=t("hour_of_day", lang), dtick=2, range=[-0.5, 23.5])
-    fig.update_xaxes(tickangle=-30, type="category")
+    fig.update_layout(
+        yaxis=dict(title=t("hour_of_day", lang), dtick=2, range=[-0.5, 23.5], showgrid=False),
+        xaxis=dict(tickangle=-30, type="category", showgrid=False),
+    )
     return fig

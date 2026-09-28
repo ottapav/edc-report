@@ -93,7 +93,25 @@ STRINGS: dict[str, dict[str, str]] = {
         "col_data": "Data from",
         "col_data_pct": "Data rows",
         "notes": "Data notes",
-        # --- phase 3: hourly plot + heatmap ---
+        # --- phase 4: keys at upload, jobs, theme ---
+        "job_lost": "The computation was lost (the server restarted or went to sleep) together with the uploaded data. Upload the file again.",
+        "queued": "Waiting for a free slot (another computation is running)",
+        "fit_title": "Allocation keys estimated from the report",
+        "fit_summary": "Today's EDC method with {rounds} reproduces the report in {pct} of 15-min "
+                       "intervals with these keys{other}. Estimated in {secs}.",
+        "fit_other": " ({rounds}: {pct})",
+        "rounds_1": "1 round",
+        "rounds_5": "5 rounds",
+        "fit_check": "Check the keys marked with a range: the report fits every value in it "
+                     "equally well. Keys act as ratios in the exact method.",
+        "fit_low": "The estimated keys reproduce less than 95 % of intervals; please check "
+                   "them against your contract.",
+        "key_range": "{lo}–{hi} %",
+        "key_lower": "≥ {lo} % (always covered)",
+        "key_nodata": "no data",
+        "theme_toggle": "Light / dark mode",
+        "others": "Others ({n} places)",
+
         "sharing_on": "Sharing on {date}",
         "lines_suffix": " — lines (log)",
         "intraday_ylabel": "Energy [kWh per 15 min]",
@@ -113,11 +131,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "heat_unmet": "unmet (from grid)",
         # --- phase 2: exact static method ---
         "keys": "Key [%]",
-        "keys_hint": "Allocation keys: leave empty to estimate them from the report "
-                     "(fitted so that today's 5-round EDC method reproduces it). "
-                     "Keys act as ratios; 0 = member gets nothing.",
+        "keys_hint": "Allocation keys are estimated from the report right after upload "
+                     "(so that today's EDC method reproduces it); correct them before the "
+                     "recompute. Keys act as ratios; 0 = member gets nothing.",
         "key_ph": "auto",
-        "clear_keys": "Clear",
+        "clear_keys": "Estimate",
         "reserve": "Reserve for sale [%]",
         "recompute_title": "Exact static method (proposal)",
         "recompute_desc": "Every 15-min interval is recomputed with rozdel() from presna_staticka.py: "
@@ -142,12 +160,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "t_clock_cpu": "CPU time of the compute thread",
         "t_clock_wall": "wall-clock time",
         "t_fit": "Key estimation",
-        "t_wall": "Whole job (incl. data preparation and key estimation)",
+        "t_wall": "Whole job (incl. data preparation)",
         "keys_used": "Keys used",
         "keys_est": "estimated from report",
         "keys_user": "entered",
         "keys_sum": "sum",
-        "edc_check": "Check: today's EDC method with these keys reproduces the report in {pct} of intervals.",
+        "edc_check": "Check: today's EDC method ({rounds}) with these keys reproduces the report in {pct} of intervals.",
         "stale": "Keys or reserve changed since the last recompute; press the button again.",
         "cmp_title": "Comparison per destination",
         "cmp_shared_edc": "Shared today [kWh]",
@@ -257,12 +275,29 @@ STRINGS: dict[str, dict[str, str]] = {
         "heat_production": "celkovou dodávku (výrobu)",
         "heat_shared": "sdílenou energii",
         "heat_unmet": "nepokrytý odběr (ze sítě)",
+        "job_lost": "Výpočet se ztratil i s nahranými daty (server se restartoval nebo uspal). Nahrajte soubor znovu.",
+        "queued": "Čeká na volné místo (běží jiný výpočet)",
+        "fit_title": "Alokační klíče odhadnuté z reportu",
+        "fit_summary": "Dnešní metoda EDC s {rounds} reprodukuje s těmito klíči report v {pct} "
+                       "čtvrthodin{other}. Odhad trval {secs}.",
+        "fit_other": " ({rounds}: {pct})",
+        "rounds_1": "1 kolem",
+        "rounds_5": "5 koly",
+        "fit_check": "Zkontrolujte klíče s vyznačeným rozsahem: report vysvětluje každou "
+                     "hodnotu v něm stejně dobře. V přesné metodě se klíče berou jako poměry.",
+        "fit_low": "Odhadnuté klíče reprodukují méně než 95 % intervalů; zkontrolujte je "
+                   "prosím podle smlouvy.",
+        "key_range": "{lo}–{hi} %",
+        "key_lower": "≥ {lo} % (vždy pokryt)",
+        "key_nodata": "bez dat",
+        "theme_toggle": "Světlý / tmavý režim",
+        "others": "Ostatní ({n} míst)",
         "keys": "Klíč [%]",
-        "keys_hint": "Alokační klíče: prázdné = odhad z reportu (dopočteno tak, aby dnešní "
-                     "metoda EDC s 5 koly report reprodukovala). Klíče se berou jako poměry; "
-                     "0 = člen nedostane nic.",
+        "keys_hint": "Alokační klíče se odhadnou z reportu hned po nahrání (tak, aby je "
+                     "dnešní metoda EDC reprodukovala); před přepočtem je můžete opravit. "
+                     "Klíče se berou jako poměry; 0 = člen nedostane nic.",
         "key_ph": "auto",
-        "clear_keys": "Vymazat",
+        "clear_keys": "Odhad",
         "reserve": "Rezerva k prodeji [%]",
         "recompute_title": "Přesná statická metoda (návrh)",
         "recompute_desc": "Každá čtvrthodina se přepočítá funkcí rozdel() z presna_staticka.py: "
@@ -287,12 +322,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "t_clock_cpu": "CPU čas výpočetního vlákna",
         "t_clock_wall": "čas na hodinách",
         "t_fit": "Odhad klíčů",
-        "t_wall": "Celá úloha (vč. přípravy dat a odhadu klíčů)",
+        "t_wall": "Celá úloha (vč. přípravy dat)",
         "keys_used": "Použité klíče",
         "keys_est": "odhad z reportu",
         "keys_user": "zadané",
         "keys_sum": "součet",
-        "edc_check": "Kontrola: dnešní metoda EDC s těmito klíči reprodukuje report v {pct} čtvrthodin.",
+        "edc_check": "Kontrola: dnešní metoda EDC ({rounds}) s těmito klíči reprodukuje report v {pct} čtvrthodin.",
         "stale": "Klíče nebo rezerva se od posledního přepočtu změnily; stiskněte tlačítko znovu.",
         "cmp_title": "Srovnání podle odběrného místa",
         "cmp_shared_edc": "Nasdíleno dnes [kWh]",

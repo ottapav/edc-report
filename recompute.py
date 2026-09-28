@@ -1,11 +1,8 @@
 """Recompute sharing with the exact static method (``presna_staticka.rozdel``).
 
-Also contains:
-
-* a vectorised replay of today's EDC static method (5 rounds, floor to 0.01 kWh
-  each round), identical to ``presna_staticka.staticka_edc``, used to
-* fit allocation keys from the report itself (the CSV carries no keys), and to
-  check how well a given set of keys reproduces the reported sharing.
+The ``rozdel()`` loop runs in a forked worker process so its timing is not
+disturbed by the web server's threads. Allocation keys come from the caller;
+they are estimated from the report in :mod:`keyfit` right after upload.
 
 All energies are integers in hundredths of kWh (0.01 kWh), like EDC data.
 Only the all report with one producer is supported (demand is needed).
@@ -13,6 +10,7 @@ Only the all report with one producer is supported (demand is needed).
 
 from __future__ import annotations
 
+import gc
 import time
 from dataclasses import dataclass, field
 from typing import Callable
@@ -20,6 +18,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
+from keyfit import KeyFit, replay_match
 from presna_staticka import rozdel
 from sharel_core import (
     SharingData, key_shared, key_unmet, key_unshared,
@@ -49,97 +48,6 @@ def to_hundredths(data: SharingData) -> tuple[np.ndarray, np.ndarray, np.ndarray
     S = np.stack([np.round(data.frame[key_shared(src, e)].to_numpy(dtype=float) * 100)
                   for e in data.dest_eans], axis=1).astype(np.int64)
     return P, D, S
-
-
-# ---------------------------------------------------------------------------
-# Today's EDC method, vectorised over intervals
-# ---------------------------------------------------------------------------
-
-
-def replay_edc(P: np.ndarray, D: np.ndarray, k: np.ndarray, rounds: int = 5) -> np.ndarray:
-    """Vectorised ``staticka_edc``: each round a member gets
-    ``min(remaining demand, floor(k_i * production at round start))``."""
-    s = np.zeros_like(D)
-    rem = D.copy()
-    Pr = P.copy()
-    for _ in range(rounds):
-        q = np.minimum(rem, np.floor(np.outer(Pr, k) + 1e-9).astype(np.int64))
-        s += q
-        rem -= q
-        Pr = Pr - q.sum(axis=1)
-    return s
-
-
-def replay_match(P, D, S, k) -> float:
-    """Fraction of intervals where the EDC replay with keys ``k`` equals the report."""
-    rep = replay_edc(P, D, np.asarray(k, dtype=float))
-    return float((rep == S).all(axis=1).mean()) if len(P) else 0.0
-
-
-@dataclass
-class KeyFit:
-    keys: list[float]          # fractions (0.1 = 10 %)
-    match: float               # fraction of intervals reproduced exactly
-    error_kwh: float           # sum |replay - report| over informative intervals
-    seconds: float
-    informative: int
-
-
-def fit_keys(P, D, S, progress: ProgressFn = _noop, max_sweeps: int = 4) -> KeyFit:
-    """Fit EDC allocation keys so the 5-round replay reproduces the report.
-
-    Coordinate search: for each member a 1 % grid over 0.5–100 %, then a 0.1 %
-    grid around the best value; keys are kept summing to at most 100 %. Finally
-    each key is snapped to a whole percent when that does not increase the error.
-    Uses only informative intervals (production > 0 and someone not fully covered).
-    """
-    t0 = time.perf_counter()
-    n = D.shape[1]
-    inf = (P > 0) & ((S < D) & (D > 0)).any(axis=1)
-    Pi, Di, Si = P[inf], D[inf], S[inf]
-
-    def err(k: np.ndarray) -> int:
-        return int(np.abs(replay_edc(Pi, Di, k) - Si).sum())
-
-    k = np.full(n, 0.9 / n)
-    best = err(k)
-    coarse = np.arange(0.005, 1.0001, 0.01)
-    total_steps = 3 * n  # usually converges in 2-3 sweeps
-    step = 0
-    for _sweep in range(max_sweeps):
-        changed = False
-        for i in range(n):
-            for grid in (coarse, None):
-                if grid is None:
-                    grid = np.clip(k[i] + np.arange(-0.01, 0.0101, 0.001), 0.001, 1.0)
-                for g in grid:
-                    kk = k.copy()
-                    kk[i] = g
-                    if kk.sum() > 1.0001:
-                        continue
-                    e = err(kk)
-                    if e < best:
-                        best, k, changed = e, kk, True
-            step += 1
-            progress("fit", min(step / total_steps, 0.97))
-        if not changed:
-            break
-    # prefer round numbers when equally good
-    for i in range(n):
-        for r in (round(k[i], 2), round(k[i] * 200) / 200):
-            kk = k.copy()
-            kk[i] = r
-            if r > 0 and kk.sum() <= 1.0001 and err(kk) <= best:
-                best, k = err(kk), kk
-                break
-    progress("fit", 1.0)
-    return KeyFit(
-        keys=[float(x) for x in k],
-        match=replay_match(P, D, S, k),
-        error_kwh=best / 100,
-        seconds=time.perf_counter() - t0,
-        informative=int(inf.sum()),
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -185,8 +93,6 @@ def rozdel_all(Pl: list[int], Dl: list[list[int]], keys: list[float], reserve: f
 
 
 def _worker(Pl, Dl, keys, reserve, chunk, q) -> None:  # runs in the child process
-    import gc
-
     # The forked child inherits the whole web-server heap; freezing it keeps the
     # garbage collector from walking (and copy-on-write faulting) all of it, which
     # would otherwise be billed to the rozdel() timing.
@@ -281,20 +187,26 @@ class Recomputed:
     reserve: float
     timing: Timing
     edc_match: float           # replay of today's method with these keys vs report
+    rounds: int = 5            # EDC rounds used for that replay
     fit: KeyFit | None = None
     notes: list[str] = field(default_factory=list)
 
 
 def recompute(
     data: SharingData,
-    keys: list[float] | None,
+    keys: list[float],
     reserve: float = 0.0,
     progress: ProgressFn = _noop,
     chunk: int = 96,
+    *,
+    fit: KeyFit | None = None,
+    keys_estimated: bool = False,
+    rounds: int = 5,
 ) -> Recomputed:
     """Run ``rozdel`` for every 15-min interval and build a comparable SharingData.
 
-    ``keys`` are fractions per destination (file order); ``None`` -> fit from the report.
+    ``keys`` are fractions per destination (file order). ``rounds`` is the number
+    of EDC rounds used to check how well the keys reproduce today's report.
     """
     t_job = time.perf_counter()
     tm = Timing()
@@ -302,12 +214,6 @@ def recompute(
     P, D, S = to_hundredths(data)
     tm.t_prepare += time.perf_counter() - t0
 
-    fit = None
-    estimated = keys is None
-    if estimated:
-        fit = fit_keys(P, D, S, progress=progress)
-        keys = fit.keys
-        tm.t_fit = fit.seconds
     keys = [max(0.0, float(x)) for x in keys]
     if not any(k > 0 for k in keys):
         raise ValueError("At least one allocation key must be > 0.")
@@ -340,9 +246,9 @@ def recompute(
         demand=data.demand, coverage=data.coverage, first_data=data.first_data,
         notes=[], n_rows=data.n_rows,
     )
-    edc_match = replay_match(P, D, S, keys)
+    edc_match = replay_match(P, D, S, keys, rounds)
     tm.t_prepare += time.perf_counter() - t0
     tm.t_wall = time.perf_counter() - t_job
     progress("done", 1.0)
-    return Recomputed(data=new, keys=keys, keys_estimated=estimated, reserve=reserve,
-                      timing=tm, edc_match=edc_match, fit=fit)
+    return Recomputed(data=new, keys=keys, keys_estimated=keys_estimated, reserve=reserve,
+                      timing=tm, edc_match=edc_match, rounds=rounds, fit=fit)

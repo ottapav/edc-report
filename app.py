@@ -9,6 +9,9 @@ Phase 2: a button recomputes sharing with the exact static method
 (``presna_staticka.rozdel``) and shows the recomputed report side by side with
 today's EDC report, with a progress bar and timing of the computation.
 
+Phase 3: hourly plot of a selected day, heatmap, allocation keys estimated
+right after upload (1 or 5 EDC rounds, any group size), dark mode.
+
 Run:  python app.py            (http://127.0.0.1:8050)
       python app.py --host 0.0.0.0 --port 8050 --debug
 """
@@ -24,21 +27,24 @@ import threading
 import time
 import traceback
 import uuid
+from html import escape as esc
 from collections import OrderedDict
 from dataclasses import dataclass
 from string import ascii_uppercase
 
 import numpy as np
 import dash
+import dash_ag_grid as dag
 from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 from flask import Response, request
 
 from figures import (
     colour_map, fig_daily, fig_heatmap, fig_intraday, fig_total_by_flow,
-    fig_wasted_pie, heat_pivot, intraday_ymax,
+    fig_wasted_pie, heat_pivot, intraday_ymax, theme, top_dests,
 )
 from i18n import fmt_date, fmt_duration, fmt_num, fmt_pct, fmt_signed, t
-from recompute import Recomputed, recompute
+from keyfit import KeyFit, estimate_keys
+from recompute import Recomputed, recompute, to_hundredths
 from sharel_core import (
     SharingData, compute_wasted_split, filter_dests, load_report,
     per_destination, summarize,
@@ -55,11 +61,20 @@ MAX_UPLOAD_MB = float(os.environ.get("SHAREL_MAX_UPLOAD_MB", "25"))
 #: optional HTTP basic auth for the whole app (both must be set)
 AUTH_USER = os.environ.get("BASIC_AUTH_USER", "")
 AUTH_PASSWORD = os.environ.get("BASIC_AUTH_PASSWORD", "")
+#: computations (key estimation, recompute) running at the same time; others queue
+MAX_JOBS = max(1, int(os.environ.get("SHAREL_MAX_JOBS", "2")))
 
 # ---------------------------------------------------------------------------
 # In-memory store of parsed uploads (keyed by a random id held in the browser)
-# and of recompute jobs. Single-process only: with gunicorn use one worker, or
-# swap these for a shared cache (e.g. flask-caching with Redis).
+# and of background jobs.
+#
+# ONE PROCESS ONLY. Everything a browser session refers to - its upload, the key
+# estimate, a running recompute and its progress - lives in this process's
+# memory, so every request of that session must reach this same process. Run
+# gunicorn with a single worker and threads (gunicorn.conf.py pins that). With
+# several workers a request lands in a process that does not know the upload or
+# the job (the failure robopid-simulator hit with per-process job caches); that
+# would need a shared store such as Redis, not more workers.
 # ---------------------------------------------------------------------------
 
 
@@ -68,6 +83,7 @@ class Entry:
     filename: str
     data: SharingData
     exact: Recomputed | None = None
+    fit: KeyFit | None = None
 
 
 _CACHE: "OrderedDict[str, Entry]" = OrderedDict()
@@ -95,34 +111,71 @@ def _cache_get(key: str | None) -> Entry | None:
 
 
 _JOBS: dict[str, dict] = {}
+_JOB_SLOTS = threading.BoundedSemaphore(MAX_JOBS)
 
 
-def _run_job(job_id: str, data_key: str, keys: list[float | None], reserve: float) -> None:
+def _run_job(job_id: str, kind: str, data_key: str, keys: list[float | None],
+             reserve: float) -> None:
+    """Background job: ``fit`` (estimate keys) or ``recompute`` (exact method).
+
+    At most MAX_JOBS run at once (small instances have < 1 CPU); the rest wait
+    in the "queued" phase and the progress bar says so.
+    """
     job = _JOBS[job_id]
 
     def progress(phase: str, frac: float) -> None:
         job["phase"], job["frac"] = phase, frac
 
     try:
-        entry = _cache_get(data_key)
-        if entry is None:
-            raise RuntimeError("data no longer on the server")
-        given = all(k is not None for k in keys)
-        res = recompute(entry.data, keys if given else None, reserve, progress=progress)
-        if not given:  # user-entered keys override the fitted ones
-            merged = [k if k is not None else f for k, f in zip(keys, res.keys)]
-            if merged != res.keys:
-                fit, t_fit = res.fit, res.timing.t_fit
-                res = recompute(entry.data, merged, reserve, progress=progress)
-                res.fit, res.keys_estimated = fit, True
-                res.timing.t_fit = t_fit
-                res.timing.t_wall += t_fit
-        entry.exact = res
+        job["phase"] = "queued"
+        with _JOB_SLOTS:
+            job["t0"] = time.perf_counter()          # time the work, not the queue
+            entry = _cache_get(data_key)
+            if entry is None:
+                raise RuntimeError("data no longer on the server")
+            need_fit = kind == "fit" or (entry.fit is None and any(k is None for k in keys))
+            if need_fit:
+                job["had_fit"] = kind == "recompute"
+                progress("fit", 0.0)
+                P, D, S = to_hundredths(entry.data)
+                entry.fit = estimate_keys(P, D, S, progress=progress)
+            if kind == "recompute":
+                fit = entry.fit
+                merged = [k if k is not None else (fit.keys[i] if fit else None)
+                          for i, k in enumerate(keys)]
+                if any(k is None for k in merged):
+                    raise RuntimeError("missing allocation keys")
+                progress("compute", 0.0)
+                entry.exact = recompute(
+                    entry.data, merged, reserve, progress=progress, fit=fit,
+                    keys_estimated=fit is not None and merged == list(fit.keys),
+                    rounds=fit.rounds if fit else 5,
+                )
         job["done"] = True
     except Exception as exc:  # reported in the UI
         traceback.print_exc()
         job["error"] = str(exc)
         job["done"] = True
+
+
+def _start_background(kind: str, data_key: str, keys: list[float | None],
+                      reserve: float, lang: str):
+    """Start a job; return (job id, poll disabled=False).
+
+    Only the poll callback writes the progress bar, its text and the button state.
+    With a second writer (upload / start) a large response applied late could
+    overwrite the poll's "done" and leave the bar stuck at 0 %.
+    """
+    now = time.perf_counter()
+    for old in [j for j, v in list(_JOBS.items())
+                if (v.get("reported") and now - v["t0"] > 60) or now - v["t0"] > 3600]:
+        _JOBS.pop(old, None)
+    job_id = uuid.uuid4().hex
+    _JOBS[job_id] = {"kind": kind, "phase": "queued", "frac": 0.0, "done": False,
+                     "error": None, "t0": now, "data_key": data_key}
+    threading.Thread(target=_run_job, args=(job_id, kind, data_key, keys, reserve),
+                     daemon=True).start()
+    return job_id, False
 
 
 # ---------------------------------------------------------------------------
@@ -140,22 +193,48 @@ def default_names(data: SharingData, lang: str) -> dict[str, str]:
     return names
 
 
-def effective_names(data: SharingData, lang: str, ids: list[dict], values: list) -> dict[str, str]:
+def effective_names(data: SharingData, lang: str, src_ids: list[dict], src_values: list,
+                    rows: list[dict] | None) -> dict[str, str]:
+    """Display names: typed names (sources: inputs, destinations: grid) or defaults."""
     names = default_names(data, lang)
-    for id_, val in zip(ids or [], values or []):
+    for id_, val in zip(src_ids or [], src_values or []):
         if val and str(val).strip() and id_["ean"] in names:
             names[id_["ean"]] = str(val).strip()
+    for r in rows or []:
+        if r.get("name") and str(r["name"]).strip() and r.get("ean") in names:
+            names[r["ean"]] = str(r["name"]).strip()
     return names
 
 
-def _keys_from_inputs(data: SharingData, ids: list[dict], values: list) -> list[float | None]:
-    """Key inputs (percent) -> fractions in destination order; None = estimate."""
-    by_ean = {i["ean"]: v for i, v in zip(ids or [], values or [])}
+def _enabled(data: SharingData, selected: list[dict] | None) -> set[str]:
+    """Ticked destinations; None (grid not ready yet) means all."""
+    if selected is None:
+        return set(data.dest_eans)
+    return {r["ean"] for r in selected if r and "ean" in r}
+
+
+def _keys_from_rows(data: SharingData, rows: list[dict] | None) -> list[float | None]:
+    """Key column (percent) -> fractions in destination order; None = not set."""
+    by_ean = {r.get("ean"): r.get("key") for r in rows or []}
     out: list[float | None] = []
     for e in data.dest_eans:
         v = by_ean.get(e)
-        out.append(None if v in (None, "") else max(0.0, float(v)) / 100)
+        try:
+            out.append(None if v in (None, "") else max(0.0, float(v)) / 100)
+        except (TypeError, ValueError):
+            out.append(None)
     return out
+
+
+def _key_only_edit() -> bool:
+    """True when the callback fired only because a key cell was edited (names and
+    selection unchanged) - then the figures need not be redrawn."""
+    props = set(ctx.triggered_prop_ids or {})
+    if props != {"members.cellValueChanged"}:
+        return False
+    changes = ctx.triggered[0].get("value") if ctx.triggered else None
+    changes = changes if isinstance(changes, list) else [changes or {}]
+    return all((c or {}).get("colId") != "name" for c in changes)
 
 
 def _pct_key(x: float) -> float:
@@ -179,10 +258,135 @@ def _graph(id_: str, cls: str = "") -> html.Section:
                         children=dcc.Graph(id=id_, config=GRAPH_CONFIG))
 
 
+def _member_columns(lang: str, can_key: bool) -> list[dict]:
+    """Grid columns; formatters depend on the language (decimal comma, default names)."""
+    dec = "," if lang == "cs" else "."
+    return [
+        {"field": "name", "headerName": t("col_name", lang), "editable": True, "flex": 1,
+         "minWidth": 84, "tooltipField": "ean",
+         "valueFormatter": {"function": f"params.value || params.data.default_{lang}"},
+         "cellClassRules": {"muted-name": "!params.value"},
+         "cellStyle": {"function": "({borderLeft: '6px solid ' + params.data.colour})"}},
+        {"field": "tail", "headerName": "EAN", "width": 64, "cellClass": "mono-cell",
+         "tooltipField": "ean"},
+        {"field": "key", "headerName": t("keys", lang), "editable": can_key, "width": 70,
+         "type": "rightAligned", "cellEditor": "agNumberCellEditor",
+         "cellEditorParams": {"min": 0, "max": 100, "precision": 2},
+         # values are rounded to 0.01 already; no globals (String/Math) in grid functions
+         "valueFormatter": {"function":
+             f"params.value == null ? '' : (params.value + '').replace('.', '{dec}')"},
+         "tooltipField": "range",
+         "cellClassRules": {"key-warn": "params.data.warn"}},
+    ]
+
+
+def _member_rows(data: SharingData) -> list[dict]:
+    cmap = colour_map(data, top_dests(data.frame, data))
+    names = {lg: default_names(data, lg) for lg in ("cs", "en")}
+    return [{"ean": e, "tail": f"…{e[-6:]}", "name": "",
+             "default_cs": names["cs"][e], "default_en": names["en"][e],
+             "colour": cmap[e], "key": None, "range": "", "warn": False}
+            for e in data.dest_eans]
+
+
+def _grid_options(many: bool) -> dict:
+    return {
+        "rowSelection": {"mode": "multiRow", "enableClickSelection": False},
+        "singleClickEdit": True, "stopEditingWhenCellsLoseFocus": True,
+        "tooltipShowDelay": 250, "rowHeight": 32, "headerHeight": 30,
+        "domLayout": "normal" if many else "autoHeight",
+    }
+
+
+def _source_rows(data: SharingData, lang: str) -> list:
+    names = default_names(data, lang)
+    return [
+        html.Div(className="dest-row", children=[
+            html.Span(className="swatch", style={"background": "#339933"}),
+            html.Div(className="name-cell", children=[
+                dcc.Input(id={"type": "name", "ean": e}, type="text", debounce=True,
+                          placeholder=names[e], className="name-in"),
+                html.Div(e, className="ean"),
+            ]),
+        ]) for e in data.source_eans
+    ]
+
+
+def _static_panel() -> html.Div:
+    """Source names + ONE grid for all destinations (tick, name, key).
+
+    The grid is part of the static layout (filled on upload): one component
+    instead of several inputs per destination - a group of 150 members would
+    otherwise put 600 pattern-matching components on the page, and the Dash
+    renderer then needs tens of seconds per update.
+    """
+    return html.Div(id="dest-panel", children=[
+        html.Section(className="panel-section", children=[
+            html.H3(id="lbl-source"),
+            html.Div(id="src-panel"),
+        ]),
+        html.Section(className="panel-section", children=[
+            html.Div(className="panel-head", children=[
+                html.H3(id="lbl-dest"),
+                html.Div(className="mini-btns", children=[
+                    html.Button(id="btn-all", n_clicks=0, className="mini"),
+                    html.Button(id="btn-none", n_clicks=0, className="mini"),
+                ]),
+            ]),
+            html.P(className="hint", id="lbl-dest-hint"),
+            dag.AgGrid(
+                id="members", rowData=[], columnDefs=_member_columns("cs", True),
+                getRowId="params.data.ean",
+                defaultColDef={"sortable": False, "resizable": False, "suppressMovable": True},
+                dashGridOptions=_grid_options(False), selectedRows=[],
+                className="members-grid", style={"height": None},
+            ),
+            html.Div(className="keys-foot", children=[
+                html.P(className="hint", id="lbl-keys-hint"),
+                html.Button(id="btn-clear-keys", n_clicks=0, className="mini"),
+            ]),
+        ]),
+    ])
+
+
 app = dash.Dash(__name__, title="SharEl report", suppress_callback_exceptions=True)
 server = app.server  # for gunicorn: gunicorn app:server --workers 1 --threads 8
 # base64 upload inflates the file by 4/3; leave headroom for the rest of the request
 server.config["MAX_CONTENT_LENGTH"] = int((MAX_UPLOAD_MB * 1.4 + 2) * 2**20)
+
+
+# Apply the theme before the first paint (no light flash in dark mode): the saved
+# choice from the "theme-pref" store, else the system preference.
+app.index_string = """<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        <script>
+        (function () {
+            try {
+                var raw = window.localStorage.getItem('theme-pref');
+                var pref = raw ? JSON.parse(raw) : null;
+                var sys = window.matchMedia &&
+                          window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var mode = pref || (sys ? 'dark' : 'light');
+                document.documentElement.dataset.theme = mode;
+                document.documentElement.setAttribute('data-ag-theme-mode', mode);
+            } catch (e) {}
+        })();
+        </script>
+        {%css%}
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>"""
 
 
 @server.route("/healthz")
@@ -204,6 +408,8 @@ def _basic_auth():
 
 
 app.layout = html.Div(className="page", children=[
+    dcc.Store(id="theme-pref", storage_type="local"),   # "light" / "dark" / None = system
+    dcc.Store(id="theme", data="light"),                 # resolved theme for the figures
     dcc.Store(id="data-key"),
     dcc.Store(id="job-id"),
     dcc.Store(id="result-rev", data=0),
@@ -211,6 +417,8 @@ app.layout = html.Div(className="page", children=[
     html.Header(className="topbar", children=[
         html.H1(id="page-title"),
         html.Div(className="lang", children=[
+            html.Button("☾", id="theme-btn", n_clicks=0, className="icon-btn",
+                        title="Tmavý režim"),
             dcc.RadioItems(
                 id="lang", value="cs", inline=True, className="seg",
                 options=[{"label": "CZ", "value": "cs"}, {"label": "EN", "value": "en"}],
@@ -222,11 +430,13 @@ app.layout = html.Div(className="page", children=[
         className="upload upload-big",
         children=html.Div(id="upload-text"),
     ),
-    html.Div(id="upload-status", className="status"),
-    dcc.Loading(type="dot", color="#339933", target_components={"report": "className"},
-                children=html.Div(id="report", className="report hidden", children=[
+    # spinner only next to the upload: wrapping the report in dcc.Loading would hide
+    # (unmount) it while the upload callback runs and drop updates arriving meanwhile
+    dcc.Loading(type="dot", color="#339933", target_components={"upload-status": "children"},
+                children=html.Div(id="upload-status", className="status")),
+    html.Div(id="report", className="report hidden", children=[
         html.Aside(className="panel", children=[
-            html.Div(id="dest-panel"),
+            _static_panel(),
             html.Section(className="panel-section", children=[
                 html.H3(id="lbl-day"),
                 html.Div(className="day-row", children=[
@@ -275,6 +485,8 @@ app.layout = html.Div(className="page", children=[
                         id="progress-bar", className="progress-bar", style={"width": "0%"})),
                     html.Div(id="progress-text", className="progress-text"),
                 ]),
+                html.Div(id="fit-info"),
+                html.Div(id="stale"),
                 html.Div(id="timing"),
             ]),
             html.Div(id="compare", className="compare single", children=[
@@ -307,8 +519,35 @@ app.layout = html.Div(className="page", children=[
                 html.Div(id="cmp-table", className="table-wrap"),
             ]),
         ]),
-    ])),
+    ]),
 ])
+
+
+# ---------------------------------------------------------------------------
+# Theme: default from the system, the icon toggles and remembers the choice
+# ---------------------------------------------------------------------------
+
+app.clientside_callback(
+    """
+    function(n, pref) {
+        const dc = window.dash_clientside;
+        const trig = (dc.callback_context.triggered || [])[0];
+        const clicked = !!trig && trig.prop_id === 'theme-btn.n_clicks' && n > 0;
+        const sys = (window.matchMedia &&
+                     window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        let cur = document.documentElement.dataset.theme || pref || sys;
+        if (clicked) { cur = (cur === 'dark') ? 'light' : 'dark'; }
+        document.documentElement.dataset.theme = cur;
+        document.documentElement.setAttribute('data-ag-theme-mode', cur);   // AG Grid
+        return [cur, clicked ? cur : dc.no_update, cur === 'dark' ? '☀' : '☾'];
+    }
+    """,
+    Output("theme", "data"),
+    Output("theme-pref", "data"),
+    Output("theme-btn", "children"),
+    Input("theme-btn", "n_clicks"),
+    State("theme-pref", "data"),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +580,7 @@ app.layout = html.Div(className="page", children=[
     Output("show-heat", "options"),
     Output("lbl-heat-metric", "children"),
     Output("heat-metric", "options"),
+    Output("theme-btn", "title"),
     Input("lang", "value"),
     Input("data-key", "data"),
 )
@@ -383,6 +623,7 @@ def _labels(lang, key):
         t("heat_metric", lang),
         [{"label": t(f"heat_{m}", lang), "value": m}
          for m in ("production", "shared", "unmet")],
+        t("theme_toggle", lang),
     )
 
 
@@ -391,73 +632,23 @@ def _labels(lang, key):
 # ---------------------------------------------------------------------------
 
 
-def _dest_panel(data: SharingData, lang: str) -> html.Div:
-    cmap = colour_map(data)
-    names = default_names(data, lang)
-    can_key = data.fmt == "all"
-    src_rows = [
-        html.Div(className="dest-row", children=[
-            html.Span(className="swatch", style={"background": "#339933"}),
-            html.Div(className="name-cell", children=[
-                dcc.Input(id={"type": "name", "ean": e}, type="text", debounce=True,
-                          placeholder=names[e], className="name-in"),
-                html.Div(e, className="ean"),
-            ]),
-        ]) for e in data.source_eans
-    ]
-    dest_rows = [
-        html.Div(className="dest-row", children=[
-            dcc.Checklist(id={"type": "dest", "ean": e}, value=[e],
-                          options=[{"label": "", "value": e}], className="dest-check"),
-            html.Span(className="swatch", style={"background": cmap[e]}),
-            html.Div(className="name-cell", children=[
-                dcc.Input(id={"type": "name", "ean": e}, type="text", debounce=True,
-                          placeholder=names[e], className="name-in"),
-                html.Div(e, className="ean"),
-            ]),
-            dcc.Input(id={"type": "key", "ean": e}, type="number", min=0, max=100, step=0.01,
-                      debounce=True, placeholder=t("key_ph", lang), className="key-in",
-                      disabled=not can_key),
-        ]) for e in data.dest_eans
-    ]
-    return html.Div([
-        html.Section(className="panel-section", children=[
-            html.H3(t("panel_source", lang), id="lbl-source"),
-            *src_rows,
-        ]),
-        html.Section(className="panel-section", children=[
-            html.Div(className="panel-head", children=[
-                html.H3(t("panel_dest", lang), id="lbl-dest"),
-                html.Div(className="mini-btns", children=[
-                    html.Button(t("all", lang), id="btn-all", n_clicks=0, className="mini"),
-                    html.Button(t("none", lang), id="btn-none", n_clicks=0, className="mini"),
-                ]),
-            ]),
-            html.P(t("panel_dest_hint", lang), className="hint", id="lbl-dest-hint"),
-            html.Div(className="dest-head", children=[
-                html.Span(),
-                html.Span(t("keys", lang), id="lbl-keys"),
-            ]),
-            *dest_rows,
-            html.Div(className="keys-foot", children=[
-                html.P(t("keys_hint", lang), className="hint", id="lbl-keys-hint"),
-                html.Button(t("clear_keys", lang), id="btn-clear-keys", n_clicks=0,
-                            className="mini"),
-            ]),
-        ]),
-    ])
-
-
 @app.callback(
     Output("data-key", "data"),
     Output("upload-status", "children"),
-    Output("dest-panel", "children"),
+    Output("src-panel", "children"),
     Output("report", "className"),
     Output("upload", "className"),
     Output("day-picker", "min_date_allowed"),
     Output("day-picker", "max_date_allowed"),
     Output("day-picker", "date"),
     Output("day-picker", "initial_visible_month"),
+    Output("job-id", "data", allow_duplicate=True),
+    Output("poll", "disabled", allow_duplicate=True),
+    Output("members", "rowData"),
+    Output("members", "columnDefs", allow_duplicate=True),
+    Output("members", "selectedRows", allow_duplicate=True),
+    Output("members", "dashGridOptions"),
+    Output("members", "style"),
     Input("upload", "contents"),
     State("upload", "filename"),
     State("lang", "value"),
@@ -465,8 +656,9 @@ def _dest_panel(data: SharingData, lang: str) -> html.Div:
 )
 def _on_upload(contents, filename, lang):
     nu = no_update
+    idle = (nu, True)
     if not contents:
-        return nu, nu, nu, nu, nu, nu, nu, nu, nu
+        return (nu,) * 9 + (nu,) * 2 + (nu,) * 5
     try:
         _header, b64 = contents.split(",", 1)
         if len(b64) * 3 / 4 > MAX_UPLOAD_MB * 2**20:
@@ -475,65 +667,78 @@ def _on_upload(contents, filename, lang):
     except Exception as exc:  # show any parse error to the user
         msg = html.Div([html.B(f"{t('error', lang)}: "), f"{filename} — {exc}"],
                        className="status-error")
-        return None, msg, [], "report hidden", "upload upload-big", nu, nu, nu, nu
+        return ((None, msg, [], "report hidden", "upload upload-big", nu, nu, nu, nu) + idle
+                + (nu,) * 5)
     key = _cache_put(filename or "report.csv", data)
     days = data.frame.index.normalize()
     first, last = days.min().date().isoformat(), days.max().date().isoformat()
-    return (key, nu, _dest_panel(data, lang), "report", "upload upload-small",
-            first, last, last, last)
+    # estimate the allocation keys right away, so they can be checked before the recompute
+    job = (_start_background("fit", key, [None] * len(data.dest_eans), 0.0, lang)
+           if data.fmt == "all" else idle)
+    many = len(data.dest_eans) > 12
+    grid = (_member_rows(data), _member_columns(lang, data.fmt == "all"),
+            {"ids": list(data.dest_eans)}, _grid_options(many),
+            {"height": "440px"} if many else {"height": None})
+    return (key, nu, _source_rows(data, lang), "report", "upload upload-small",
+            first, last, last, last) + job + grid
 
 
 @app.callback(
     Output({"type": "name", "ean": ALL}, "placeholder"),
-    Output({"type": "key", "ean": ALL}, "placeholder"),
+    Output("members", "columnDefs"),
     Output("lbl-source", "children"),
     Output("lbl-dest", "children"),
     Output("lbl-dest-hint", "children"),
     Output("btn-all", "children"),
     Output("btn-none", "children"),
-    Output("lbl-keys", "children"),
     Output("lbl-keys-hint", "children"),
     Output("btn-clear-keys", "children"),
     Input("lang", "value"),
     State({"type": "name", "ean": ALL}, "id"),
-    State({"type": "key", "ean": ALL}, "id"),
+    State("data-key", "data"),
+    prevent_initial_call=False,
+)
+def _panel_lang(lang, ids, key):
+    entry = _cache_get(key)
+    names = default_names(entry.data, lang) if entry else {}
+    can_key = entry is None or entry.data.fmt == "all"
+    return ([names.get(i["ean"], "") for i in ids],
+            _member_columns(lang, can_key),
+            t("panel_source", lang), t("panel_dest", lang), t("panel_dest_hint", lang),
+            t("all", lang), t("none", lang), t("keys_hint", lang), t("clear_keys", lang))
+
+
+@app.callback(
+    Output("members", "selectedRows"),
+    Input("btn-all", "n_clicks"),
+    Input("btn-none", "n_clicks"),
     State("data-key", "data"),
     prevent_initial_call=True,
 )
-def _panel_lang(lang, ids, key_ids, key):
+def _all_none(_a, _n, key):
     entry = _cache_get(key)
     if entry is None:
         raise dash.exceptions.PreventUpdate
-    names = default_names(entry.data, lang)
-    return ([names.get(i["ean"], "") for i in ids], [t("key_ph", lang)] * len(key_ids),
-            t("panel_source", lang), t("panel_dest", lang), t("panel_dest_hint", lang),
-            t("all", lang), t("none", lang), t("keys", lang), t("keys_hint", lang),
-            t("clear_keys", lang))
-
-
-@app.callback(
-    Output({"type": "dest", "ean": ALL}, "value"),
-    Input("btn-all", "n_clicks"),
-    Input("btn-none", "n_clicks"),
-    State({"type": "dest", "ean": ALL}, "id"),
-    prevent_initial_call=True,
-)
-def _all_none(_a, _n, ids):
     if ctx.triggered_id == "btn-all":
-        return [[i["ean"]] for i in ids]
-    return [[] for _ in ids]
+        return {"ids": list(entry.data.dest_eans)}
+    return []
 
 
 @app.callback(
-    Output({"type": "key", "ean": ALL}, "value"),
+    Output("members", "rowTransaction"),
     Input("btn-clear-keys", "n_clicks"),
-    State({"type": "key", "ean": ALL}, "id"),
+    State("members", "rowData"),
+    State("data-key", "data"),
     prevent_initial_call=True,
 )
-def _clear_keys(n, ids):
-    if not n:
+def _reset_keys(n, rows, key):
+    """Put the estimated keys back (after manual edits)."""
+    entry = _cache_get(key)
+    if not n or entry is None or entry.fit is None:
         raise dash.exceptions.PreventUpdate
-    return [None] * len(ids)
+    by_ean = dict(zip(entry.data.dest_eans, entry.fit.keys))
+    return {"update": [dict(r, key=_pct_key(by_ean[r["ean"]])) for r in rows or []
+                       if r.get("ean") in by_ean]}
 
 
 # ---------------------------------------------------------------------------
@@ -550,30 +755,26 @@ def _clear_keys(n, ids):
     Output("progress-text", "children"),
     Input("btn-recompute", "n_clicks"),
     State("data-key", "data"),
-    State({"type": "key", "ean": ALL}, "id"),
-    State({"type": "key", "ean": ALL}, "value"),
+    State("members", "rowData"),
     State("reserve", "value"),
     State("lang", "value"),
     prevent_initial_call=True,
 )
-def _start_job(n, key, key_ids, key_values, reserve, lang):
-    entry = _cache_get(key)
-    if not n or entry is None:
+def _start_job(n, key, rows, reserve, lang):
+    if not n:
         raise dash.exceptions.PreventUpdate
+    entry = _cache_get(key)
+    if entry is None:   # server restarted / went to sleep since the upload
+        return (no_update, True, False, "progress error", {"width": "0%"},
+                t("session_lost", lang))
     if entry.data.fmt != "all":
         return (no_update, True, False, "progress error", {"width": "0%"},
                 t("part_no_recompute", lang))
-    keys = _keys_from_inputs(entry.data, key_ids, key_values)
+    keys = _keys_from_rows(entry.data, rows)
     reserve = min(max(float(reserve or 0), 0.0), 100.0) / 100
-    now = time.perf_counter()
-    for old in [j for j, v in _JOBS.items() if v.get("reported") or now - v["t0"] > 3600]:
-        _JOBS.pop(old, None)
-    job_id = uuid.uuid4().hex
-    _JOBS[job_id] = {"phase": "start", "frac": 0.0, "done": False, "error": None,
-                     "t0": time.perf_counter(), "data_key": key}
-    threading.Thread(target=_run_job, args=(job_id, key, keys, reserve), daemon=True).start()
-    first = t("phase_fit" if any(k is None for k in keys) else "phase_compute", lang)
-    return job_id, False, True, "progress running", {"width": "0%"}, f"{first}… 0 %"
+    job_id, poll_off = _start_background("recompute", key, keys, reserve, lang)
+    nu = no_update
+    return job_id, poll_off, True, nu, nu, nu        # the poll draws the bar
 
 
 @app.callback(
@@ -583,28 +784,35 @@ def _start_job(n, key, key_ids, key_values, reserve, lang):
     Output("progress-bar", "style", allow_duplicate=True),
     Output("progress-text", "children", allow_duplicate=True),
     Output("result-rev", "data"),
-    Output({"type": "key", "ean": ALL}, "value", allow_duplicate=True),
     Input("poll", "n_intervals"),
     State("job-id", "data"),
     State("result-rev", "data"),
-    State({"type": "key", "ean": ALL}, "id"),
     State("lang", "value"),
     prevent_initial_call=True,
 )
-def _poll(_n, job_id, rev, key_ids, lang):
+def _poll(_n, job_id, rev, lang):
+    nu = no_update
     job = _JOBS.get(job_id or "")
-    if job is None or job.get("reported"):
-        # late poll after completion: just make sure polling stops, keep the bar as is
-        nu = no_update
-        return True, nu, nu, nu, nu, nu, [nu] * len(key_ids)
+    if job is None:
+        # The job is not in this process: the server restarted / went to sleep, or
+        # (misconfigured) another worker answered. Never leave the button dead.
+        if not job_id:
+            return True, False, nu, nu, nu, nu
+        return (True, False, "progress error", {"width": "0%"}, t("job_lost", lang), nu)
+    if job.get("final") is not None:
+        # Idempotent: the interval may fire again before the first "done" response
+        # arrives, and Dash then drops that first response as outdated - so every
+        # later poll repeats the complete final state instead of no_update.
+        return job["final"]
     elapsed = time.perf_counter() - job["t0"]
     if not job["done"]:
         phase = job["phase"]
+        if phase == "queued":
+            return (False, True, "progress running", {"width": "0%"},
+                    f"{t('queued', lang)}…", nu)
         label = t("phase_fit" if phase == "fit" else "phase_compute", lang)
-        # fit and compute are shown as one bar: fit 0–60 %, compute 60–100 % when fitting
         frac = job["frac"]
-        if job.get("had_fit") or phase == "fit":
-            job["had_fit"] = True
+        if job.get("had_fit"):                     # fit and compute in one recompute job
             frac = 0.6 * frac if phase == "fit" else 0.6 + 0.4 * frac
         entry = _cache_get(job["data_key"])
         extra = ""
@@ -612,20 +820,96 @@ def _poll(_n, job_id, rev, key_ids, lang):
             n_iv = entry.data.n_rows
             extra = f" · {fmt_num(job['frac'] * n_iv, lang)} / {fmt_num(n_iv, lang)}"
         text = f"{label}… {fmt_pct(100 * frac, lang, 0)}{extra} · {fmt_duration(elapsed, lang)}"
-        return (False, True, "progress running", {"width": f"{100 * frac:.1f}%"}, text,
-                no_update, [no_update] * len(key_ids))
+        return (False, True, "progress running", {"width": f"{100 * frac:.1f}%"}, text, nu)
     job["reported"] = True
     if job["error"]:
-        return (True, False, "progress error", {"width": "100%"},
-                f"{t('phase_error', lang)}: {job['error']}", no_update,
-                [no_update] * len(key_ids))
-    entry = _cache_get(job["data_key"])
-    values = [no_update] * len(key_ids)
-    if entry is not None and entry.exact is not None:
-        by_ean = dict(zip(entry.data.dest_eans, entry.exact.keys))
-        values = [_pct_key(by_ean[i["ean"]]) for i in key_ids]
+        job["final"] = (True, False, "progress error", {"width": "100%"},
+                        f"{t('phase_error', lang)}: {job['error']}", nu)
+        return job["final"]
     text = f"✓ {fmt_duration(elapsed, lang)}"
-    return True, False, "progress done", {"width": "100%"}, text, (rev or 0) + 1, values
+    job["final"] = (True, False, "progress done", {"width": "100%"}, text, (rev or 0) + 1)
+    return job["final"]
+
+
+# ---------------------------------------------------------------------------
+# Key estimate: summary in the recompute card, range per key, "keys changed"
+# ---------------------------------------------------------------------------
+
+
+@app.callback(
+    Output("fit-info", "children"),
+    Output("members", "rowTransaction", allow_duplicate=True),
+    Input("result-rev", "data"),
+    Input("lang", "value"),
+    Input("data-key", "data"),
+    State("members", "rowData"),
+    prevent_initial_call="initial_duplicate",
+)
+def _fit_info(_rev, lang, key, rows):
+    """Summary of the key estimate; per member: estimated key into empty key cells,
+    consistency range as tooltip, warning mark where the report cannot pin it down."""
+    entry = _cache_get(key)
+    if entry is None or entry.fit is None or not rows:
+        return [], no_update
+    fit = entry.fit
+    rounds = lambda r: t(f"rounds_{r}", lang)  # noqa: E731
+    other = "".join(t("fit_other", lang).format(rounds=rounds(r), pct=fmt_pct(100 * m, lang))
+                    for r, m in fit.tried.items() if r != fit.rounds)
+    summary = t("fit_summary", lang).format(
+        rounds=rounds(fit.rounds), pct=fmt_pct(100 * fit.match, lang), other=other,
+        secs=fmt_duration(fit.seconds, lang))
+    idx = {e: i for i, e in enumerate(entry.data.dest_eans)}
+    update, wide = [], False
+    for r in rows:
+        i = idx.get(r.get("ean"))
+        if i is None:
+            continue
+        status = fit.status[i]
+        lo, hi = fit.ranges[i] if i < len(fit.ranges) else (fit.keys[i], fit.keys[i])
+        warn, text = False, ""
+        if status == "no_data":
+            warn, text = True, t("key_nodata", lang)
+        elif status == "always_covered" or hi >= 0.999:
+            warn, text = True, t("key_lower", lang).format(lo=fmt_num(100 * lo, lang, 2))
+        elif hi - lo > max(0.002, 0.05 * fit.keys[i]):   # > 0.2 pp or 5 % of the key
+            warn = True
+            text = t("key_range", lang).format(lo=fmt_num(100 * lo, lang, 2),
+                                               hi=fmt_num(100 * hi, lang, 2))
+        else:
+            text = t("key_range", lang).format(lo=fmt_num(100 * lo, lang, 2),
+                                               hi=fmt_num(100 * hi, lang, 2))
+        wide = wide or warn
+        key_val = r.get("key") if r.get("key") not in (None, "") else _pct_key(fit.keys[i])
+        update.append(dict(r, key=key_val, range=text, warn=warn))
+    notes = [html.P([html.B(f"{t('fit_title', lang)}: "), summary], className="fit-line")]
+    if fit.match < 0.95:
+        notes.append(html.P(t("fit_low", lang), className="stale"))
+    elif wide:
+        notes.append(html.P(t("fit_check", lang), className="hint"))
+    return notes, {"update": update}
+
+
+@app.callback(
+    Output("stale", "children"),
+    Input("members", "cellValueChanged"),
+    Input("members", "rowData"),
+    Input("reserve", "value"),
+    Input("result-rev", "data"),
+    Input("lang", "value"),
+    State("data-key", "data"),
+)
+def _stale(_changed, rows, reserve, _rev, lang, key):
+    """"Keys changed since the last recompute" - a tiny callback, so typing a key
+    no longer re-renders every figure."""
+    entry = _cache_get(key)
+    if entry is None or entry.exact is None:
+        return []
+    exact = entry.exact
+    cur = _keys_from_rows(entry.data, rows)
+    cur_res = min(max(float(reserve or 0), 0.0), 100.0) / 100
+    changed = (any(k is not None and abs(k - u) > 1e-6 for k, u in zip(cur, exact.keys))
+               or abs(cur_res - exact.reserve) > 1e-9)
+    return html.P(t("stale", lang), className="stale") if changed else []
 
 
 # ---------------------------------------------------------------------------
@@ -716,9 +1000,29 @@ def _tiles(data: SharingData, enabled: set[str], lang: str, ref: SharingData | N
             html.P(t("kpi_note", lang), className="hint")]
 
 
-def _dest_table(data: SharingData, enabled: set[str], names: dict, lang: str):
+def _cell(text, cls: str = "", title: str = "") -> str:
+    attrs = (f' class="{cls}"' if cls else "") + (f' title="{esc(title)}"' if title else "")
+    return f"<td{attrs}>{text}</td>"
+
+
+def _name_cell(name: str, ean: str, colour: str) -> str:
+    return _cell(f'<div><span class="swatch" style="background:{esc(colour)}"></span>'
+                 f'{esc(name)}</div><div class="mono sub-ean">{esc(ean)}</div>', "name")
+
+
+def _html_table(head: list[str], rows: list[tuple[str, str]], foot: str) -> dcc.Markdown:
+    """One component for the whole table. As Dash html.* elements a table of 150
+    members is ~5 000 React components and takes seconds to render in the browser."""
+    thead = "".join(f"<th>{esc(h)}</th>" for h in head)
+    tbody = "".join(f'<tr class="{cls}">{cells}</tr>' for cls, cells in rows)
+    markup = (f'<table class="tbl"><thead><tr>{thead}</tr></thead><tbody>{tbody}</tbody>'
+              f"<tfoot><tr>{foot}</tr></tfoot></table>")
+    return dcc.Markdown(markup, dangerously_allow_html=True, className="tbl-md")
+
+
+def _dest_table(data: SharingData, enabled: set[str], names: dict, lang: str, top=None):
     df = per_destination(data)
-    cmap = colour_map(data)
+    cmap = colour_map(data, top)
     is_all = data.fmt == "all"
     head = [f"{t('col_name', lang)} / {t('col_ean', lang)}"]
     if is_all:
@@ -728,95 +1032,71 @@ def _dest_table(data: SharingData, enabled: set[str], names: dict, lang: str):
         head += [t("col_shared", lang)]
     head += [t("col_share", lang), t("col_data", lang)]
 
-    body = []
+    rows = []
     for r in df.itertuples():
-        cells = [
-            html.Td(className="name", children=[
-                html.Div([html.Span(className="swatch", style={"background": cmap[r.ean]}),
-                          names[r.ean]]),
-                html.Div(r.ean, className="mono sub-ean"),
-            ]),
-        ]
+        cells = _name_cell(names[r.ean], r.ean, cmap[r.ean])
         if is_all:
-            cells += [html.Td(fmt_num(r.consumption, lang, 1), className="num"),
-                      html.Td(fmt_num(r.shared, lang, 1), className="num"),
-                      html.Td(fmt_num(r.unmet, lang, 1), className="num"),
-                      html.Td(fmt_pct(r.coverage_pct, lang), className="num")]
+            cells += (_cell(fmt_num(r.consumption, lang, 1), "num")
+                      + _cell(fmt_num(r.shared, lang, 1), "num")
+                      + _cell(fmt_num(r.unmet, lang, 1), "num")
+                      + _cell(fmt_pct(r.coverage_pct, lang), "num"))
         else:
-            cells += [html.Td(fmt_num(r.shared, lang, 1), className="num")]
-        cells += [html.Td(fmt_pct(r.share_of_shared_pct, lang), className="num"),
-                  html.Td([fmt_date(r.first_data, lang),
-                           html.Span(f" ({fmt_pct(r.data_pct, lang, 0)})", className="muted")],
-                          className="num", title=t("col_data_pct", lang))]
-        body.append(html.Tr(cells, className="" if r.ean in enabled else "off"))
+            cells += _cell(fmt_num(r.shared, lang, 1), "num")
+        cells += (_cell(fmt_pct(r.share_of_shared_pct, lang), "num")
+                  + _cell(f'{fmt_date(r.first_data, lang)}<span class="muted"> '
+                          f'({fmt_pct(r.data_pct, lang, 0)})</span>', "num",
+                          t("col_data_pct", lang)))
+        rows.append(("" if r.ean in enabled else "off", cells))
 
-    tot = [html.Td(html.B("Σ"))]
+    b = lambda x: f"<b>{x}</b>"  # noqa: E731
+    foot = _cell(b("Σ"))
     if is_all:
         c, sh, u = df["consumption"].sum(), df["shared"].sum(), df["unmet"].sum()
-        tot += [html.Td(html.B(fmt_num(c, lang, 1)), className="num"),
-                html.Td(html.B(fmt_num(sh, lang, 1)), className="num"),
-                html.Td(html.B(fmt_num(u, lang, 1)), className="num"),
-                html.Td(html.B(fmt_pct(100 * sh / c if c else None, lang)), className="num")]
+        foot += (_cell(b(fmt_num(c, lang, 1)), "num") + _cell(b(fmt_num(sh, lang, 1)), "num")
+                 + _cell(b(fmt_num(u, lang, 1)), "num")
+                 + _cell(b(fmt_pct(100 * sh / c if c else None, lang)), "num"))
     else:
-        tot += [html.Td(html.B(fmt_num(df["shared"].sum(), lang, 1)), className="num")]
-    tot += [html.Td(html.B(fmt_pct(100.0, lang)), className="num"), html.Td("")]
-
-    return html.Table(className="tbl", children=[
-        html.Thead(html.Tr([html.Th(h) for h in head])),
-        html.Tbody(body),
-        html.Tfoot(html.Tr(tot)),
-    ])
+        foot += _cell(b(fmt_num(df["shared"].sum(), lang, 1)), "num")
+    foot += _cell(b(fmt_pct(100.0, lang)), "num") + _cell("")
+    return _html_table(head, rows, foot)
 
 
-def _cmp_table(data: SharingData, exact: Recomputed, enabled: set[str], names: dict, lang: str):
+def _cmp_table(data: SharingData, exact: Recomputed, enabled: set[str], names: dict, lang: str,
+               top=None):
     a = per_destination(data).set_index("ean")
-    b = per_destination(exact.data).set_index("ean")
+    bb = per_destination(exact.data).set_index("ean")
     keys = dict(zip(data.dest_eans, exact.keys))
     ksum = sum(exact.keys) or 1.0
-    cmap = colour_map(data)
+    cmap = colour_map(data, top)
     head = [f"{t('col_name', lang)} / {t('col_ean', lang)}", t("cmp_key", lang),
             t("col_consumption", lang), t("cmp_shared_edc", lang), t("cmp_shared_exact", lang),
             t("cmp_delta", lang), t("cmp_delta_pct", lang), t("cmp_cov", lang)]
-    body = []
+    cov = lambda x, dem: fmt_pct(100 * x / dem if dem else None, lang)  # noqa: E731
+    rows = []
     for e in data.dest_eans:
-        sa, sb, dem = a.at[e, "shared"], b.at[e, "shared"], a.at[e, "consumption"]
+        sa, sb, dem = a.at[e, "shared"], bb.at[e, "shared"], a.at[e, "consumption"]
         d = sb - sa
-        body.append(html.Tr(className="" if e in enabled else "off", children=[
-            html.Td(className="name", children=[
-                html.Div([html.Span(className="swatch", style={"background": cmap[e]}), names[e]]),
-                html.Div(e, className="mono sub-ean"),
-            ]),
-            html.Td([fmt_pct(100 * keys[e], lang, 1),
-                     html.Span(f" ({fmt_pct(100 * keys[e] / ksum, lang, 1)})", className="muted")],
-                    className="num"),
-            html.Td(fmt_num(dem, lang, 1), className="num"),
-            html.Td(fmt_num(sa, lang, 1), className="num"),
-            html.Td(html.B(fmt_num(sb, lang, 1)), className="num"),
-            html.Td(fmt_signed(d, lang), className="num " + ("pos" if d > 0.05 else "")),
-            html.Td(fmt_pct(100 * d / sa, lang) if sa else "—", className="num"),
-            html.Td(f"{fmt_pct(100 * sa / dem if dem else None, lang)} → "
-                    f"{fmt_pct(100 * sb / dem if dem else None, lang)}", className="num"),
-        ]))
-    sa, sb, dem = a["shared"].sum(), b["shared"].sum(), a["consumption"].sum()
-    foot = html.Tr([
-        html.Td(html.B("Σ")),
-        html.Td(html.B(fmt_pct(100 * sum(exact.keys), lang, 1)), className="num"),
-        html.Td(html.B(fmt_num(dem, lang, 1)), className="num"),
-        html.Td(html.B(fmt_num(sa, lang, 1)), className="num"),
-        html.Td(html.B(fmt_num(sb, lang, 1)), className="num"),
-        html.Td(html.B(fmt_signed(sb - sa, lang)), className="num pos"),
-        html.Td(html.B(fmt_pct(100 * (sb - sa) / sa if sa else None, lang)), className="num"),
-        html.Td(html.B(f"{fmt_pct(100 * sa / dem if dem else None, lang)} → "
-                       f"{fmt_pct(100 * sb / dem if dem else None, lang)}"), className="num"),
-    ])
-    return html.Table(className="tbl", children=[
-        html.Thead(html.Tr([html.Th(h) for h in head])),
-        html.Tbody(body), html.Tfoot(foot),
-    ])
+        rows.append(("" if e in enabled else "off",
+                     _name_cell(names[e], e, cmap[e])
+                     + _cell(f'{fmt_pct(100 * keys[e], lang, 1)}<span class="muted"> '
+                             f'({fmt_pct(100 * keys[e] / ksum, lang, 1)})</span>', "num")
+                     + _cell(fmt_num(dem, lang, 1), "num")
+                     + _cell(fmt_num(sa, lang, 1), "num")
+                     + _cell(f"<b>{fmt_num(sb, lang, 1)}</b>", "num")
+                     + _cell(fmt_signed(d, lang), "num pos" if d > 0.05 else "num")
+                     + _cell(fmt_pct(100 * d / sa, lang) if sa else "—", "num")
+                     + _cell(f"{cov(sa, dem)} → {cov(sb, dem)}", "num")))
+    sa, sb, dem = a["shared"].sum(), bb["shared"].sum(), a["consumption"].sum()
+    b = lambda x: f"<b>{x}</b>"  # noqa: E731
+    foot = (_cell(b("Σ")) + _cell(b(fmt_pct(100 * sum(exact.keys), lang, 1)), "num")
+            + _cell(b(fmt_num(dem, lang, 1)), "num") + _cell(b(fmt_num(sa, lang, 1)), "num")
+            + _cell(b(fmt_num(sb, lang, 1)), "num") + _cell(b(fmt_signed(sb - sa, lang)), "num pos")
+            + _cell(b(fmt_pct(100 * (sb - sa) / sa if sa else None, lang)), "num")
+            + _cell(b(f"{cov(sa, dem)} → {cov(sb, dem)}"), "num"))
+    return _html_table(head, rows, foot)
 
 
-def _timing(exact: Recomputed, data: SharingData, names: dict, lang: str,
-            stale: bool) -> list:
+def _timing(exact: Recomputed, data: SharingData, names: dict, lang: str) -> list:
     tm = exact.timing
     n = lambda x: fmt_num(x, lang)  # noqa: E731
     stats = html.Div(className="timing-grid", children=[
@@ -857,11 +1137,10 @@ def _timing(exact: Recomputed, data: SharingData, names: dict, lang: str,
         html.P([html.B(f"{t('keys_used', lang)} ({src}): "), key_txt,
                 f" ({t('keys_sum', lang)} {fmt_pct(100 * sum(exact.keys), lang, 1)}){reserve}"],
                className="keys-line"),
-        html.P(t("edc_check", lang).format(pct=fmt_pct(100 * exact.edc_match, lang, 1)),
+        html.P(t("edc_check", lang).format(rounds=t(f"rounds_{exact.rounds}", lang),
+                                           pct=fmt_pct(100 * exact.edc_match, lang, 1)),
                className="hint"),
     ]
-    if stale:
-        out.append(html.P(t("stale", lang), className="stale"))
     return out
 
 
@@ -922,23 +1201,25 @@ def _align_daily(fa, fb, log: bool) -> None:
     Output("fig-heat-b", "style"),
     Input("data-key", "data"),
     Input("result-rev", "data"),
-    Input({"type": "dest", "ean": ALL}, "value"),
+    Input("members", "selectedRows"),
+    Input("members", "cellValueChanged"),
     Input({"type": "name", "ean": ALL}, "value"),
-    Input({"type": "key", "ean": ALL}, "value"),
-    Input("reserve", "value"),
     Input("lang", "value"),
     Input("yscale", "value"),
     Input("grid-toggles", "value"),
     Input("group", "value"),
     Input("show-heat", "value"),
     Input("heat-metric", "value"),
+    Input("theme", "data"),
     State({"type": "name", "ean": ALL}, "id"),
-    State({"type": "key", "ean": ALL}, "id"),
+    State("members", "rowData"),
     State("day-picker", "date"),
     prevent_initial_call="initial_duplicate",
 )
-def _render(key, _rev, dest_values, name_values, key_values, reserve, lang, yscale,
-            toggles, group, show_heat, heat_metric, name_ids, key_ids, sel_day):
+def _render(key, _rev, selected, _changed, name_values, lang, yscale, toggles, group,
+            show_heat, heat_metric, theme_name, name_ids, rows, sel_day):
+    if _key_only_edit():
+        raise dash.exceptions.PreventUpdate      # a key cell changed: figures unaffected
     group = (group or "").strip()
     title = (t("report_title_group", lang).format(group=group) if group
              else t("report_title", lang))
@@ -951,22 +1232,22 @@ def _render(key, _rev, dest_values, name_values, key_values, reserve, lang, ysca
                 [], e, e, e, e, e, e, {"display": "none"}, [], [], "", status, e, e, e, e)
     data = entry.data
 
-    enabled = {v[0] for v in (dest_values or []) if v}
-    if not dest_values:  # panel not rendered yet -> everything on
-        enabled = set(data.dest_eans)
-    names = effective_names(data, lang, name_ids, name_values)
+    enabled = _enabled(data, selected)
+    names = effective_names(data, lang, name_ids, name_values, rows)
     show_unshared = "unshared" in (toggles or [])
     show_unmet = "unmet" in (toggles or [])
     yscale = yscale or "linear"
-    opts = dict(show_unshared=show_unshared, show_unmet=show_unmet, lang=lang)
+    th = theme(theme_name)
+    opts = dict(show_unshared=show_unshared, show_unmet=show_unmet, lang=lang, th=th)
     h = lambda fig: {"height": f"{fig.layout.height}px"} if fig else {}  # noqa: E731
 
     df = filter_dests(data, enabled)
+    opts["top"] = top_dests(df, data)      # >10 destinations: fold the rest (same in both)
     ov_a = fig_total_by_flow(df, data, names, **opts)
     sel_day = _day(sel_day)
     dy_a = fig_daily(df, data, names, yscale=yscale, sel_day=sel_day, **opts)
     has_grid = data.fmt == "all"
-    pie_a = fig_wasted_pie(compute_wasted_split(df), lang) if has_grid else {}
+    pie_a = fig_wasted_pie(compute_wasted_split(df), lang, th) if has_grid else {}
 
     notes = []
     if data.notes:
@@ -984,16 +1265,12 @@ def _render(key, _rev, dest_values, name_values, key_values, reserve, lang, ysca
         df_b = filter_dests(exact.data, enabled)
         ov_b = fig_total_by_flow(df_b, exact.data, names, **opts)
         dy_b = fig_daily(df_b, exact.data, names, yscale=yscale, sel_day=sel_day, **opts)
-        pie_b = fig_wasted_pie(compute_wasted_split(df_b), lang)
+        pie_b = fig_wasted_pie(compute_wasted_split(df_b), lang, th)
         _align_overview(ov_a, ov_b)
         _align_daily(dy_a, dy_b, yscale == "log")
-        cur_keys = _keys_from_inputs(data, key_ids, key_values)
-        cur_res = min(max(float(reserve or 0), 0.0), 100.0) / 100
-        stale = (any(k is not None and abs(k - u) > 1e-6 for k, u in zip(cur_keys, exact.keys))
-                 or abs(cur_res - exact.reserve) > 1e-9)
         b = (_tiles(exact.data, enabled, lang, ref=data), ov_b, dy_b, pie_b,
-             h(ov_b), h(dy_b), h(pie_b), {}, _cmp_table(data, exact, enabled, names, lang),
-             _timing(exact, data, names, lang, stale))
+             h(ov_b), h(dy_b), h(pie_b), {}, _cmp_table(data, exact, enabled, names, lang, opts["top"]),
+             _timing(exact, data, names, lang))
         mode = "compare dual"
         # keep paired graphs the same height
         for fa, fb in ((ov_a, ov_b),):
@@ -1012,9 +1289,9 @@ def _render(key, _rev, dest_values, name_values, key_values, reserve, lang, ysca
         zs = [float(np.nanmax(p.to_numpy())) for p in (pv_a, pv_b)
               if p is not None and not p.empty]
         z_max = max(zs) if zs else None
-        ht_a = fig_heatmap(pv_a, metric, z_max=z_max, lang=lang)
+        ht_a = fig_heatmap(pv_a, metric, z_max=z_max, lang=lang, th=th)
         if exact is not None:
-            ht_b = fig_heatmap(pv_b, metric, z_max=z_max, lang=lang)
+            ht_b = fig_heatmap(pv_b, metric, z_max=z_max, lang=lang, th=th)
     if not heat_on:
         mode += " no-heat"
 
@@ -1029,7 +1306,7 @@ def _render(key, _rev, dest_values, name_values, key_values, reserve, lang, ysca
         ov_a, dy_a, pie_a,
         h(ov_a), h(dy_a), h(pie_a),
         {} if has_grid else hidden,
-        _dest_table(data, enabled, names, lang),
+        _dest_table(data, enabled, names, lang, opts["top"]),
         mode,
         *b,
         btn_title,
@@ -1091,7 +1368,8 @@ app.clientside_callback(
             const d = String(day).slice(0, 10);
             const layout = Object.assign({}, fig.layout, {shapes: [{
                 type: 'line', xref: 'x', yref: 'paper', x0: d, x1: d, y0: 0, y1: 1,
-                line: {color: 'black', width: 1.5, dash: 'dash'}, layer: 'above'}]});
+                line: {color: (fig.layout.meta && fig.layout.meta.marker) || 'black',
+                       width: 1.5, dash: 'dash'}, layer: 'above'}]});
             return Object.assign({}, fig, {layout: layout});
         }
         return [mark(figA), mark(figB)];
@@ -1114,24 +1392,28 @@ app.clientside_callback(
     Input("day-picker", "date"),
     Input("data-key", "data"),
     Input("result-rev", "data"),
-    Input({"type": "dest", "ean": ALL}, "value"),
+    Input("members", "selectedRows"),
+    Input("members", "cellValueChanged"),
     Input({"type": "name", "ean": ALL}, "value"),
     Input("lang", "value"),
     Input("yscale", "value"),
     Input("grid-toggles", "value"),
+    Input("theme", "data"),
     State({"type": "name", "ean": ALL}, "id"),
+    State("members", "rowData"),
 )
-def _hourly(day, key, _rev, dest_values, name_values, lang, yscale, toggles, name_ids):
+def _hourly(day, key, _rev, selected, _changed, name_values, lang, yscale, toggles,
+            theme_name, name_ids, rows):
     """Subplot 4: one day in 15-min steps; y axis fixed over the whole period (and
     shared by both reports) so days and methods compare on one scale."""
+    if _key_only_edit():
+        raise dash.exceptions.PreventUpdate
     entry = _cache_get(key)
     if entry is None or not day:
         return {}, {}, {}, {}
     data = entry.data
-    enabled = {v[0] for v in (dest_values or []) if v}
-    if not dest_values:
-        enabled = set(data.dest_eans)
-    names = effective_names(data, lang, name_ids, name_values)
+    enabled = _enabled(data, selected)
+    names = effective_names(data, lang, name_ids, name_values, rows)
     yscale = yscale or "linear"
     show_unshared = "unshared" in (toggles or [])
     show_unmet = "unmet" in (toggles or [])
@@ -1141,7 +1423,8 @@ def _hourly(day, key, _rev, dest_values, name_values, lang, yscale, toggles, nam
         frames.append(filter_dests(entry.exact.data, enabled))
     y_max = max(intraday_ymax(f, show_unshared, show_unmet, stacked) for f in frames)
     opts = dict(y_max=y_max, yscale=yscale, show_unshared=show_unshared,
-                show_unmet=show_unmet, lang=lang)
+                show_unmet=show_unmet, lang=lang, th=theme(theme_name),
+                top=top_dests(frames[0], data))
     fa = fig_intraday(frames[0], data, names, _day(day), **opts)
     style = {"height": f"{fa.layout.height}px"}
     if entry.exact is None:
