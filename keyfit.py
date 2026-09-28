@@ -1,4 +1,4 @@
-"""Estimate EDC allocation keys from a SharEl report (the CSV carries no keys).
+"""Estimate EDC allocation keys from an EDC sharing report (the CSV carries no keys).
 
 Today's EDC static method (``presna_staticka.staticka_edc``): in every round each
 member gets ``min(remaining demand, floor(k_i * P_r))`` where ``P_r`` is the

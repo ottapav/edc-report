@@ -31,7 +31,7 @@ def synthetic_group(n: int, T: int, rounds: int, keys=None, seed: int = 0):
 
 def all_report_csv(P, D, S, eans=None, prod="859182400699900000",
                    start="2026-06-01") -> bytes:
-    """Build a SharEl 'all report' CSV (decimal comma, ';') from hundredths of kWh."""
+    """Build an EDC 'all report' CSV (decimal comma, ';') from hundredths of kWh."""
     T, n = D.shape
     eans = eans or [f"8591824006{i:08d}" for i in range(n)]
     idx = pd.date_range(start, periods=T, freq="15min")

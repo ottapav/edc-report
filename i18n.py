@@ -36,8 +36,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "pie_no_overlap": "No concurrent overlap",
         "pie_union": "Total source: {total} kWh",
         # --- web UI ---
-        "app_title": "SharEl sharing report",
-        "upload_prompt": "Drag and drop a SharEl CSV export here, or click to choose a file",
+        "app_title": "EDC sharing report",
+        "upload_prompt": "Drag and drop the CSV report from edc-cr.cz here, or click to choose a file",
         "upload_hint": "Part report (<ean>-<ean> columns) or all report (IN/OUT-<ean>-D/O columns). "
                        "The file is processed in memory and not stored.",
         "upload_other": "Upload another file",
@@ -202,8 +202,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "pie_subtitle": "Zmařené = min(nesdíleno, nepokryto) za 15min interval",
         "pie_no_overlap": "Žádný souběžný překryv",
         "pie_union": "Celkem výroba: {total} kWh",
-        "app_title": "Report sdílení SharEl",
-        "upload_prompt": "Přetáhněte sem CSV export ze SharEl, nebo klikněte a vyberte soubor",
+        "app_title": "Report sdílení EDC",
+        "upload_prompt": "Přetáhněte sem CSV report z portálu edc-cr.cz, nebo klikněte a vyberte soubor",
         "upload_hint": "Dílčí report (sloupce <ean>-<ean>) nebo úplný report (sloupce IN/OUT-<ean>-D/O). "
                        "Soubor se zpracuje v paměti a neukládá se.",
         "upload_other": "Nahrát jiný soubor",

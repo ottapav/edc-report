@@ -20,7 +20,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from i18n import fmt_num, month_label, plotly_separators, t
-from sharel_core import (
+from edc_data import (
     SharingData, WastedSplit, aggregate_grid_flows, key_dest, key_kind,
     key_source, key_unmet, memoized, shared_cols,
 )

@@ -2,7 +2,7 @@
 # (Or create a Web Service by hand with the same build/start commands.)
 services:
   - type: web
-    name: sharel-report
+    name: edc-report
     runtime: python
     # free = 512 MB, spins down after 15 min idle (first request then waits ~1 min
     # and uploaded reports are gone). 0.5c-512mb ($7/mo) stays up.
@@ -15,11 +15,11 @@ services:
     healthCheckPath: /healthz
     autoDeployTrigger: commit
     envVars:
-      - key: SHAREL_CACHE_MAX        # reports kept in memory (~25 MB each)
+      - key: EDC_CACHE_MAX        # reports kept in memory (~25 MB each)
         value: "6"
-      - key: SHAREL_MAX_UPLOAD_MB
+      - key: EDC_MAX_UPLOAD_MB
         value: "25"
-      - key: SHAREL_MAX_JOBS          # computations at once (instance has < 1 CPU)
+      - key: EDC_MAX_JOBS          # computations at once (instance has < 1 CPU)
         value: "2"
       - key: BASIC_AUTH_USER          # optional: set both to password-protect the app
         sync: false

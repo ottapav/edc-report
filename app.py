@@ -1,6 +1,7 @@
-"""SharEl sharing report - Dash web app.
+"""EDC sharing report - Dash web app that displays the CSV sharing reports
+generated on edc-cr.cz (the EDC portal).
 
-Phase 1: upload a SharEl CSV export and see general information and statistics,
+Phase 1: upload the CSV report from edc-cr.cz and see general information and statistics,
 the "total by flow" overview and daily plot from Figure 1 of
 ``plot_energy_sharing.py``, and the shared / wasted pie from Figure 2, with a
 selection panel (destinations on/off, names, display options).
@@ -45,7 +46,7 @@ from figures import (
 from i18n import fmt_date, fmt_duration, fmt_num, fmt_pct, fmt_signed, t
 from keyfit import KeyFit, estimate_keys
 from recompute import Recomputed, recompute, to_hundredths
-from sharel_core import (
+from edc_data import (
     SharingData, compute_wasted_split, filter_dests, load_report,
     per_destination, summarize,
 )
@@ -55,14 +56,14 @@ from sharel_core import (
 # ---------------------------------------------------------------------------
 
 #: parsed reports kept in memory (~20-25 MB each incl. a recompute; 512 MB instances -> 6)
-CACHE_MAX = int(os.environ.get("SHAREL_CACHE_MAX", "6"))
+CACHE_MAX = int(os.environ.get("EDC_CACHE_MAX", "6"))
 #: largest accepted CSV in MB
-MAX_UPLOAD_MB = float(os.environ.get("SHAREL_MAX_UPLOAD_MB", "25"))
+MAX_UPLOAD_MB = float(os.environ.get("EDC_MAX_UPLOAD_MB", "25"))
 #: optional HTTP basic auth for the whole app (both must be set)
 AUTH_USER = os.environ.get("BASIC_AUTH_USER", "")
 AUTH_PASSWORD = os.environ.get("BASIC_AUTH_PASSWORD", "")
 #: computations (key estimation, recompute) running at the same time; others queue
-MAX_JOBS = max(1, int(os.environ.get("SHAREL_MAX_JOBS", "2")))
+MAX_JOBS = max(1, int(os.environ.get("EDC_MAX_JOBS", "2")))
 
 # ---------------------------------------------------------------------------
 # In-memory store of parsed uploads (keyed by a random id held in the browser)
@@ -349,7 +350,7 @@ def _static_panel() -> html.Div:
     ])
 
 
-app = dash.Dash(__name__, title="SharEl report", suppress_callback_exceptions=True)
+app = dash.Dash(__name__, title="EDC sharing report", suppress_callback_exceptions=True)
 server = app.server  # for gunicorn: gunicorn app:server --workers 1 --threads 8
 # base64 upload inflates the file by 4/3; leave headroom for the rest of the request
 server.config["MAX_CONTENT_LENGTH"] = int((MAX_UPLOAD_MB * 1.4 + 2) * 2**20)
@@ -404,7 +405,7 @@ def _basic_auth():
             and hmac.compare_digest(auth.password or "", AUTH_PASSWORD)):
         return None
     return Response("Authentication required", 401,
-                    {"WWW-Authenticate": 'Basic realm="SharEl report"'})
+                    {"WWW-Authenticate": 'Basic realm="EDC sharing report"'})
 
 
 app.layout = html.Div(className="page", children=[
@@ -1434,7 +1435,7 @@ def _hourly(day, key, _rev, selected, _changed, name_values, lang, yscale, toggl
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="SharEl sharing report web app")
+    ap = argparse.ArgumentParser(description="EDC sharing report web app")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8050)
     ap.add_argument("--debug", action="store_true")

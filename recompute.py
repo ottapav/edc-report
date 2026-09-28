@@ -20,7 +20,7 @@ import pandas as pd
 
 from keyfit import KeyFit, replay_match
 from presna_staticka import rozdel
-from sharel_core import (
+from edc_data import (
     SharingData, key_shared, key_unmet, key_unshared,
 )
 

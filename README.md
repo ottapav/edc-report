@@ -1,12 +1,14 @@
 # EDC sharing report
 
-Interactive web app (Dash) for the electricity-sharing reports that Czech energy communities
-download from the EDC portal (*Elektroenergetické datové centrum*, SharEl export). Upload the
-CSV and you get the group's sharing at a glance. The app also recomputes the whole period
-with the proposed **exact static method** (`presna_staticka.py`) and shows today's result and
-the proposal side by side, with the computation timed per 15-min interval.
+Interactive web app (Dash) that displays the electricity-sharing data of a Czech sharing
+group. The input is the CSV report generated on [edc-cr.cz](https://www.edc-cr.cz), the portal
+of the *Elektroenergetické datové centrum* (EDC). Upload the CSV and you get the group's
+sharing at a glance. The app also recomputes the whole period with the proposed **exact
+static method** (`presna_staticka.py`) and shows today's result and the proposal side by side,
+with the computation timed per 15-min interval.
 
-> **Česky:** Webová aplikace pro reporty sdílení elektřiny z EDC. Po nahrání CSV ukáže
+> **Česky:** Webová aplikace, která zobrazuje data o sdílení elektřiny z CSV reportu
+> vygenerovaného na portálu edc-cr.cz. Po nahrání CSV ukáže
 > souhrny, denní a hodinové grafy, teplotní mapu a podíl, který „mohl být sdílen“.
 > Z reportu odhadne alokační klíče (dnešní metoda EDC s 1 nebo 5 koly, i pro velké skupiny).
 > Jedním tlačítkem přepočítá sdílení přesnou statickou metodou a porovná ji s dneškem.
@@ -91,8 +93,8 @@ gunicorn app:server -c gunicorn.conf.py        # listens on $PORT (default 8050)
 
 ## Using the app
 
-1. **Upload** the CSV exported from the EDC portal (*Sdílení → Export dat*). Both layouts are
-   detected from the header:
+1. **Upload** the CSV report generated on edc-cr.cz (file name like
+   `Export-dat-…-report-….csv`). Both report layouts are detected from the header:
    * **all report** (`IN/OUT-<ean>-D` for the producer, `IN/OUT-<ean>-O` for members) carries
      production and consumption and enables everything;
    * **part report** (`<ean>-<ean>` columns) has shared energy only: no pie, no recompute.
@@ -190,7 +192,7 @@ interval. Numbers vary with the machine; Render instances have less than one CPU
 | File | Role |
 |---|---|
 | `app.py` | Dash layout and callbacks, in-memory store, background jobs, config, `/healthz`, optional basic auth |
-| `sharel_core.py` | CSV parsing (both layouts), per-member frames keyed by EAN, statistics; memoised derived data |
+| `edc_data.py` | CSV parsing (both layouts), per-member frames keyed by EAN, statistics; memoised derived data |
 | `keyfit.py` | Replay of today's EDC method (numpy, in blocks), key estimation for 1 and 5 rounds |
 | `recompute.py` | Exact static recompute in a worker process, timing |
 | `presna_staticka.py` | Reference implementation of the exact static method |
@@ -210,7 +212,7 @@ polls of a job reached the worker that did not start it, and the button looked d
 workers here would need a shared store such as Redis, not a bigger worker count.
 
 **Background jobs.** Key estimation (after upload) and the recompute run in threads. At most
-`SHAREL_MAX_JOBS` run at once, and the rest wait in a visible queue. The browser polls every
+`EDC_MAX_JOBS` run at once, and the rest wait in a visible queue. The browser polls every
 200 ms, and only the poll callback draws the progress bar and the button state. Two other
 safeguards:
 
@@ -260,7 +262,7 @@ Notes:
 * **Free plan:** 512 MB, and it sleeps after 15 minutes without traffic. The first visit then
   waits about a minute, and uploaded reports are gone; the page says so and asks for the file
   again. The *0.5c-512mb* plan ($7/month) stays up.
-* **Memory:** both plans have 512 MB. Keep `SHAREL_CACHE_MAX` about 6.
+* **Memory:** both plans have 512 MB. Keep `EDC_CACHE_MAX` about 6.
 * **Changing the Blueprint:** if you created the service before `gunicorn.conf.py` existed,
   update its start command to the one above (or re-sync the Blueprint).
 * **Keep one worker.** Do not add `--workers N`, and do not rely on `WEB_CONCURRENCY` (see
@@ -271,10 +273,10 @@ Notes:
 | Variable | Default | Meaning |
 |---|---|---|
 | `PORT` | 8050 (Render sets it) | port for gunicorn |
-| `SHAREL_THREADS` | 8 | request threads of the single worker |
-| `SHAREL_MAX_JOBS` | 2 | key estimations / recomputes running at once (others queue) |
-| `SHAREL_CACHE_MAX` | 6 | uploaded reports kept in memory (oldest dropped) |
-| `SHAREL_MAX_UPLOAD_MB` | 25 | largest accepted CSV |
+| `EDC_THREADS` | 8 | request threads of the single worker |
+| `EDC_MAX_JOBS` | 2 | key estimations / recomputes running at once (others queue) |
+| `EDC_CACHE_MAX` | 6 | uploaded reports kept in memory (oldest dropped) |
+| `EDC_MAX_UPLOAD_MB` | 25 | largest accepted CSV |
 | `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD` | empty | password-protect the whole app when both are set |
 | `LOG_LEVEL` | info | gunicorn log level |
 

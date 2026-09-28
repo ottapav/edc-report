@@ -1,4 +1,5 @@
-"""Loading and statistics for SharEl export CSVs (no plotting, no matplotlib).
+"""Loading and statistics for the CSV sharing reports generated on edc-cr.cz
+(the EDC portal); no plotting, no matplotlib.
 
 Ported from ``plot_energy_sharing.py`` with one structural change: frame
 columns are keyed by EAN rather than by display name, so names can be edited
@@ -170,7 +171,7 @@ def _detect_format(columns: list[str]) -> str:
     if any(_RE_PAIR.match(c) for c in columns):
         return "part"
     raise ValueError(
-        "Unrecognised SharEl CSV header. Expected '<ean>-<ean>' columns "
+        "Unrecognised EDC report header. Expected '<ean>-<ean>' columns "
         "(part report) or 'IN-<ean>-D' / 'OUT-<ean>-D' columns (all report)."
     )
 
@@ -288,7 +289,7 @@ def _load_all(df: pd.DataFrame) -> SharingData:
 
 
 def load_report(content: bytes) -> SharingData:
-    """Parse the raw bytes of a SharEl CSV export."""
+    """Parse the raw bytes of a CSV report downloaded from edc-cr.cz."""
     text = None
     for enc in ("utf-8-sig", "cp1250", "latin-1"):
         try:

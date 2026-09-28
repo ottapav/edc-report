@@ -18,7 +18,7 @@ import os
 bind = f"0.0.0.0:{os.environ.get('PORT', '8050')}"
 workers = 1
 worker_class = "gthread"
-threads = int(os.environ.get("SHAREL_THREADS", "8"))
+threads = int(os.environ.get("EDC_THREADS", "8"))
 timeout = 120
 graceful_timeout = 30
 max_requests = 0
@@ -33,4 +33,4 @@ def on_starting(server):  # pragma: no cover - log only
     if wc and wc != "1":
         server.log.warning(
             "WEB_CONCURRENCY=%s ignored: this app must run with one worker "
-            "(in-memory uploads and jobs); scale with SHAREL_THREADS instead.", wc)
+            "(in-memory uploads and jobs); scale with EDC_THREADS instead.", wc)

@@ -2,7 +2,7 @@ import numpy as np
 
 import keyfit
 import recompute
-import sharel_core as core
+import edc_data as core
 from conftest import all_report_csv
 
 
