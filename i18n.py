@@ -91,6 +91,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "col_data_pct": "Data rows",
         "notes": "Data notes",
         # --- phase 4: keys at upload, jobs, theme ---
+        "job_cancelled": "The computation was cancelled (another file was uploaded, or the page stopped responding). Start it again.",
+        "job_timeout": "The computation took too long and was stopped. Try a smaller report.",
         "job_lost": "The computation was lost (the server restarted or went to sleep) together with the uploaded data. Upload the file again.",
         "queued": "Waiting for a free slot (another computation is running)",
         "fit_title": "Allocation keys estimated from the report",
@@ -267,6 +269,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "heat_production": "celkovou výrobu",
         "heat_consumption": "celkový odběr (vybraná místa)",
         "heat_shared": "sdílenou energii",
+        "job_cancelled": "Výpočet byl zrušen (byl nahrán jiný soubor, nebo stránka přestala odpovídat). Spusťte ho znovu.",
+        "job_timeout": "Výpočet trval příliš dlouho a byl zastaven. Zkuste menší report.",
         "job_lost": "Výpočet se ztratil i s nahranými daty (server se restartoval nebo uspal). Nahrajte soubor znovu.",
         "queued": "Čeká na volné místo (běží jiný výpočet)",
         "fit_title": "Alokační klíče odhadnuté z reportu",

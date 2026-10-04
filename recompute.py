@@ -1,7 +1,7 @@
 """Recompute sharing with the exact static method (``presna_staticka.rozdel``).
 
-The ``rozdel()`` loop runs in a forked worker process so its timing is not
-disturbed by the web server's threads. Allocation keys come from the caller;
+The ``rozdel()`` loop runs in a child process (:mod:`procjob`), so its timing is not
+disturbed by the web server's threads and it can be cancelled. Allocation keys come from the caller;
 they are estimated from the report in :mod:`keyfit` right after upload.
 
 All energies are integers in hundredths of kWh (0.01 kWh), like EDC data.
@@ -10,7 +10,6 @@ Only the all report with one producer is supported (demand is needed).
 
 from __future__ import annotations
 
-import gc
 import time
 from dataclasses import dataclass, field
 from typing import Callable
@@ -19,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from keyfit import KeyFit, replay_match
+from procjob import run_in_child
 from presna_staticka import rozdel
 from edc_data import (
     SharingData, key_shared, key_unmet, key_unshared,
@@ -92,61 +92,20 @@ def rozdel_all(Pl: list[int], Dl: list[list[int]], keys: list[float], reserve: f
     return out, tt
 
 
-def _worker(Pl, Dl, keys, reserve, chunk, q) -> None:  # runs in the child process
-    # The forked child inherits the whole web-server heap; freezing it keeps the
-    # garbage collector from walking (and copy-on-write faulting) all of it, which
-    # would otherwise be billed to the rozdel() timing.
-    gc.freeze()
-    try:
-        last = [0.0]
-
-        def report(frac: float) -> None:
-            if frac - last[0] >= 0.01:  # at most ~100 progress messages
-                last[0] = frac
-                q.put(("p", frac))
-
-        out, tt = rozdel_all(Pl, Dl, keys, reserve, chunk, report)
-        q.put(("r", out, tt))
-    except Exception as exc:  # pragma: no cover - reported to the parent
-        q.put(("e", repr(exc)))
+def _rozdel_child(Pl, Dl, keys, reserve, chunk, progress: ProgressFn):
+    return rozdel_all(Pl, Dl, keys, reserve, chunk, lambda f: progress("compute", f))
 
 
-def _run_isolated(Pl, Dl, keys, reserve, chunk, progress: ProgressFn):
-    """Run :func:`rozdel_all` in a child process, relaying progress.
+def _run_isolated(Pl, Dl, keys, reserve, chunk, progress: ProgressFn,
+                  cancelled: Callable[[], bool] | None = None):
+    """Run :func:`rozdel_all` in a child process (see :mod:`procjob`), relaying progress.
 
-    Uses ``fork`` where available (cheap, no re-import of the web app); falls back
-    to running in-process if a child process cannot be started.
+    The loop gets a core of its own, so its timing is not disturbed by the web server's
+    threads, and the child can be killed when ``cancelled()`` turns True.
     """
-    import multiprocessing as mp
-    import queue as _queue
-
-    methods = mp.get_all_start_methods()
-    if "fork" not in methods:
-        return rozdel_all(Pl, Dl, keys, reserve, chunk, lambda f: progress("compute", f))
-    ctx = mp.get_context("fork")
-    q = ctx.Queue()
-    proc = ctx.Process(target=_worker, args=(Pl, Dl, keys, reserve, chunk, q), daemon=True)
-    proc.start()
     progress("compute", 0.0)
-    try:
-        while True:
-            try:
-                msg = q.get(timeout=0.5)
-            except _queue.Empty:
-                if not proc.is_alive():
-                    raise RuntimeError(f"worker process exited ({proc.exitcode})")
-                continue
-            if msg[0] == "p":
-                progress("compute", msg[1])
-            elif msg[0] == "r":
-                progress("compute", 1.0)
-                return msg[1], msg[2]
-            else:
-                raise RuntimeError(f"worker failed: {msg[1]}")
-    finally:
-        proc.join(timeout=5)
-        if proc.is_alive():
-            proc.terminate()
+    return run_in_child(_rozdel_child, (Pl, Dl, keys, reserve, chunk), progress=progress,
+                        cancelled=cancelled)
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +161,7 @@ def recompute(
     fit: KeyFit | None = None,
     keys_estimated: bool = False,
     rounds: int = 5,
+    cancelled: Callable[[], bool] | None = None,
 ) -> Recomputed:
     """Run ``rozdel`` for every 15-min interval and build a comparable SharingData.
 
@@ -225,7 +185,7 @@ def recompute(
 
     # The rozdel() loop runs in a separate process: it gets a whole core and its
     # timing is not disturbed by the web server's threads (GIL, caches).
-    out, tt = _run_isolated(Pl, Dl, keys, reserve, chunk, progress)
+    out, tt = _run_isolated(Pl, Dl, keys, reserve, chunk, progress, cancelled)
     for name, value in tt.items():
         setattr(tm, name, value)
     tm.t_total = tm.t_night + tm.t_enough + tm.t_full

@@ -45,6 +45,7 @@ from figures import (
 )
 from i18n import fmt_date, fmt_duration, fmt_num, fmt_pct, fmt_signed, t
 from keyfit import KeyFit, estimate_keys
+from procjob import JobCancelled, JobTimeout, run_in_child
 from recompute import Recomputed, recompute, to_hundredths
 from edc_data import (
     SharingData, compute_wasted_split, filter_dests, load_report,
@@ -64,6 +65,11 @@ AUTH_USER = os.environ.get("BASIC_AUTH_USER", "")
 AUTH_PASSWORD = os.environ.get("BASIC_AUTH_PASSWORD", "")
 #: computations (key estimation, recompute) running at the same time; others queue
 MAX_JOBS = max(1, int(os.environ.get("EDC_MAX_JOBS", "2")))
+#: a key estimate is killed after this many seconds (it stops itself after ~20 s)
+FIT_TIMEOUT_S = float(os.environ.get("EDC_FIT_TIMEOUT", "120"))
+#: a job nobody has polled for this long (page closed) is cancelled; browsers throttle
+#: timers of hidden tabs to once a minute, so keep this well above that
+JOB_IDLE_S = float(os.environ.get("EDC_JOB_IDLE_S", "180"))
 
 # ---------------------------------------------------------------------------
 # In-memory store of parsed uploads (keyed by a random id held in the browser)
@@ -94,11 +100,22 @@ _LOCK = threading.Lock()
 
 def _cache_put(filename: str, data: SharingData) -> str:
     key = uuid.uuid4().hex
+    evicted: list[str] = []
     with _LOCK:
         _CACHE[key] = Entry(filename, data)
         while len(_CACHE) > _CACHE_MAX:
-            _CACHE.popitem(last=False)
+            evicted.append(_CACHE.popitem(last=False)[0])
+    _cancel_jobs(evicted)                 # nobody can see their result any more
     return key
+
+
+def _cache_drop(key: str | None) -> None:
+    """Forget an upload (its browser replaced it) and stop its running jobs."""
+    if not key:
+        return
+    with _LOCK:
+        _CACHE.pop(key, None)
+    _cancel_jobs([key])
 
 
 def _cache_get(key: str | None) -> Entry | None:
@@ -115,31 +132,50 @@ _JOBS: dict[str, dict] = {}
 _JOB_SLOTS = threading.BoundedSemaphore(MAX_JOBS)
 
 
+def _cancel_jobs(data_keys: list[str]) -> None:
+    for job in list(_JOBS.values()):
+        if job["data_key"] in data_keys:
+            job["cancel"].set()
+
+
+def _cancelled(job: dict) -> bool:
+    """True when the job's result is no longer wanted: its upload was replaced or
+    evicted, or the page stopped polling (closed) for JOB_IDLE_S."""
+    return job["cancel"].is_set() or time.perf_counter() - job["seen"] > JOB_IDLE_S
+
+
 def _run_job(job_id: str, kind: str, data_key: str, keys: list[float | None],
              reserve: float) -> None:
     """Background job: ``fit`` (estimate keys) or ``recompute`` (exact method).
 
-    At most MAX_JOBS run at once (small instances have < 1 CPU); the rest wait
-    in the "queued" phase and the progress bar says so.
+    The heavy part runs in a child process (:mod:`procjob`), so request threads stay
+    free for progress polls and the job can be cancelled. At most MAX_JOBS run at once
+    (small instances have < 1 CPU); the rest wait in the "queued" phase and the
+    progress bar says so.
     """
     job = _JOBS[job_id]
+    stop = lambda: _cancelled(job)  # noqa: E731
 
     def progress(phase: str, frac: float) -> None:
         job["phase"], job["frac"] = phase, frac
 
     try:
         job["phase"] = "queued"
-        with _JOB_SLOTS:
+        while not _JOB_SLOTS.acquire(timeout=0.5):      # a cancelled job leaves the queue
+            if stop():
+                raise JobCancelled()
+        try:
             job["t0"] = time.perf_counter()          # time the work, not the queue
             entry = _cache_get(data_key)
             if entry is None:
-                raise RuntimeError("data no longer on the server")
+                raise JobCancelled()
             need_fit = kind == "fit" or (entry.fit is None and any(k is None for k in keys))
             if need_fit:
                 job["had_fit"] = kind == "recompute"
                 progress("fit", 0.0)
                 P, D, S = to_hundredths(entry.data)
-                entry.fit = estimate_keys(P, D, S, progress=progress)
+                entry.fit = run_in_child(estimate_keys, (P, D, S), progress=progress,
+                                         cancelled=stop, timeout=FIT_TIMEOUT_S)
             if kind == "recompute":
                 fit = entry.fit
                 merged = [k if k is not None else (fit.keys[i] if fit else None)
@@ -150,8 +186,16 @@ def _run_job(job_id: str, kind: str, data_key: str, keys: list[float | None],
                 entry.exact = recompute(
                     entry.data, merged, reserve, progress=progress, fit=fit,
                     keys_estimated=fit is not None and merged == list(fit.keys),
-                    rounds=fit.rounds if fit else 5,
+                    rounds=fit.rounds if fit else 5, cancelled=stop,
                 )
+        finally:
+            _JOB_SLOTS.release()
+        job["done"] = True
+    except JobCancelled:
+        job["error_key"] = "job_cancelled"
+        job["done"] = True
+    except JobTimeout:
+        job["error_key"] = "job_timeout"
         job["done"] = True
     except Exception as exc:  # reported in the UI
         traceback.print_exc()
@@ -173,7 +217,8 @@ def _start_background(kind: str, data_key: str, keys: list[float | None],
         _JOBS.pop(old, None)
     job_id = uuid.uuid4().hex
     _JOBS[job_id] = {"kind": kind, "phase": "queued", "frac": 0.0, "done": False,
-                     "error": None, "t0": now, "data_key": data_key}
+                     "error": None, "t0": now, "data_key": data_key,
+                     "cancel": threading.Event(), "seen": now}
     threading.Thread(target=_run_job, args=(job_id, kind, data_key, keys, reserve),
                      daemon=True).start()
     return job_id, False
@@ -404,7 +449,11 @@ app.index_string = """<!DOCTYPE html>
 
 @server.route("/healthz")
 def _healthz():
-    return {"status": "ok", "cached_reports": len(_CACHE)}
+    jobs = [j for j in list(_JOBS.values()) if not j["done"]]
+    return {"status": "ok", "cached_reports": len(_CACHE),
+            "jobs_running": sum(j["phase"] != "queued" for j in jobs),
+            "jobs_queued": sum(j["phase"] == "queued" for j in jobs),
+            "max_jobs": MAX_JOBS}
 
 
 @server.before_request
@@ -651,13 +700,15 @@ def _labels(lang, key, heat_value):
     Input("upload", "contents"),
     State("upload", "filename"),
     State("lang", "value"),
+    State("data-key", "data"),
     prevent_initial_call=True,
 )
-def _on_upload(contents, filename, lang):
+def _on_upload(contents, filename, lang, old_key):
     nu = no_update
     idle = (nu, True)
     if not contents:
         return (nu,) * 9 + (nu,) * 2 + (nu,) * 5
+    _cache_drop(old_key)       # this browser replaces its report: free it, stop its jobs
     try:
         _header, b64 = contents.split(",", 1)
         if len(b64) * 3 / 4 > MAX_UPLOAD_MB * 2**20:
@@ -792,6 +843,8 @@ def _start_job(n, key, rows, reserve, lang):
 def _poll(_n, job_id, rev, lang):
     nu = no_update
     job = _JOBS.get(job_id or "")
+    if job is not None:
+        job["seen"] = time.perf_counter()          # the page is alive
     if job is None:
         # The job is not in this process: the server restarted / went to sleep, or
         # (misconfigured) another worker answered. Never leave the button dead.
@@ -821,9 +874,10 @@ def _poll(_n, job_id, rev, lang):
         text = f"{label}… {fmt_pct(100 * frac, lang, 0)}{extra} · {fmt_duration(elapsed, lang)}"
         return (False, True, "progress running", {"width": f"{100 * frac:.1f}%"}, text, nu)
     job["reported"] = True
-    if job["error"]:
-        job["final"] = (True, False, "progress error", {"width": "100%"},
-                        f"{t('phase_error', lang)}: {job['error']}", nu)
+    if job.get("error_key") or job["error"]:
+        msg = (t(job["error_key"], lang) if job.get("error_key")
+               else f"{t('phase_error', lang)}: {job['error']}")
+        job["final"] = (True, False, "progress error", {"width": "100%"}, msg, nu)
         return job["final"]
     text = f"✓ {fmt_duration(elapsed, lang)}"
     job["final"] = (True, False, "progress done", {"width": "100%"}, text, (rev or 0) + 1)

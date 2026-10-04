@@ -9,8 +9,9 @@ process, so every request of a browser session must reach that process:
   per-process job cache). More users are served by threads, not workers.
 * ``max_requests = 0`` - never recycle the worker; a recycled worker would drop
   every upload and job in flight.
-* Heavy work runs in background threads (key estimation) and a forked child
-  process (the rozdel() loop), so request threads stay free for progress polls.
+* Heavy work (key estimation, the rozdel() loop) runs in forked child processes
+  (procjob.py), so request threads stay free for progress polls and a job can be
+  cancelled. Capacity is EDC_MAX_JOBS (jobs at once) and EDC_THREADS (requests).
 """
 
 import os

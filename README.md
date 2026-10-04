@@ -217,7 +217,8 @@ interval. Numbers vary with the machine; Render instances have less than one CPU
 | `edc_data.py` | CSV parsing (both layouts), per-member frames keyed by EAN, statistics; memoised derived data |
 | `keyfit.py` | Replay of today's EDC method (numpy, in blocks), rough key estimation for 1 and 5 rounds |
 | `bench/keyfit_bench.py` | Reproducible accuracy / time benchmark of the key estimate (synthetic data) |
-| `recompute.py` | Exact static recompute in a worker process, timing |
+| `recompute.py` | Exact static recompute (the `rozdel()` loop in a child process), timing |
+| `procjob.py` | Runs a function in a forked child with progress, cancellation and a time limit |
 | `presna_staticka.py` | Reference implementation of the exact static method |
 | `figures.py` | Plotly figures, light/dark themes, folding of large groups into "Others" |
 | `i18n.py` | CZ/EN strings and number formatting |
@@ -234,10 +235,24 @@ This is the failure mode fixed in robopid-simulator: there, with two workers, th
 polls of a job reached the worker that did not start it, and the button looked dead. More
 workers here would need a shared store such as Redis, not a bigger worker count.
 
-**Background jobs.** Key estimation (after upload) and the recompute run in threads. At most
-`EDC_MAX_JOBS` run at once, and the rest wait in a visible queue. The browser polls every
-200 ms, and only the poll callback draws the progress bar and the button state. Two other
-safeguards:
+**Background jobs.** Key estimation (after upload) and the `rozdel()` loop of the recompute
+each run in a **forked child process** (`procjob.py`), started from a job thread. The web
+server's request threads therefore stay free for progress polls and page renders, the child
+gets a core of its own, and its arguments (big numpy arrays) are shared with the parent by
+`fork` instead of being pickled; only progress messages and the small result travel back.
+At most `EDC_MAX_JOBS` jobs run at once, and the rest wait in a visible queue. The browser
+polls every 200 ms, and only the poll callback draws the progress bar and the button state.
+Because a job is a process, it can be **cancelled**, and the slot is freed at once:
+
+* when the same browser uploads another file (the old report and its jobs are dropped), or
+  the report is evicted from the cache;
+* when the page stops polling for `EDC_JOB_IDLE_S` seconds (tab closed). A waiting job leaves
+  the queue the same way;
+* when a key estimate runs longer than `EDC_FIT_TIMEOUT` seconds. It stops itself after about
+  20 s with the best keys so far, so this is only a safety net.
+
+The child resets gunicorn's signal handlers, so killing it really stops it. `/healthz` shows
+`jobs_running`, `jobs_queued` and `max_jobs`. Two other safeguards:
 
 * the poll is idempotent: every later poll repeats the complete final state, because Dash may
   drop the first "done" response when the next poll overtakes it;
@@ -307,7 +322,9 @@ Notes:
 |---|---|---|
 | `PORT` | 8050 (Render sets it) | port for gunicorn |
 | `EDC_THREADS` | 8 | request threads of the single worker |
-| `EDC_MAX_JOBS` | 2 | key estimations / recomputes running at once (others queue) |
+| `EDC_MAX_JOBS` | 2 | key estimations / recomputes running at once (others queue); set to the number of CPUs of the instance |
+| `EDC_FIT_TIMEOUT` | 120 | seconds after which a key estimate is killed |
+| `EDC_JOB_IDLE_S` | 180 | seconds without a progress poll after which a job is cancelled (page closed) |
 | `EDC_CACHE_MAX` | 6 | uploaded reports kept in memory (oldest dropped) |
 | `EDC_MAX_UPLOAD_MB` | 25 | largest accepted CSV |
 | `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD` | empty | password-protect the whole app when both are set |
