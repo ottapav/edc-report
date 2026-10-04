@@ -41,7 +41,7 @@ from flask import Response, request
 
 from figures import (
     colour_map, fig_daily, fig_heatmap, fig_intraday, fig_total_by_flow,
-    fig_wasted_pie, heat_pivot, intraday_ymax, theme, top_dests,
+    fig_wasted_pie, heat_metrics, heat_pivot, intraday_ymax, theme, top_dests,
 )
 from i18n import fmt_date, fmt_duration, fmt_num, fmt_pct, fmt_signed, t
 from keyfit import KeyFit, estimate_keys
@@ -466,13 +466,10 @@ app.layout = html.Div(className="page", children=[
             ]),
             html.Section(className="panel-section", children=[
                 html.H3(id="lbl-display"),
-                html.Label(id="lbl-yscale", className="field-label"),
-                dcc.RadioItems(id="yscale", value="linear", className="radios"),
-                dcc.Checklist(id="grid-toggles", value=["unshared", "unmet"],
-                              className="checks"),
-                dcc.Checklist(id="show-heat", value=["on"], className="checks"),
-                html.Label(id="lbl-heat-metric", className="field-label"),
-                dcc.RadioItems(id="heat-metric", value="production", className="radios"),
+                html.Div(id="heat-box", children=[
+                    html.Label(id="lbl-heat-metric", className="field-label"),
+                    dcc.RadioItems(id="heat-metric", value="production", className="radios"),
+                ]),
             ]),
             html.Section(className="panel-section", children=[
                 html.H3(id="lbl-group"),
@@ -574,9 +571,6 @@ app.clientside_callback(
 @app.callback(
     Output("upload", "children"),
     Output("lbl-display", "children"),
-    Output("lbl-yscale", "children"),
-    Output("yscale", "options"),
-    Output("grid-toggles", "options"),
     Output("lbl-group", "children"),
     Output("group", "placeholder"),
     Output("info-title", "children"),
@@ -593,22 +587,21 @@ app.clientside_callback(
     Output("btn-prev-day", "title"),
     Output("btn-next-day", "title"),
     Output("day-picker", "display_format"),
-    Output("show-heat", "options"),
     Output("lbl-heat-metric", "children"),
     Output("heat-metric", "options"),
+    Output("heat-metric", "value"),
+    Output("heat-box", "style"),
     Output("theme-btn", "title"),
     Input("lang", "value"),
     Input("data-key", "data"),
+    State("heat-metric", "value"),
 )
-def _labels(lang, key):
+def _labels(lang, key, heat_value):
+    entry = _cache_get(key)
+    metrics = heat_metrics(entry.data) if entry else ("production", "consumption")
     return (
-        _upload_content(lang, _cache_get(key) is not None),
+        _upload_content(lang, entry is not None),
         t("panel_display", lang),
-        t("yscale", lang),
-        [{"label": t("linear", lang), "value": "linear"},
-         {"label": t("log", lang), "value": "log"}],
-        [{"label": t("show_unshared", lang), "value": "unshared"},
-         {"label": t("show_unmet", lang), "value": "unmet"}],
         t("panel_group", lang),
         t("panel_group_ph", lang),
         t("info_title", lang),
@@ -625,10 +618,10 @@ def _labels(lang, key):
         t("prev_day", lang),
         t("next_day", lang),
         "DD.MM.YYYY" if lang == "cs" else "YYYY-MM-DD",
-        [{"label": t("show_heatmap", lang), "value": "on"}],
         t("heat_metric", lang),
-        [{"label": t(f"heat_{m}", lang), "value": m}
-         for m in ("production", "shared", "unmet")],
+        [{"label": t(f"heat_{m}", lang), "value": m} for m in metrics],
+        heat_value if heat_value in metrics else metrics[0],
+        {"display": "none"} if len(metrics) < 2 else {},   # nothing to choose (part report)
         t("theme_toggle", lang),
     )
 
@@ -1156,13 +1149,8 @@ def _align_overview(fa, fb) -> None:
         f.update_xaxes(range=[0, hi])
 
 
-def _align_daily(fa, fb, log: bool) -> None:
+def _align_daily(fa, fb) -> None:
     if not fa.data or not fb.data:
-        return
-    if log:
-        hi = max(fa.layout.yaxis.range[1], fb.layout.yaxis.range[1])
-        for f in (fa, fb):
-            f.update_yaxes(range=[-2, hi])
         return
     peak = max(np.sum([np.asarray(tr.y, dtype=float) for tr in f.data], axis=0).max()
                for f in (fa, fb))
@@ -1211,10 +1199,7 @@ def _align_daily(fa, fb, log: bool) -> None:
     Input("members", "cellValueChanged"),
     Input({"type": "name", "ean": ALL}, "value"),
     Input("lang", "value"),
-    Input("yscale", "value"),
-    Input("grid-toggles", "value"),
     Input("group", "value"),
-    Input("show-heat", "value"),
     Input("heat-metric", "value"),
     Input("theme", "data"),
     State({"type": "name", "ean": ALL}, "id"),
@@ -1222,8 +1207,8 @@ def _align_daily(fa, fb, log: bool) -> None:
     State("day-picker", "date"),
     prevent_initial_call="initial_duplicate",
 )
-def _render(key, _rev, selected, _changed, name_values, lang, yscale, toggles, group,
-            show_heat, heat_metric, theme_name, name_ids, rows, sel_day):
+def _render(key, _rev, selected, _changed, name_values, lang, group,
+            heat_metric, theme_name, name_ids, rows, sel_day):
     if _key_only_edit():
         raise dash.exceptions.PreventUpdate      # a key cell changed: figures unaffected
     group = (group or "").strip()
@@ -1240,18 +1225,15 @@ def _render(key, _rev, selected, _changed, name_values, lang, yscale, toggles, g
 
     enabled = _enabled(data, selected)
     names = effective_names(data, lang, name_ids, name_values, rows)
-    show_unshared = "unshared" in (toggles or [])
-    show_unmet = "unmet" in (toggles or [])
-    yscale = yscale or "linear"
     th = theme(theme_name)
-    opts = dict(show_unshared=show_unshared, show_unmet=show_unmet, lang=lang, th=th)
+    opts = dict(lang=lang, th=th)
     h = lambda fig: {"height": f"{fig.layout.height}px"} if fig else {}  # noqa: E731
 
     df = filter_dests(data, enabled)
     opts["top"] = top_dests(df, data)      # >10 destinations: fold the rest (same in both)
     ov_a = fig_total_by_flow(df, data, names, **opts)
     sel_day = _day(sel_day)
-    dy_a = fig_daily(df, data, names, yscale=yscale, sel_day=sel_day, **opts)
+    dy_a = fig_daily(df, data, names, sel_day=sel_day, **opts)
     has_grid = data.fmt == "all"
     pie_a = fig_wasted_pie(compute_wasted_split(df), lang, th) if has_grid else {}
 
@@ -1270,10 +1252,10 @@ def _render(key, _rev, selected, _changed, name_values, lang, yscale, toggles, g
     else:
         df_b = filter_dests(exact.data, enabled)
         ov_b = fig_total_by_flow(df_b, exact.data, names, **opts)
-        dy_b = fig_daily(df_b, exact.data, names, yscale=yscale, sel_day=sel_day, **opts)
+        dy_b = fig_daily(df_b, exact.data, names, sel_day=sel_day, **opts)
         pie_b = fig_wasted_pie(compute_wasted_split(df_b), lang, th)
         _align_overview(ov_a, ov_b)
-        _align_daily(dy_a, dy_b, yscale == "log")
+        _align_daily(dy_a, dy_b)
         b = (_tiles(exact.data, enabled, lang, ref=data), ov_b, dy_b, pie_b,
              h(ov_b), h(dy_b), h(pie_b), {}, _cmp_table(data, exact, enabled, names, lang, opts["top"]),
              _timing(exact, data, names, lang))
@@ -1285,21 +1267,17 @@ def _render(key, _rev, selected, _changed, name_values, lang, yscale, toggles, g
             fb.update_layout(height=hh)
         b = (b[0], ov_b, dy_b, pie_b, h(ov_b), h(dy_b), h(pie_b), *b[7:])
 
-    # heatmap (optional); in dual mode both share one colour scale
-    heat_on = "on" in (show_heat or [])
-    metric = heat_metric or "production"
-    ht_a = ht_b = {}
-    if heat_on:
-        pv_a = heat_pivot(df, metric)
-        pv_b = heat_pivot(filter_dests(exact.data, enabled), metric) if exact else None
-        zs = [float(np.nanmax(p.to_numpy())) for p in (pv_a, pv_b)
-              if p is not None and not p.empty]
-        z_max = max(zs) if zs else None
-        ht_a = fig_heatmap(pv_a, metric, z_max=z_max, lang=lang, th=th)
-        if exact is not None:
-            ht_b = fig_heatmap(pv_b, metric, z_max=z_max, lang=lang, th=th)
-    if not heat_on:
-        mode += " no-heat"
+    # heatmap: total production or total consumption (part report: shared); in dual
+    # mode both reports share one colour scale
+    metrics = heat_metrics(data)
+    metric = heat_metric if heat_metric in metrics else metrics[0]
+    pv_a = heat_pivot(data, enabled, metric)
+    pv_b = heat_pivot(exact.data, enabled, metric) if exact else None
+    zs = [float(np.nanmax(p.to_numpy())) for p in (pv_a, pv_b)
+          if p is not None and not p.empty]
+    z_max = max(zs) if zs else None
+    ht_a = fig_heatmap(pv_a, metric, z_max=z_max, lang=lang, th=th)
+    ht_b = fig_heatmap(pv_b, metric, z_max=z_max, lang=lang, th=th) if exact else {}
 
     btn_title = t("part_no_recompute", lang) if data.fmt != "all" else ""
     status = html.Div([html.Span("✓ ", className="ok"), f"{t('loaded', lang)}: ",
@@ -1402,13 +1380,11 @@ app.clientside_callback(
     Input("members", "cellValueChanged"),
     Input({"type": "name", "ean": ALL}, "value"),
     Input("lang", "value"),
-    Input("yscale", "value"),
-    Input("grid-toggles", "value"),
     Input("theme", "data"),
     State({"type": "name", "ean": ALL}, "id"),
     State("members", "rowData"),
 )
-def _hourly(day, key, _rev, selected, _changed, name_values, lang, yscale, toggles,
+def _hourly(day, key, _rev, selected, _changed, name_values, lang,
             theme_name, name_ids, rows):
     """Subplot 4: one day in 15-min steps; y axis fixed over the whole period (and
     shared by both reports) so days and methods compare on one scale."""
@@ -1420,16 +1396,11 @@ def _hourly(day, key, _rev, selected, _changed, name_values, lang, yscale, toggl
     data = entry.data
     enabled = _enabled(data, selected)
     names = effective_names(data, lang, name_ids, name_values, rows)
-    yscale = yscale or "linear"
-    show_unshared = "unshared" in (toggles or [])
-    show_unmet = "unmet" in (toggles or [])
-    stacked = yscale != "log"
     frames = [filter_dests(data, enabled)]
     if entry.exact is not None:
         frames.append(filter_dests(entry.exact.data, enabled))
-    y_max = max(intraday_ymax(f, show_unshared, show_unmet, stacked) for f in frames)
-    opts = dict(y_max=y_max, yscale=yscale, show_unshared=show_unshared,
-                show_unmet=show_unmet, lang=lang, th=theme(theme_name),
+    y_max = max(intraday_ymax(f) for f in frames)
+    opts = dict(y_max=y_max, lang=lang, th=theme(theme_name),
                 top=top_dests(frames[0], data))
     fa = fig_intraday(frames[0], data, names, _day(day), **opts)
     style = {"height": f"{fa.layout.height}px"}

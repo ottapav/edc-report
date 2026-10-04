@@ -7,8 +7,9 @@
 * Figure 2            - shared / wasted pie        (:func:`fig_wasted_pie`)
 
 Colours follow the script: tab10 per destination (fixed by destination order, so
-unticking one never repaints the others), greys for grid flows, green for the
-source, black for summary rows, red for "could have been shared". Every figure
+unticking one never repaints the others), greys for grid flows, a blue-grey for
+what unticked destinations received, green for the source, black for summary
+rows, red for "could have been shared". Every figure
 takes a theme (:data:`THEMES`); the dark theme uses its own greys, summary colour
 and heatmap scale rather than an inverted light one.
 """
@@ -21,8 +22,8 @@ import plotly.graph_objects as go
 
 from i18n import fmt_num, month_label, plotly_separators, t
 from edc_data import (
-    SharingData, WastedSplit, aggregate_grid_flows, key_dest, key_kind,
-    key_source, key_unmet, memoized, shared_cols,
+    KEY_OTHERS, SharingData, WastedSplit, aggregate_grid_flows, filter_dests, key_dest,
+    key_kind, key_source, key_unmet, memoized, shared_cols,
 )
 
 TAB10 = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
@@ -32,14 +33,14 @@ FONT_FAMILY = "system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
 THEMES: dict[str, dict] = {
     "light": dict(
         paper="#ffffff", ink="#1f2328", muted="#57606a", grid="#ececec",
-        unshared="#8c8c8c", unmet="#c7c7c7", total="rgba(0,0,0,0.9)",
+        unshared="#8c8c8c", unmet="#c7c7c7", total="rgba(0,0,0,0.9)", others="#a9b8cc",
         source="#339933", wasted="#cc3326", marker="#000000",
         label_bg="rgba(255,255,255,0.85)", hover_bg="#ffffff", hover_border="#d0d7de",
         heat="YlOrRd", area_alpha=0.75,
     ),
     "dark": dict(
         paper="#161b22", ink="#e6edf3", muted="#9da7b3", grid="#2a313c",
-        unshared="#7d8590", unmet="#3d444d", total="#e6edf3",
+        unshared="#7d8590", unmet="#3d444d", total="#e6edf3", others="#5d6b82",
         source="#3da63d", wasted="#e5534b", marker="#e6edf3",
         label_bg="rgba(22,27,34,0.85)", hover_bg="#1c2128", hover_border="#3d444d",
         # dark surface: low values stay near the surface, high values glow
@@ -129,6 +130,8 @@ def _rgba(hex_colour: str, alpha: float) -> str:
 
 
 def series_label(key: str, names: dict[str, str], lang: str) -> str:
+    if key == KEY_OTHERS:
+        return t("others_shared", lang)
     if key == "GRID_UNSHARED":
         return f"{t('grid', lang)} {t('unshared_paren', lang)}"
     if key == "GRID_UNMET":
@@ -142,11 +145,30 @@ def series_label(key: str, names: dict[str, str], lang: str) -> str:
 
 
 def series_colour(key: str, cmap: dict[str, str], th: dict) -> str:
+    if key == KEY_OTHERS:
+        return th["others"]
     if key == "GRID_UNSHARED" or key_kind(key) == "unshared":
         return th["unshared"]
     if key == "GRID_UNMET" or key_kind(key) == "unmet":
         return th["unmet"]
     return cmap.get(key_dest(key), TAB10[0])
+
+
+def _hatch(th: dict) -> dict:
+    """Diagonal stripes: marks "went to unselected members", which is neither one of
+    the selected members' colours nor one of the greys of the grid flows."""
+    return dict(shape="/", size=7, solidity=0.45, fgcolor=th["others"],
+                bgcolor=_rgba(th["others"], 0.25))
+
+
+def _area(fig: go.Figure, x, y, col: str, cmap: dict, th: dict, names: dict, lang: str) -> None:
+    """One stacked area of the daily / hourly plot."""
+    colour = series_colour(col, cmap, th)
+    fill = (dict(fillpattern=_hatch(th)) if col == KEY_OTHERS
+            else dict(fillcolor=_rgba(colour, th["area_alpha"])))
+    fig.add_scatter(x=x, y=y, mode="lines", stackgroup="one",
+                    name=series_label(col, names, lang), hovertemplate="%{y:,.2f} kWh",
+                    line=dict(color=colour, width=0.6 if col != KEY_OTHERS else 1.0), **fill)
 
 
 def _figure(title: str, lang: str, height: int, th: dict) -> go.Figure:
@@ -176,17 +198,9 @@ def _no_data(fig: go.Figure, lang: str, th: dict) -> go.Figure:
 
 
 @memoized
-def grid_flows(df: pd.DataFrame, show_unshared: bool, show_unmet: bool) -> pd.DataFrame:
-    """Shared pairs + aggregated grid flows, without the hidden grid columns."""
-    agg = aggregate_grid_flows(df)
-    drop = [c for c, on in (("GRID_UNSHARED", show_unshared), ("GRID_UNMET", show_unmet))
-            if not on and c in agg.columns]
-    return agg.drop(columns=drop) if drop else agg
-
-
-@memoized
-def daily_totals(df: pd.DataFrame, show_unshared: bool, show_unmet: bool) -> pd.DataFrame:
-    return grid_flows(df, show_unshared, show_unmet).resample("D").sum().fillna(0)
+def daily_totals(df: pd.DataFrame) -> pd.DataFrame:
+    """kWh per day: shared pairs, shared to unselected members, unshared, unmet."""
+    return aggregate_grid_flows(df).resample("D").sum().fillna(0)
 
 
 # ---------------------------------------------------------------------------
@@ -199,14 +213,13 @@ def fig_total_by_flow(
     data: SharingData,
     names: dict[str, str],
     *,
-    show_unshared: bool = True,
-    show_unmet: bool = True,
     lang: str = "cs",
     th: dict | None = None,
     top: tuple[str, ...] | None = None,
 ) -> go.Figure:
-    """Stacked horizontal bars, bottom-to-top: destinations (shared | unmet,
-    ascending by shared), source (shared | unshared), gap, summary rows."""
+    """Stacked horizontal bars, bottom-to-top: destinations (shared | unmet),
+    ascending by shared), source (shared | shared to unselected | unshared), gap,
+    summary rows."""
     th = th or THEMES["light"]
     fig = _figure(t("total_by_flow_title", lang), lang, 420, th)
     df, names, cmap = _folded(df, data, names, lang, top)
@@ -219,51 +232,64 @@ def fig_total_by_flow(
     unmet_cols = [c for c in df.columns if key_kind(c) == "unmet"]
     n_sources = len({key_source(c) for c in sc})
     n_dests = len({key_dest(c) for c in sc})
-    show_total_source = show_unshared and n_sources > 1
-    show_total_dest = show_unmet and n_dests > 1
+    show_total_source = n_sources > 1
+    show_total_dest = n_dests > 1
 
+    # every row: s = shared | o = shared to unselected members | u = unmet / unshared
     rows: list[dict | None] = []
     for col in totals[sc].sort_values(ascending=True).index:
         dst = key_dest(col)
         label = names[dst] if n_sources == 1 else series_label(col, names, lang)
-        u = float(totals.get(key_unmet(dst), 0.0)) if show_unmet else 0.0
-        rows.append(dict(label=label, s=float(totals[col]), u=u,
+        rows.append(dict(label=label, s=float(totals[col]), o=0.0,
+                         u=float(totals.get(key_unmet(dst), 0.0)),
                          c1=cmap.get(dst, TAB10[0]), c2=th["unmet"],
                          u_lab=t("unmet", lang), summary=False))
 
     total_shared = float(totals[sc].sum())
-    total_unshared = float(totals[unshared_cols].sum()) if show_unshared and unshared_cols else 0.0
+    total_others = float(totals.get(KEY_OTHERS, 0.0))
+    total_unshared = float(totals[unshared_cols].sum()) if unshared_cols else 0.0
     src_label = names[key_source(sc[0])] if n_sources == 1 else t("source", lang)
-    rows.append(dict(label=src_label, s=total_shared, u=total_unshared,
+    rows.append(dict(label=src_label, s=total_shared, o=total_others, u=total_unshared,
                      c1=th["source"], c2=th["unshared"],
                      u_lab=t("unshared", lang), summary=False))
 
-    total_unmet = float(totals[unmet_cols].sum()) if show_unmet and unmet_cols else 0.0
+    total_unmet = float(totals[unmet_cols].sum()) if unmet_cols else 0.0
     if show_total_source or show_total_dest:
         rows.append(None)  # visual gap
     if show_total_source:
-        rows.append(dict(label=t("total_source", lang), s=total_shared, u=total_unshared,
-                         c1=th["total"], c2=th["unshared"],
+        rows.append(dict(label=t("total_source", lang), s=total_shared, o=total_others,
+                         u=total_unshared, c1=th["total"], c2=th["unshared"],
                          u_lab=t("unshared", lang), summary=True))
     if show_total_dest:
-        rows.append(dict(label=t("total_destination", lang), s=total_shared, u=total_unmet,
-                         c1=th["total"], c2=th["unmet"],
+        rows.append(dict(label=t("total_destination", lang), s=total_shared, o=0.0,
+                         u=total_unmet, c1=th["total"], c2=th["unmet"],
                          u_lab=t("unmet", lang), summary=True))
 
     y = list(range(len(rows)))
     real = [(i, r) for i, r in enumerate(rows) if r is not None]
-    max_val = max((r["s"] + r["u"] for _, r in real), default=0.0) or 1.0
+    max_val = max((r["s"] + r["o"] + r["u"] for _, r in real), default=0.0) or 1.0
+    ys = [i for i, _ in real]
+    others_lab = t("others_shared", lang)
 
     fig.add_bar(
-        y=[i for i, _ in real], x=[r["s"] for _, r in real], orientation="h",
+        y=ys, x=[r["s"] for _, r in real], orientation="h",
         marker=dict(color=[r["c1"] for _, r in real], line=dict(color=th["paper"], width=1)),
         name=t("shared", lang),
         customdata=[r["label"] for _, r in real],
         hovertemplate="%{customdata}<br>" + t("shared", lang) + ": %{x:,.1f} kWh<extra></extra>",
     )
+    if total_others > 0:
+        fig.add_bar(
+            y=ys, x=[r["o"] for _, r in real], orientation="h",
+            base=[r["s"] for _, r in real],
+            marker=dict(color=th["others"], line=dict(color=th["paper"], width=1),
+                        pattern=_hatch(th)),
+            name=others_lab, customdata=[r["label"] for _, r in real],
+            hovertemplate="%{customdata}<br>" + others_lab + ": %{x:,.1f} kWh<extra></extra>",
+        )
     fig.add_bar(
-        y=[i for i, _ in real], x=[r["u"] for _, r in real], orientation="h",
-        base=[r["s"] for _, r in real],
+        y=ys, x=[r["u"] for _, r in real], orientation="h",
+        base=[r["s"] + r["o"] for _, r in real],
         marker=dict(color=[r["c2"] for _, r in real], line=dict(color=th["paper"], width=1)),
         name=f"{t('unmet', lang)} / {t('unshared', lang)}",
         customdata=[[r["label"], r["u_lab"]] for _, r in real],
@@ -271,15 +297,19 @@ def fig_total_by_flow(
     )
     annotations = []
     for i, r in real:
-        width = r["s"] + r["u"]
-        if r["u"] > 0:
-            txt = (f"{fmt_num(r['s'], lang, 1)} + {fmt_num(r['u'], lang, 1)} "
-                   f"({r['u_lab']}) kWh")
+        width = r["s"] + r["o"] + r["u"]
+        if r["o"] > 0:
+            # production row of a partial selection: numbers, then what each part is
+            nums = [fmt_num(r[k], lang, 1) for k in ("s", "o") + (("u",) if r["u"] > 0 else ())]
+            labs = [t("shared", lang), t("others_short", lang)] + ([r["u_lab"]] if r["u"] > 0 else [])
+            txt = " + ".join(nums) + " kWh<br>(" + " + ".join(labs) + ")"
+        elif r["u"] > 0:
+            txt = f"{fmt_num(r['s'], lang, 1)} + {fmt_num(r['u'], lang, 1)} ({r['u_lab']}) kWh"
         else:
             txt = f"{fmt_num(width, lang, 2)} kWh"
         if r["summary"]:
             txt = f"<b>{txt}</b>"
-        # long bars: label inside the (grey) second segment, else after the bar
+        # long bars: label inside the (grey) last segment, else after the bar
         inside = width > 0.55 * max_val
         annotations.append(dict(
             x=width - max_val * 0.01 if inside else width + max_val * 0.01, y=i,
@@ -289,8 +319,8 @@ def fig_total_by_flow(
         ))
     fig.update_layout(
         annotations=annotations, barmode="overlay", showlegend=False, bargap=0.25,
-        height=max(320, 90 + 38 * len(rows)),
-        xaxis=dict(title=t("total_energy_xlabel", lang), range=[0, max_val * 1.35],
+        height=max(320, 90 + 38 * len(rows) + (14 if total_others > 0 else 0)),
+        xaxis=dict(title=t("total_energy_xlabel", lang), range=[0, max_val * (1.3 if total_others > 0 else 1.35)],
                    showgrid=True, zeroline=False, tickformat=",.0f"),
         yaxis=dict(
             tickvals=y,
@@ -328,48 +358,29 @@ def fig_daily(
     data: SharingData,
     names: dict[str, str],
     *,
-    yscale: str = "linear",
-    show_unshared: bool = True,
-    show_unmet: bool = True,
     lang: str = "cs",
     sel_day: str | None = None,
     th: dict | None = None,
     top: tuple[str, ...] | None = None,
 ) -> go.Figure:
-    """Stacked areas of daily kWh (linear) or unstacked lines (log).
-    ``sel_day`` draws the dashed selected-day marker; click a day to select it."""
+    """Stacked areas of daily kWh: shared per destination, shared to unselected
+    members, unshared, unmet. ``sel_day`` draws the dashed selected-day marker;
+    click a day to select it."""
     th = th or THEMES["light"]
-    log = yscale == "log"
-    fig = _figure(t("daily_title_lines" if log else "daily_title", lang), lang, 460, th)
+    fig = _figure(t("daily_title", lang), lang, 460, th)
     df, names, cmap = _folded(df, data, names, lang, top)
-    daily = daily_totals(df, show_unshared, show_unmet)
+    daily = daily_totals(df)
     if daily.empty or len(daily.columns) == 0:
         return _no_data(fig, lang, th)
 
     for col in daily.columns:
-        colour = series_colour(col, cmap, th)
-        vals = daily[col].to_numpy()
-        common = dict(x=daily.index, name=series_label(col, names, lang),
-                      hovertemplate="%{y:,.2f} kWh")
-        if log:
-            fig.add_scatter(y=np.where(vals > 0, vals, np.nan), mode="lines",
-                            line=dict(color=colour, width=1.2), opacity=0.9,
-                            connectgaps=False, **common)
-        else:
-            fig.add_scatter(y=vals, mode="lines", stackgroup="one",
-                            line=dict(color=colour, width=0.6),
-                            fillcolor=_rgba(colour, th["area_alpha"]), **common)
+        _area(fig, daily.index, daily[col].to_numpy(), col, cmap, th, names, lang)
 
     tickvals, ticktext = _month_ticks(daily.index, lang)
-    yaxis = dict(title=t("daily_ylabel", lang), showgrid=True,
-                 type="log" if log else "linear", zeroline=False)
-    if log:
-        ymax = float(np.nanmax(daily.to_numpy())) if daily.size else 1.0
-        yaxis.update(range=[-2, np.log10(max(ymax, 0.1)) + 0.1], dtick=1, tickformat=",.2~f")
     fig.update_layout(
         xaxis=dict(tickvals=tickvals, ticktext=ticktext, tickangle=-30, showgrid=True,
                    hoverformat="%d.%m.%Y" if lang == "cs" else "%Y-%m-%d"),
-        yaxis=yaxis,
+        yaxis=dict(title=t("daily_ylabel", lang), showgrid=True, zeroline=False),
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="left", x=0,
                     font=dict(size=11)),
@@ -385,22 +396,29 @@ def fig_daily(
 
 
 def fig_wasted_pie(split: WastedSplit, lang: str = "cs", th: dict | None = None) -> go.Figure:
+    """Where the production went. The slices always add up to the production:
+    shared to the selected members, shared to the unselected ones, could have been
+    shared (unshared while selected members bought from the grid), unshared."""
     th = th or THEMES["light"]
     fig = _figure(t("pie_title", lang), lang, 500, th)
-    total = split.shared_total + split.unshared_only + split.overlap
+    total = split.shared_total + split.shared_others + split.unshared_only + split.overlap
     if total <= 0:
         return _no_data(fig, lang, th)
     slices = [
         (t("pie_shared", lang), split.shared_total, th["source"]),
+        (t("pie_others", lang), split.shared_others, th["others"]),
         (t("pie_wasted", lang), split.overlap, th["wasted"]),
         (t("pie_unshared_only", lang), split.unshared_only, th["unshared"]),
     ]
     slices = [s for s in slices if s[1] > 0]
-    wasted = t("pie_wasted", lang)
+    wasted, others = t("pie_wasted", lang), t("pie_others", lang)
     fig.add_pie(
         labels=[s[0] for s in slices],
         values=[s[1] for s in slices],
-        marker=dict(colors=[s[2] for s in slices], line=dict(color=th["paper"], width=2)),
+        marker=dict(colors=[s[2] for s in slices], line=dict(color=th["paper"], width=2),
+                    pattern=dict(shape=["/" if s[0] == others else "" for s in slices],
+                                 size=7, solidity=0.45, fgcolor=th["others"],
+                                 bgcolor=_rgba(th["others"], 0.25))),
         pull=[0.06 if s[0] == wasted else 0 for s in slices],
         sort=False, direction="clockwise", rotation=0,
         texttemplate="%{label}<br>%{value:,.0f} kWh<br>%{percent:.1%}",
@@ -429,13 +447,13 @@ INTRADAY_XEND_HOUR = 21
 
 
 @memoized
-def intraday_ymax(df: pd.DataFrame, show_unshared: bool, show_unmet: bool,
-                  stacked: bool = True) -> float:
-    """Peak kWh per 15 min over the whole dataset (same scale for every day)."""
-    agg = grid_flows(df, show_unshared, show_unmet).fillna(0)
+def intraday_ymax(df: pd.DataFrame) -> float:
+    """Peak kWh per 15 min of the stacked flows over the whole dataset (one scale
+    for every day)."""
+    agg = aggregate_grid_flows(df).fillna(0)
     if agg.empty or len(agg.columns) == 0:
         return 1.0
-    peak = float(agg.sum(axis=1).max()) if stacked else float(agg.to_numpy().max())
+    peak = float(agg.sum(axis=1).max())
     return peak if np.isfinite(peak) and peak > 0 else 1.0
 
 
@@ -446,24 +464,19 @@ def fig_intraday(
     day: str | None,
     *,
     y_max: float | None = None,
-    yscale: str = "linear",
-    show_unshared: bool = True,
-    show_unmet: bool = True,
     lang: str = "cs",
     th: dict | None = None,
     top: tuple[str, ...] | None = None,
 ) -> go.Figure:
-    """Stacked areas per 15 min for one calendar day (lines on a log axis)."""
+    """Stacked areas per 15 min for one calendar day."""
     th = th or THEMES["light"]
-    log = yscale == "log"
     df, names, cmap = _folded(df, data, names, lang, top)
-    agg = grid_flows(df, show_unshared, show_unmet)
+    agg = aggregate_grid_flows(df)
     day_ts = pd.Timestamp(day).normalize() if day else agg.index.normalize().max()
     date_txt = day_ts.strftime("%d.%m.%Y" if lang == "cs" else "%Y-%m-%d")
-    title = t("sharing_on", lang).format(date=date_txt) + (t("lines_suffix", lang) if log else "")
-    fig = _figure(title, lang, 440, th)
+    fig = _figure(t("sharing_on", lang).format(date=date_txt), lang, 440, th)
     if y_max is None:
-        y_max = intraday_ymax(df, show_unshared, show_unmet, not log)
+        y_max = intraday_ymax(df)
     lo, hi = day_ts, day_ts + pd.Timedelta(days=1)
     day_df = agg.loc[(agg.index >= lo) & (agg.index < hi)].fillna(0)
     fig.update_layout(
@@ -472,8 +485,7 @@ def fig_intraday(
                    dtick=3 * 3600 * 1000, tickformat="%H:%M", hoverformat="%H:%M",
                    showgrid=True),
         yaxis=dict(title=t("intraday_ylabel", lang), showgrid=True, zeroline=False,
-                   type="log" if log else "linear",
-                   range=([-3, np.log10(y_max) + 0.05] if log else [0, y_max * 1.02])),
+                   range=[0, y_max * 1.02]),
     )
     if day_df.empty or len(agg.columns) == 0:
         fig.add_annotation(text=t("no_data", lang), x=0.5, y=0.5, xref="paper",
@@ -481,17 +493,7 @@ def fig_intraday(
                            font=dict(size=14, color=th["muted"]))
         return fig
     for col in day_df.columns:
-        colour = series_colour(col, cmap, th)
-        vals = day_df[col].to_numpy()
-        common = dict(x=day_df.index, name=series_label(col, names, lang),
-                      hovertemplate="%{y:,.2f} kWh")
-        if log:
-            fig.add_scatter(y=np.where(vals > 0, vals, np.nan), mode="lines",
-                            line=dict(color=colour, width=1.2), **common)
-        else:
-            fig.add_scatter(y=vals, mode="lines", stackgroup="one",
-                            line=dict(color=colour, width=0.6),
-                            fillcolor=_rgba(colour, th["area_alpha"]), **common)
+        _area(fig, day_df.index, day_df[col].to_numpy(), col, cmap, th, names, lang)
     fig.update_layout(
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="top", y=-0.12, xanchor="left", x=0,
@@ -500,25 +502,34 @@ def fig_intraday(
     return fig
 
 
-HEAT_METRICS = ("production", "shared", "unmet")
+# What the heatmap can show. A report with production and demand (all report): the
+# total production or the total consumption of the selected destinations. The part
+# report has neither, only the energy shared to the selected destinations.
+def heat_metrics(data: SharingData) -> tuple[str, ...]:
+    return ("production", "consumption") if data.fmt == "all" else ("shared",)
 
 
 @memoized
-def heat_pivot(df: pd.DataFrame, metric: str = "production") -> pd.DataFrame:
+def heat_pivot(data: SharingData, enabled: set[str], metric: str = "production") -> pd.DataFrame:
     """Mean kWh per 15-min interval, hour-of-day x month.
 
-    ``production`` = everything leaving the source (shared + unshared), as in the
-    script; ``shared`` = shared only; ``unmet`` = demand covered from the grid.
+    ``production`` = the producer's whole production (does not depend on the ticked
+    destinations, same as the tile); ``consumption`` = demand of the ticked
+    destinations (shared + bought from the grid); ``shared`` = shared to them.
     """
-    if metric == "shared":
-        cols = [c for c in df.columns if key_kind(c) == "shared"]
-    elif metric == "unmet":
-        cols = [c for c in df.columns if key_kind(c) == "unmet"]
+    if metric == "production" and data.production is not None:
+        series = data.production
+    elif metric == "consumption" and data.demand:
+        parts = [data.demand[e] for e in data.dest_eans if e in enabled and e in data.demand]
+        series = (pd.concat(parts, axis=1).sum(axis=1) if parts
+                  else pd.Series(0.0, index=data.frame.index))
     else:
-        cols = [c for c in df.columns if key_kind(c) != "unmet"]
-    if not cols:
-        return pd.DataFrame()
-    total = df[cols].sum(axis=1).to_frame("total")
+        df = filter_dests(data, enabled)
+        cols = shared_cols(df)
+        if not cols:
+            return pd.DataFrame()
+        series = df[cols].sum(axis=1)
+    total = series.to_frame("total")
     total["hour"] = total.index.hour
     total["month"] = total.index.to_period("M")
     return total.pivot_table(values="total", index="hour", columns="month", aggfunc="mean")

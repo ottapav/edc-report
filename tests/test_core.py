@@ -39,3 +39,60 @@ def test_memoised_filter_is_reused(small_group):
     a = core.filter_dests(data, set(data.dest_eans[:3]))
     b = core.filter_dests(data, set(data.dest_eans[:3]))
     assert a is b
+
+
+def _group_data(small_group):
+    P, D, S, _ = small_group
+    return core.load_report(all_report_csv(P, D, S)), P
+
+
+def test_production_adds_up_for_any_selection(small_group):
+    """selected + shared to unselected + could-have-been + unshared == production."""
+    import itertools
+    data, P = _group_data(small_group)
+    production = P.sum() / 100
+    for r in range(1, len(data.dest_eans) + 1):
+        for sel in itertools.combinations(data.dest_eans, r):
+            sp = core.compute_wasted_split(core.filter_dests(data, set(sel)))
+            total = sp.shared_total + sp.shared_others + sp.overlap + sp.unshared_only
+            assert abs(total - production) < 0.05, (sel, total, production)
+            assert (sp.shared_others > 0) == (len(sel) < len(data.dest_eans))
+
+
+def test_selection_only_changes_what_is_selected(small_group):
+    data, _ = _group_data(small_group)
+    one = {data.dest_eans[0]}
+    df = core.filter_dests(data, one)
+    assert core.KEY_OTHERS in df.columns
+    assert core.KEY_OTHERS not in core.filter_dests(data, set(data.dest_eans)).columns
+    assert len(core.shared_cols(df)) == 1                     # the others column is not a pair
+    s_all = core.summarize(data, set(data.dest_eans))
+    s_one = core.summarize(data, one)
+    assert s_one.production == s_all.production                # production never depends on it
+    assert s_one.shared < s_all.shared
+
+
+def test_heatmap_production_and_consumption(small_group):
+    import figures
+    data, P = _group_data(small_group)
+    one = {data.dest_eans[0]}
+    prod_all = figures.heat_pivot(data, set(data.dest_eans), "production")
+    prod_one = figures.heat_pivot(data, one, "production")
+    assert prod_all.equals(prod_one)                           # total production, any selection
+    cons_all = figures.heat_pivot(data, set(data.dest_eans), "consumption")
+    cons_one = figures.heat_pivot(data, one, "consumption")
+    assert cons_one.to_numpy().sum() < cons_all.to_numpy().sum()
+    assert figures.heat_metrics(data) == ("production", "consumption")
+
+
+def test_figures_build_for_every_selection(small_group):
+    import figures
+    data, _ = _group_data(small_group)
+    names = {e: f"M{i}" for i, e in enumerate(data.dest_eans + data.source_eans)}
+    for sel in (set(data.dest_eans), {data.dest_eans[0]}, {data.dest_eans[1], data.dest_eans[3]}):
+        df = core.filter_dests(data, sel)
+        figures.fig_total_by_flow(df, data, names)
+        figures.fig_daily(df, data, names, sel_day="2026-06-10")
+        figures.fig_intraday(df, data, names, "2026-06-10")
+        pie = figures.fig_wasted_pie(core.compute_wasted_split(df))
+        assert abs(sum(pie.data[0].values) - small_group[0].sum() / 100) < 0.05

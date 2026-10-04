@@ -10,6 +10,9 @@ Column keys
 ``shared|<src>|<dst>``   energy shared from producer ``src`` to consumer ``dst``
 ``unmet|<dst>``          consumer demand not covered by sharing (all report)
 ``unshared|<src>``       producer surplus exported to grid (all report)
+``others|shared``        added by :func:`filter_dests` when members are unticked: what
+                         the producer shared to the *unticked* destinations, so that
+                         selected + others + unshared always adds up to the production
 
 Two export layouts are auto-detected from the header (see the original
 script's docstring for the sign conventions):
@@ -96,8 +99,11 @@ def key_unshared(src: str) -> str:
     return f"unshared|{src}"
 
 
+KEY_OTHERS = "others|shared"
+
+
 def key_kind(key: str) -> str:
-    """Return ``shared`` / ``unmet`` / ``unshared``."""
+    """Return ``shared`` / ``unmet`` / ``unshared`` / ``others``."""
     return key.split("|", 1)[0]
 
 
@@ -322,10 +328,18 @@ def load_report(content: bytes) -> SharingData:
 
 @memoized
 def filter_dests(data: SharingData, enabled: set[str]) -> pd.DataFrame:
-    """Keep columns of checked destinations; producer-side columns always stay."""
+    """Keep columns of checked destinations; producer-side columns always stay.
+
+    Energy shared to the unchecked destinations is summed into one ``KEY_OTHERS``
+    column (only when something is unchecked), so the production still adds up.
+    """
     keep = [c for c in data.frame.columns
             if key_dest(c) is None or key_dest(c) in enabled]
-    return data.frame[keep]
+    out = data.frame[keep]
+    off = [c for c in shared_cols(data.frame) if key_dest(c) not in enabled]
+    if off:
+        out = out.assign(**{KEY_OTHERS: data.frame[off].sum(axis=1)})
+    return out
 
 
 def shared_cols(df: pd.DataFrame) -> list[str]:
@@ -334,8 +348,10 @@ def shared_cols(df: pd.DataFrame) -> list[str]:
 
 @memoized
 def aggregate_grid_flows(df: pd.DataFrame) -> pd.DataFrame:
-    """Shared pair columns + one ``GRID_UNSHARED`` + one ``GRID_UNMET`` column."""
+    """Shared pair columns (+ ``KEY_OTHERS``) + one ``GRID_UNSHARED`` + one ``GRID_UNMET``."""
     parts: dict[str, pd.Series] = {c: df[c] for c in shared_cols(df)}
+    if KEY_OTHERS in df.columns:
+        parts[KEY_OTHERS] = df[KEY_OTHERS]
     uns = [c for c in df.columns if key_kind(c) == "unshared"]
     unm = [c for c in df.columns if key_kind(c) == "unmet"]
     if uns:
@@ -352,11 +368,16 @@ class WastedSplit:
     overlap: float
     unshared_total: float
     unmet_total: float
+    shared_others: float = 0.0     # shared to the unselected destinations
 
 
 @memoized
 def compute_wasted_split(df: pd.DataFrame) -> WastedSplit:
-    """Shared / wasted overlap ``min(unshared, unmet)`` per interval / unshared-only."""
+    """Shared / wasted overlap ``min(unshared, unmet)`` per interval / unshared-only.
+
+    With unselected destinations ``shared_others`` is what they received, so
+    ``shared_total + shared_others + overlap + unshared_only`` is the production.
+    """
     agg = aggregate_grid_flows(df)
     sc = shared_cols(agg)
     shared_total = float(agg[sc].sum().sum()) if sc else 0.0
@@ -364,12 +385,14 @@ def compute_wasted_split(df: pd.DataFrame) -> WastedSplit:
     uns = agg["GRID_UNSHARED"] if "GRID_UNSHARED" in agg else zero
     unm = agg["GRID_UNMET"] if "GRID_UNMET" in agg else zero
     overlap = float(np.minimum(uns.to_numpy(), unm.to_numpy()).sum())
+    others = float(agg[KEY_OTHERS].sum()) if KEY_OTHERS in agg else 0.0
     return WastedSplit(
         shared_total=shared_total,
         unshared_only=float(uns.sum()) - overlap,
         overlap=overlap,
         unshared_total=float(uns.sum()),
         unmet_total=float(unm.sum()),
+        shared_others=others,
     )
 
 

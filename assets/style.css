@@ -223,9 +223,6 @@ body {
 .compare.single .col-a > .daily-card,
 .compare.single .col-a > .table-card { grid-column: 1 / -1; }
 .compare.single .col-a:has(> .pie-card[style*="none"]) > .overview-card { grid-column: 1 / -1; }
-/* heatmap is optional: without it the hourly plot takes the full width */
-.compare.no-heat .heat-card { display: none; }
-.compare.single.no-heat .col-a > .hourly-card { grid-column: 1 / -1; }
 /* the daily plot is clickable (selects the day of the hourly plot) */
 .daily-card .nsewdrag { cursor: pointer !important; }
 .compare.single .col-b, .compare.single .col-head { display: none; }

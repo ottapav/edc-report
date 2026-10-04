@@ -40,13 +40,18 @@ with the computation timed per 15-min interval.
   * energy: production, shared, *could have been shared*, surplus above group demand;
   * consumption: members' consumption and energy from the grid.
 * **Total energy by flow:** stacked bars per member (shared | unmet) and for the source
-  (shared | unshared).
-* **Pie of the source's energy:** shared, *could have been shared* (min(unshared, unmet) in the
-  same 15 min), and surplus nobody could use.
-* **Daily energy:** stacked areas, or lines on a log axis. **Click a day** to select it.
+  (shared | shared to unticked members | unshared).
+* **Pie "where the production went":** shared to the ticked members, shared to the unticked
+  ones (hatched), *could have been shared* (min(unshared, unmet of the ticked members) in the
+  same 15 min), and surplus nobody could use. The slices always add up to the production,
+  whatever is ticked.
+* **Daily energy:** stacked areas (linear axis) with the grid flows, unshared and unmet, and
+  the hatched energy that went to unticked members. **Click a day** to select it.
 * **Sharing on the selected day:** 15-min steps from 06:00 to 21:00, always directly under the
   daily plot. The y axis is fixed over the whole period, so days compare on one scale.
-* **Heatmap hour × month** (optional): outgoing energy, shared energy or unmet demand.
+* **Heatmap hour × month:** the **total production** (independent of the selection) or the
+  **total consumption** of the ticked members. A part report has neither, so it shows the
+  shared energy.
 * **Per-member table:** consumption, shared, unmet, coverage and data availability.
 
 **Selection panel:**
@@ -54,7 +59,7 @@ with the computation timed per 15-min interval.
 * Tick members on or off, rename them, and edit their allocation keys. All of this happens in
   one grid, so a group of hundreds of members stays fast.
 * ◀ date ▶ for the hourly plot.
-* Display options.
+* Heatmap metric (production / consumption).
 * Group ID for the title.
 
 **Exact static method (proposal):**
@@ -110,7 +115,7 @@ gunicorn app:server -c gunicorn.conf.py        # listens on $PORT (default 8050)
 5. **Explore:**
    * click a day in either daily plot, or use ◀ ▶, to see it in 15-min steps;
    * untick members to see the rest of the group;
-   * switch the heatmap metric, or turn the heatmap off.
+   * switch the heatmap between total production and total consumption.
 
 ![Daily plot with the selected day, the hourly plot and the heatmap](docs/screenshot-hourly.png)
 
