@@ -124,48 +124,65 @@ gunicorn app:server -c gunicorn.conf.py        # listens on $PORT (default 8050)
 The CSV has no keys, but it contains what today's EDC static method did with them. In every
 round each member gets `min(remaining demand, floor(k_i · P_r))`, where `P_r` is the production
 left at the start of the round. Groups up to 100 EAN get 5 rounds, larger groups one round.
-`keyfit.py` inverts this:
+`keyfit.py` inverts this. The result is a **rough estimate**: it need not be optimal, but it
+must never contradict the report.
+
+**Rules that always hold**
+
+* A member that never receives anything while it has demand and there is production gets
+  **key 0**. The report only bounds its key from above, and a nonzero key would contradict it.
+  A member without any demand while there was production also gets 0 (no phantom key).
+* A member that is always fully covered gets the smallest key that keeps it covered.
+* The keys never sum above 100 %, and the match with the report (the share of 15-min intervals
+  that today's method reproduces with these keys) is always measured on **every** interval.
+
+**How it works**
 
 * **Every interval where a member is not fully covered bounds its key.** Such a member was
   never capped, so it received exactly `floor(k_i · P_r)` in each round:
-  `sum_r floor(k_i · P_r) = s_i`. That pins `k_i` to a small interval, which is found exactly
-  by bisection.
+  `sum_r floor(k_i · P_r) = s_i`. That pins `k_i` to a small interval, found exactly by
+  bisection. An interval where the member is fully covered gives a lower bound.
 * **The key is the value consistent with the most intervals**, on the 0.01 % grid of EDC
   keys. A rounder value nearby (1 %, 0.5 %, …) wins only when the separating intervals do not
   clearly favour the finer one. This absorbs the ~1 % of report rows that do not follow the
   model, without inventing round numbers.
 * **One round is separable**, because each member depends only on its own key, so all keys
-  come out in one pass. This covers the groups above 100 EAN.
-* **Five rounds couple the members** through `P_r`. The bounds are iterated to a fixed point
-  from two starts:
-  * uniform keys;
-  * a rank-1 estimate, which needs no `P_r`, because two members short in the same interval
-    both got their key's share of the same productions.
-  The fit is then settled by replaying the method: moving single keys, and moving all keys
-  together (rounded or rescaled). Several key sets can be self-consistent; the replay decides
-  between them.
-* Both round counts are tried (5 only up to 100 members), and the one that reproduces more
-  intervals wins.
+  come out in one pass over every interval. This covers the groups above 100 EAN.
+* **Five rounds couple the members** through `P_r`. The bounds are iterated to a (nearly) fixed
+  point from a rank-1 estimate, which needs no `P_r`, because two members short in the same
+  interval both got their key's share of the same productions. The fit is then settled by
+  replaying the method: moving single keys, and moving all keys together (rounded or rescaled).
+  If the match is still below 98 %, a second, uniform start is tried and the better fit kept.
+* **The five-round search is rough on purpose.** It works on at most 1 500 informative
+  intervals, evenly spread over the period (every member keeps up to 300 of its own), with a
+  few iterations and one sweep; small groups (rows × members ≤ 60 000) get the full search on
+  all intervals. After 20 s (`FIT_BUDGET_S`) it returns the best keys found so far and the
+  page says so. This is as good as the full search on the benchmark, in a tenth of the time.
+* Both round counts are tried (5 only up to 100 members, and not when one round already
+  explains the report), and the one that reproduces more intervals wins.
 
 For every key the app also returns the **range of values the report fits equally well**. A key
 is marked when that range is wider than 0.2 pp or 5 % of the key. Typical causes are a member
 that is almost always fully covered (then only a lower bound is known) or one with no data.
 
-**Accuracy**, measured on synthetic groups: EDC shares from known keys, 1 % of rows perturbed.
-"As good as the truth" means the estimated keys reproduce as many intervals as the true keys.
-The data cannot tell those apart.
+**Accuracy and time**, measured by `python bench/keyfit_bench.py` on synthetic one-year groups
+(35 040 intervals): EDC shares from known keys, 1 % of intervals perturbed, one CPU core.
+"truth" is what the true keys reproduce, so a fit "as good as the truth" cannot do better.
 
-| Group | EDC rounds | Result | Time (1 CPU) |
-|---|---|---|---|
-| Real group 0000018947 (5 members, 1 year) | 5 | exactly 50 / 10 / 10 / 10 / 10 %, 99.2 % of intervals (same as the true keys) | 0.3–3 s |
-| 60 or 100 members, round keys | 5 | as good as the truth in 12 / 12 runs | 5–7 s |
-| 20 members, random keys (0.01 % steps) | 5 | as good as the truth in 5 / 6 runs | ≤ 4 s |
-| 60–100 members, random keys | 5 | 91–99 % of intervals; not always optimal | 10–22 s |
-| 150–1 000 members | 1 | as good as the truth; every true key inside the reported range | 0.1–0.6 s |
+| Members | Keys | EDC rounds | Match with the report (truth) | Keys equal to the true ones | Time |
+|---|---|---|---|---|---|
+| 20 | random, 0.01 % steps | 5 | 99.0 % (99.0 %) | 85 % | 2 s |
+| 60 | whole percent | 5 | 99.0 % (99.0 %) | 90 % | 5 s |
+| 60 | random | 5 | 99.0 % (99.0 %) | 92 % | 7 s |
+| 100 | random | 5 | 99.0 % (99.0 %) | 99 % | 18 s |
+| 150 | random | 1 | 99.0 % (99.0 %) | 100 % | 0.5 s |
 
-Irregular keys in large 5-round groups remain the hard case: the fit can stop at a local
-optimum. The summary always shows the match, and a warning appears below 95 %, so check those
-keys against the contract.
+The real group 0000018947 (5 members, 1 year) comes out as exactly 50 / 10 / 10 / 10 / 10 %,
+reproducing 99.2 % of intervals, in about 3 s. Keys that differ from the true ones are
+members whose value the data cannot pin down (every value in the reported range reproduces the
+report equally well). The summary shows the match and warns below 95 %, so check those keys
+against the contract. On the free Render instance (less than 1 CPU) expect several times
+longer.
 
 ## Exact static method and timing
 
@@ -198,7 +215,8 @@ interval. Numbers vary with the machine; Render instances have less than one CPU
 |---|---|
 | `app.py` | Dash layout and callbacks, in-memory store, background jobs, config, `/healthz`, optional basic auth |
 | `edc_data.py` | CSV parsing (both layouts), per-member frames keyed by EAN, statistics; memoised derived data |
-| `keyfit.py` | Replay of today's EDC method (numpy, in blocks), key estimation for 1 and 5 rounds |
+| `keyfit.py` | Replay of today's EDC method (numpy, in blocks), rough key estimation for 1 and 5 rounds |
+| `bench/keyfit_bench.py` | Reproducible accuracy / time benchmark of the key estimate (synthetic data) |
 | `recompute.py` | Exact static recompute in a worker process, timing |
 | `presna_staticka.py` | Reference implementation of the exact static method |
 | `figures.py` | Plotly figures, light/dark themes, folding of large groups into "Others" |

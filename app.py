@@ -868,6 +868,8 @@ def _fit_info(_rev, lang, key, rows):
         warn, text = False, ""
         if status == "no_data":
             warn, text = True, t("key_nodata", lang)
+        elif status == "zero":
+            text = t("key_zero", lang).format(hi=fmt_num(100 * hi, lang, 2))
         elif status == "always_covered" or hi >= 0.999:
             warn, text = True, t("key_lower", lang).format(lo=fmt_num(100 * lo, lang, 2))
         elif hi - lo > max(0.002, 0.05 * fit.keys[i]):   # > 0.2 pp or 5 % of the key
@@ -883,6 +885,8 @@ def _fit_info(_rev, lang, key, rows):
     notes = [html.P([html.B(f"{t('fit_title', lang)}: "), summary], className="fit-line")]
     if fit.match < 0.95:
         notes.append(html.P(t("fit_low", lang), className="stale"))
+    elif fit.rough:
+        notes.append(html.P(t("fit_rough", lang), className="hint"))
     elif wide:
         notes.append(html.P(t("fit_check", lang), className="hint"))
     return notes, {"update": update}
