@@ -1195,11 +1195,12 @@ def _timing(exact: Recomputed, data: SharingData, names: dict, lang: str) -> lis
             html.Div(t("loss_none", lang), className="loss-text")])
     else:
         loss_box = html.Div(className="loss-box", children=[
-            html.Div([html.Span(fmt_pct(loss.pct_of_production, lang, 1), className="loss-pct"),
+            html.Div([html.Span(fmt_pct(loss.pct_of_max, lang, 1), className="loss-pct"),
                       html.Span(t("loss_title", lang), className="loss-title")]),
             html.Div(t("loss_text", lang).format(
-                kwh=fmt_num(loss.lost, lang, 1), pct=fmt_pct(loss.pct_of_production, lang, 1),
-                pct_grid=fmt_pct(loss.pct_of_grid, lang, 1)), className="loss-text")])
+                max=fmt_num(loss.shared_exact, lang, 1), edc=fmt_num(loss.shared_edc, lang, 1),
+                kwh=fmt_num(loss.lost, lang, 1), pct=fmt_pct(loss.pct_of_max, lang, 1),
+                pct_prod=fmt_pct(loss.pct_of_production, lang, 1)), className="loss-text")])
     out = [
         loss_box,
         html.H3(t("timing_title", lang), className="sub-title"),

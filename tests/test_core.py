@@ -31,7 +31,8 @@ def test_grid_loss_matches_the_wasted_overlap(small_group):
     res = recompute.recompute(data, list(k), rounds=5)
     loss = recompute.grid_loss(data, res.data)
     assert abs(loss.lost - core.compute_wasted_split(data.frame).overlap) < 0.05
-    assert 0 <= loss.pct_of_production <= 100 and loss.pct_of_grid >= loss.pct_of_production
+    assert 0 <= loss.pct_of_production <= loss.pct_of_max <= 100
+    assert abs(loss.pct_of_max - 100 * loss.lost / loss.shared_exact) < 1e-9
     same = recompute.grid_loss(res.data, res.data)
     assert same.negligible and same.pct_of_production == 0
 

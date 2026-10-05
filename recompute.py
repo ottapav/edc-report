@@ -161,6 +161,11 @@ class GridLoss:
     lost: float             # kWh the exact method shares in addition (>= 0)
 
     @property
+    def pct_of_max(self) -> float:
+        """Sharing error: the part of the maximum (exact-method) sharing EDC missed."""
+        return 100 * self.lost / self.shared_exact if self.shared_exact > 0 else 0.0
+
+    @property
     def pct_of_production(self) -> float:
         return 100 * self.lost / self.production if self.production > 0 else 0.0
 
