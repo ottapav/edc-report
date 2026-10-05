@@ -1141,14 +1141,14 @@ def _cmp_table(data: SharingData, exact: Recomputed, enabled: set[str], names: d
                      + _cell(fmt_num(sa, lang, 1), "num")
                      + _cell(f"<b>{fmt_num(sb, lang, 1)}</b>", "num")
                      + _cell(fmt_signed(d, lang), "num pos" if d > 0.05 else "num")
-                     + _cell(fmt_pct(100 * d / sa, lang) if sa else "—", "num")
+                     + _cell(fmt_pct(100 * d / sb, lang) if sb else "—", "num")
                      + _cell(f"{cov(sa, dem)} → {cov(sb, dem)}", "num")))
     sa, sb, dem = a["shared"].sum(), bb["shared"].sum(), a["consumption"].sum()
     b = lambda x: f"<b>{x}</b>"  # noqa: E731
     foot = (_cell(b("Σ")) + _cell(b(fmt_pct(100 * sum(exact.keys), lang, 1)), "num")
             + _cell(b(fmt_num(dem, lang, 1)), "num") + _cell(b(fmt_num(sa, lang, 1)), "num")
             + _cell(b(fmt_num(sb, lang, 1)), "num") + _cell(b(fmt_signed(sb - sa, lang)), "num pos")
-            + _cell(b(fmt_pct(100 * (sb - sa) / sa if sa else None, lang)), "num")
+            + _cell(b(fmt_pct(100 * (sb - sa) / sb if sb else None, lang)), "num")
             + _cell(b(f"{cov(sa, dem)} → {cov(sb, dem)}"), "num"))
     return _html_table(head, rows, foot)
 
