@@ -71,7 +71,7 @@ with the computation timed per 15-min interval.
   the tiles, and a per-member comparison table.
 * **Sharing error:** when the recompute is done, a callout gives the error of today's EDC
   algorithm as a percentage of the maximum sharing (what the exact method shares), with the
-  kWh missed and the same loss as a share of production.
+  kWh missed.
 * **Timing:** the number of intervals evaluated, total time, and time per interval, split by
   the method's fast paths.
 
