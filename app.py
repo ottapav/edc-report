@@ -46,7 +46,7 @@ from figures import (
 from i18n import fmt_date, fmt_duration, fmt_num, fmt_pct, fmt_signed, t
 from keyfit import KeyFit, estimate_keys
 from procjob import JobCancelled, JobTimeout, run_in_child
-from recompute import Recomputed, recompute, to_hundredths
+from recompute import Recomputed, grid_loss, recompute, to_hundredths
 from edc_data import (
     SharingData, compute_wasted_split, filter_dests, load_report,
     per_destination, summarize,
@@ -1188,7 +1188,20 @@ def _timing(exact: Recomputed, data: SharingData, names: dict, lang: str) -> lis
     src = t("keys_est", lang) if exact.keys_estimated else t("keys_user", lang)
     reserve = (f" · {t('reserve', lang)}: {fmt_pct(100 * exact.reserve, lang, 1)}"
                if exact.reserve else "")
+    loss = grid_loss(data, exact.data)
+    if loss.negligible:
+        loss_box = html.Div(className="loss-box ok", children=[
+            html.Div(t("loss_title", lang), className="loss-title"),
+            html.Div(t("loss_none", lang), className="loss-text")])
+    else:
+        loss_box = html.Div(className="loss-box", children=[
+            html.Div([html.Span(fmt_pct(loss.pct_of_production, lang, 1), className="loss-pct"),
+                      html.Span(t("loss_title", lang), className="loss-title")]),
+            html.Div(t("loss_text", lang).format(
+                kwh=fmt_num(loss.lost, lang, 1), pct=fmt_pct(loss.pct_of_production, lang, 1),
+                pct_grid=fmt_pct(loss.pct_of_grid, lang, 1)), className="loss-text")])
     out = [
+        loss_box,
         html.H3(t("timing_title", lang), className="sub-title"),
         stats,
         html.P([html.B(f"{t('keys_used', lang)} ({src}): "), key_txt,

@@ -335,3 +335,9 @@ input, .name-in, .text-in, .key-in, .num-in { background: var(--field); color: v
 .members-grid .ag-checkbox-input-wrapper.ag-checked::after { color: var(--accent); }
 .ag-tooltip { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
 .tbl-md > p { margin: 0; }
+
+.loss-box { background: var(--warn-bg); border: 1px solid var(--warn-line); border-left: 4px solid var(--warn); border-radius: 6px; padding: 10px 14px; margin: 12px 0 4px; }
+.loss-box.ok { background: var(--accent-soft); border-color: var(--line); border-left-color: var(--accent); }
+.loss-pct { font-size: 22px; font-weight: 700; color: var(--warn); margin-right: 10px; }
+.loss-title { font-weight: 600; }
+.loss-text { font-size: 13px; margin-top: 4px; }

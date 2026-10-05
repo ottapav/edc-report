@@ -151,6 +151,43 @@ class Recomputed:
     notes: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class GridLoss:
+    """Energy the EDC report sent to the grid although members could have used it."""
+
+    production: float       # kWh
+    shared_edc: float       # kWh shared by the EDC report
+    shared_exact: float     # kWh shared by the exact method
+    lost: float             # kWh the exact method shares in addition (>= 0)
+
+    @property
+    def pct_of_production(self) -> float:
+        return 100 * self.lost / self.production if self.production > 0 else 0.0
+
+    @property
+    def grid_edc(self) -> float:
+        return max(0.0, self.production - self.shared_edc)
+
+    @property
+    def pct_of_grid(self) -> float:
+        return 100 * self.lost / self.grid_edc if self.grid_edc > 0 else 0.0
+
+    @property
+    def negligible(self) -> bool:
+        return self.lost < 0.005
+
+
+def grid_loss(edc: SharingData, exact: SharingData) -> GridLoss:
+    """Compare the whole group's shared energy: EDC report vs. exact recompute."""
+    def shared(d: SharingData) -> float:
+        cols = [key_shared(d.source_eans[0], e) for e in d.dest_eans]
+        return float(d.frame[cols].to_numpy(dtype=float).sum())
+
+    prod = float(edc.production.sum()) if edc.production is not None else 0.0
+    a, b = shared(edc), shared(exact)
+    return GridLoss(production=prod, shared_edc=a, shared_exact=b, lost=max(0.0, b - a))
+
+
 def recompute(
     data: SharingData,
     keys: list[float],

@@ -69,6 +69,9 @@ with the computation timed per 15-min interval.
 * **Recompute:** one button runs `rozdel()` for every 15-min interval, with a progress bar.
 * **Side by side:** today (EDC) and the exact method, with shared axes, differences to EDC in
   the tiles, and a per-member comparison table.
+* **Energy lost to the grid:** when the recompute is done, a callout says how much energy
+  (kWh, % of production, % of what went to the grid) today's EDC algorithm sent to the grid
+  although the exact method shares it between members.
 * **Timing:** the number of intervals evaluated, total time, and time per interval, split by
   the method's fast paths.
 

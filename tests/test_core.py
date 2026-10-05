@@ -25,6 +25,17 @@ def test_wasted_overlap_is_what_the_exact_method_adds(small_group):
     assert core.compute_wasted_split(res.data.frame).overlap < 0.05
 
 
+def test_grid_loss_matches_the_wasted_overlap(small_group):
+    P, D, S, k = small_group
+    data = core.load_report(all_report_csv(P, D, S))
+    res = recompute.recompute(data, list(k), rounds=5)
+    loss = recompute.grid_loss(data, res.data)
+    assert abs(loss.lost - core.compute_wasted_split(data.frame).overlap) < 0.05
+    assert 0 <= loss.pct_of_production <= 100 and loss.pct_of_grid >= loss.pct_of_production
+    same = recompute.grid_loss(res.data, res.data)
+    assert same.negligible and same.pct_of_production == 0
+
+
 def test_recompute_timing_counts_every_interval(small_group):
     P, D, S, k = small_group
     data = core.load_report(all_report_csv(P, D, S))
