@@ -1150,7 +1150,8 @@ def _cmp_table(data: SharingData, exact: Recomputed, enabled: set[str], names: d
             + _cell(b(fmt_num(sb, lang, 1)), "num") + _cell(b(fmt_signed(sb - sa, lang)), "num pos")
             + _cell(b(fmt_pct(100 * (sb - sa) / sb if sb else None, lang)), "num")
             + _cell(b(f"{cov(sa, dem)} → {cov(sb, dem)}"), "num"))
-    return _html_table(head, rows, foot)
+    return [_html_table(head, rows, foot),
+            html.P(t("cmp_error_hint", lang), className="hint")]
 
 
 def _timing(exact: Recomputed, data: SharingData, names: dict, lang: str) -> list:
