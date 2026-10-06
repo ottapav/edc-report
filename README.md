@@ -4,13 +4,13 @@ Interactive web app (Dash) that displays the electricity-sharing data of a Czech
 group. The input is the CSV report generated on [edc-cr.cz](https://www.edc-cr.cz), the portal
 of the *Elektroenergetické datové centrum* (EDC). Upload the CSV and you get the group's
 sharing at a glance. The app also recomputes the whole period with the proposed **exact
-static method** (`presna_staticka.py`) and shows today's result and the proposal side by side,
+static method** (`presna_staticka.py`) and shows the result of the approximate static method (EDC's current implementation) and the exact one side by side,
 with the computation timed per 15-min interval.
 
 > **Česky:** Webová aplikace, která zobrazuje data o sdílení elektřiny z CSV reportu
 > vygenerovaného na portálu edc-cr.cz. Po nahrání CSV ukáže
 > souhrny, denní a hodinové grafy, teplotní mapu a podíl, který „mohl být sdílen“.
-> Z reportu odhadne alokační klíče (dnešní metoda EDC s 1 nebo 5 koly, i pro velké skupiny).
+> Z reportu odhadne alokační klíče (přibližná statická metoda EDC s 1 nebo 5 koly, i pro velké skupiny).
 > Jedním tlačítkem přepočítá sdílení přesnou statickou metodou a porovná ji s dneškem.
 > Rozhraní je v češtině i angličtině, se světlým i tmavým režimem.
 
@@ -33,7 +33,7 @@ with the computation timed per 15-min interval.
 
 ## Features
 
-**Report of today's sharing** (the figures of `plot_energy_sharing.py`, interactive):
+**Report of the approximate static method (EDC)** (the figures of `plot_energy_sharing.py`, interactive):
 
 * **General information and headline figures:**
   * facts: period, 15-min intervals, producer, peak production, best day;
@@ -67,9 +67,9 @@ with the computation timed per 15-min interval.
 * **Keys:** estimated from the report right after upload. You can check and correct them
   before the recompute.
 * **Recompute:** one button runs `rozdel()` for every 15-min interval, with a progress bar.
-* **Side by side:** today (EDC) and the exact method, with shared axes, differences to EDC in
+* **Side by side:** the approximate static method (EDC) and the exact method, with shared axes, differences to EDC in
   the tiles, and a per-member comparison table.
-* **Sharing error:** when the recompute is done, a callout gives the error of today's EDC
+* **Sharing error:** when the recompute is done, a callout gives the error of the approximate static method (EDC)
   algorithm as a percentage of the maximum sharing (what the exact method shares), with the
   kWh missed.
 * **Timing:** the number of intervals evaluated, total time, and time per interval, split by
@@ -82,7 +82,7 @@ with the computation timed per 15-min interval.
   remembers the choice.
 * Works on a phone.
 
-![Today vs. the exact static method, dark mode](docs/screenshot-dark.png)
+![Approximate (EDC) vs. exact static method, dark mode](docs/screenshot-dark.png)
 
 ## Quick start
 
@@ -113,7 +113,7 @@ gunicorn app:server -c gunicorn.conf.py        # listens on $PORT (default 8050)
 3. **Check the keys** against the contract and correct them in the grid if needed; **Odhad**
    restores the estimate. Keys act as ratios in the exact method, and 0 means the member gets
    nothing. An optional *reserve for sale* is passed to `rozdel(..., rezerva=)`.
-4. **Recompute.** The second column appears next to today's report, and the timing card shows
+4. **Recompute.** The second column appears next to the EDC report, and the timing card shows
    the computation.
 5. **Explore:**
    * click a day in either daily plot, or use ◀ ▶, to see it in 15-min steps;
@@ -124,7 +124,7 @@ gunicorn app:server -c gunicorn.conf.py        # listens on $PORT (default 8050)
 
 ## How the allocation keys are estimated
 
-The CSV has no keys, but it contains what today's EDC static method did with them. In every
+The CSV has no keys, but it contains what the approximate static method (EDC) did with them. In every
 round each member gets `min(remaining demand, floor(k_i · P_r))`, where `P_r` is the production
 left at the start of the round. Groups up to 100 EAN get 5 rounds, larger groups one round.
 `keyfit.py` inverts this. The result is a **rough estimate**: it need not be optimal, but it
@@ -137,7 +137,7 @@ must never contradict the report.
   A member without any demand while there was production also gets 0 (no phantom key).
 * A member that is always fully covered gets the smallest key that keeps it covered.
 * The keys never sum above 100 %, and the match with the report (the share of 15-min intervals
-  that today's method reproduces with these keys) is always measured on **every** interval.
+  that the approximate method reproduces with these keys) is always measured on **every** interval.
 
 **How it works**
 
@@ -218,7 +218,7 @@ interval. Numbers vary with the machine; Render instances have less than one CPU
 |---|---|
 | `app.py` | Dash layout and callbacks, in-memory store, background jobs, config, `/healthz`, optional basic auth |
 | `edc_data.py` | CSV parsing (both layouts), per-member frames keyed by EAN, statistics; memoised derived data |
-| `keyfit.py` | Replay of today's EDC method (numpy, in blocks), rough key estimation for 1 and 5 rounds |
+| `keyfit.py` | Replay of the approximate static method (EDC) (numpy, in blocks), rough key estimation for 1 and 5 rounds |
 | `bench/keyfit_bench.py` | Reproducible accuracy / time benchmark of the key estimate (synthetic data) |
 | `recompute.py` | Exact static recompute (the `rozdel()` loop in a child process), timing |
 | `procjob.py` | Runs a function in a forked child with progress, cancellation and a time limit |
@@ -268,7 +268,7 @@ The child resets gunicorn's signal handlers, so killing it really stops it. `/he
   components the Dash renderer needed tens of seconds per update for 150 members.
 * Tables are rendered as one HTML block instead of thousands of React components.
 * More than 10 members fold into 9 + "Others" in the plots. tab10 has 10 colours and hues
-  are never cycled; the ranking comes from today's report, so both columns match. Tables keep
+  are never cycled; the ranking comes from the EDC report, so both columns match. Tables keep
   every member.
 * Derived data is memoised per upload and selection: filtered frames, aggregates, totals,
   daily sums, heatmap pivots, the hourly y range.

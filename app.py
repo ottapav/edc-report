@@ -8,7 +8,7 @@ selection panel (destinations on/off, names, display options).
 
 Phase 2: a button recomputes sharing with the exact static method
 (``presna_staticka.rozdel``) and shows the recomputed report side by side with
-today's EDC report, with a progress bar and timing of the computation.
+the EDC report (the approximate static method), with a progress bar and timing of the computation.
 
 Phase 3: hourly plot of a selected day, heatmap, allocation keys estimated
 right after upload (1 or 5 EDC rounds, any group size), dark mode.

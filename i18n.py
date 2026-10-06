@@ -96,7 +96,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "job_lost": "The computation was lost (the server restarted or went to sleep) together with the uploaded data. Upload the file again.",
         "queued": "Waiting for a free slot (another computation is running)",
         "fit_title": "Allocation keys estimated from the report",
-        "fit_summary": "Today's EDC method with {rounds} reproduces the report in {pct} of 15-min "
+        "fit_summary": "The approximate static method (EDC) with {rounds} reproduces the report in {pct} of 15-min "
                        "intervals with these keys{other}. Estimated in {secs}.",
         "fit_other": " ({rounds}: {pct})",
         "rounds_1": "1 round",
@@ -131,7 +131,7 @@ STRINGS: dict[str, dict[str, str]] = {
         # --- phase 2: exact static method ---
         "keys": "Key [%]",
         "keys_hint": "Allocation keys are estimated from the report right after upload "
-                     "(so that today's EDC method reproduces it); correct them before the "
+                     "(so that the approximate static method reproduces it); correct them before the "
                      "recompute. Keys act as ratios; 0 = member gets nothing.",
         "key_ph": "auto",
         "clear_keys": "Estimate",
@@ -139,14 +139,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "recompute_title": "Exact static method (proposal)",
         "recompute_desc": "Every 15-min interval is recomputed with rozdel() from presna_staticka.py: "
                           "s_i = min(D_i, k_i · H), with the level H computed to the end. "
-                          "The result is shown side by side with today's report.",
+                          "The result is shown side by side with the approximate static method (the EDC report).",
         "recompute_btn": "Recompute sharing with the exact static method",
         "part_no_recompute": "Recompute needs an all report (members' consumption is required).",
         "phase_fit": "Estimating keys from the report",
         "phase_compute": "Recomputing 15-min intervals",
         "phase_done": "Done",
         "phase_error": "Recompute failed",
-        "col_edc": "Today — EDC static method (report)",
+        "col_edc": "Approximate static method (EDC report)",
         "col_exact": "Exact static method (recomputed)",
         "vs_edc": "vs EDC",
         "timing_title": "Computation timing",
@@ -164,18 +164,18 @@ STRINGS: dict[str, dict[str, str]] = {
         "keys_est": "estimated from report",
         "keys_user": "entered",
         "keys_sum": "sum",
-        "edc_check": "Check: today's EDC method ({rounds}) with these keys reproduces the report in {pct} of intervals.",
-        "loss_title": "Sharing error of the EDC algorithm",
-        "loss_text": "The exact static method shares {max} kWh (the maximum). Today's EDC algorithm shared {edc} kWh and sent {kwh} kWh to the grid that members could have used.",
-        "loss_none": "No sharing error: today's EDC algorithm shares as much as the exact method.",
+        "edc_check": "Check: the approximate static method (EDC, {rounds}) with these keys reproduces the report in {pct} of intervals.",
+        "loss_title": "Sharing error of the approximate static method (EDC)",
+        "loss_text": "The exact static method shares {max} kWh (the maximum). The approximate static method (EDC) shared {edc} kWh and sent {kwh} kWh to the grid that members could have used.",
+        "loss_none": "No sharing error: the approximate static method (EDC) shares as much as the exact one.",
         "stale": "Keys or reserve changed since the last recompute; press the button again.",
         "cmp_title": "Comparison per destination",
-        "cmp_shared_edc": "Shared today [kWh]",
+        "cmp_shared_edc": "Shared approx. [kWh]",
         "cmp_shared_exact": "Shared exact [kWh]",
         "cmp_delta": "Difference [kWh]",
         "cmp_delta_pct": "EDC error [%]",
-        "cmp_error_hint": "EDC error = Difference ÷ Shared exact: the part of the sharing the exact method makes possible that EDC missed. Per member it is relative to that member's exact sharing; the Σ row is the whole group and equals the sharing error in the box above.",
-        "cmp_cov": "Covered by sharing: today → exact",
+        "cmp_error_hint": "EDC error = Difference ÷ Shared exact: the part of the sharing the exact method makes possible that the approximate method (EDC) missed. Per member it is relative to that member's exact sharing; the Σ row is the whole group and equals the sharing error in the box above.",
+        "cmp_cov": "Covered by sharing: approx. → exact",
         "cmp_key": "Key",
     },
     "cs": {
@@ -278,7 +278,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "job_lost": "Výpočet se ztratil i s nahranými daty (server se restartoval nebo uspal). Nahrajte soubor znovu.",
         "queued": "Čeká na volné místo (běží jiný výpočet)",
         "fit_title": "Alokační klíče odhadnuté z reportu",
-        "fit_summary": "Dnešní metoda EDC s {rounds} reprodukuje s těmito klíči report v {pct} "
+        "fit_summary": "Přibližná statická metoda (EDC) s {rounds} reprodukuje s těmito klíči report v {pct} "
                        "čtvrthodin{other}. Odhad trval {secs}.",
         "fit_other": " ({rounds}: {pct})",
         "rounds_1": "1 kolem",
@@ -296,7 +296,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "others": "Ostatní ({n} míst)",
         "keys": "Klíč [%]",
         "keys_hint": "Alokační klíče se odhadnou z reportu hned po nahrání (tak, aby je "
-                     "dnešní metoda EDC reprodukovala); před přepočtem je můžete opravit. "
+                     "přibližná statická metoda reprodukovala); před přepočtem je můžete opravit. "
                      "Klíče se berou jako poměry; 0 = člen nedostane nic.",
         "key_ph": "auto",
         "clear_keys": "Odhad",
@@ -304,14 +304,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "recompute_title": "Přesná statická metoda (návrh)",
         "recompute_desc": "Každá čtvrthodina se přepočítá funkcí rozdel() z presna_staticka.py: "
                           "s_i = min(D_i, k_i · H), hladina H dopočtená do konce. "
-                          "Výsledek se zobrazí vedle dnešního reportu.",
+                          "Výsledek se zobrazí vedle přibližné statické metody (reportu EDC).",
         "recompute_btn": "Přepočítat sdílení přesnou statickou metodou",
         "part_no_recompute": "Přepočet potřebuje úplný report (odběry členů).",
         "phase_fit": "Odhad klíčů z reportu",
         "phase_compute": "Přepočet čtvrthodin",
         "phase_done": "Hotovo",
         "phase_error": "Přepočet selhal",
-        "col_edc": "Dnes — statická metoda EDC (report)",
+        "col_edc": "Přibližná statická metoda (report EDC)",
         "col_exact": "Přesná statická metoda (přepočet)",
         "vs_edc": "oproti EDC",
         "timing_title": "Měření výpočtu",
@@ -329,18 +329,18 @@ STRINGS: dict[str, dict[str, str]] = {
         "keys_est": "odhad z reportu",
         "keys_user": "zadané",
         "keys_sum": "součet",
-        "edc_check": "Kontrola: dnešní metoda EDC ({rounds}) s těmito klíči reprodukuje report v {pct} čtvrthodin.",
-        "loss_title": "Chyba sdílení algoritmu EDC",
-        "loss_text": "Přesná statická metoda sdílí {max} kWh (maximum). Dnešní algoritmus EDC sdílel {edc} kWh a {kwh} kWh poslal do sítě, ačkoli je členové mohli využít.",
-        "loss_none": "Žádná chyba sdílení: dnešní algoritmus EDC sdílí stejně jako přesná metoda.",
+        "edc_check": "Kontrola: přibližná statická metoda (EDC, {rounds}) s těmito klíči reprodukuje report v {pct} čtvrthodin.",
+        "loss_title": "Chyba sdílení přibližné statické metody (EDC)",
+        "loss_text": "Přesná statická metoda sdílí {max} kWh (maximum). Přibližná statická metoda (EDC) sdílela {edc} kWh a {kwh} kWh poslala do sítě, ačkoli je členové mohli využít.",
+        "loss_none": "Žádná chyba sdílení: přibližná statická metoda (EDC) sdílí stejně jako přesná.",
         "stale": "Klíče nebo rezerva se od posledního přepočtu změnily; stiskněte tlačítko znovu.",
         "cmp_title": "Srovnání podle odběrného místa",
-        "cmp_shared_edc": "Nasdíleno dnes [kWh]",
+        "cmp_shared_edc": "Nasdíleno přibl. [kWh]",
         "cmp_shared_exact": "Nasdíleno přesně [kWh]",
         "cmp_delta": "Rozdíl [kWh]",
         "cmp_delta_pct": "Chyba EDC [%]",
-        "cmp_error_hint": "Chyba EDC = Rozdíl ÷ Nasdíleno přesně: jaká část sdílení, které přesná metoda umožní, EDC unikla. U člena se počítá z jeho přesného sdílení; řádek Σ je celá skupina a odpovídá chybě sdílení v boxu nahoře.",
-        "cmp_cov": "Pokryto sdílením: dnes → přesně",
+        "cmp_error_hint": "Chyba EDC = Rozdíl ÷ Nasdíleno přesně: jaká část sdílení, které přesná metoda umožní, přibližné metodě (EDC) unikla. U člena se počítá z jeho přesného sdílení; řádek Σ je celá skupina a odpovídá chybě sdílení v boxu nahoře.",
+        "cmp_cov": "Pokryto sdílením: přibl. → přesně",
         "cmp_key": "Klíč",
     },
 }
