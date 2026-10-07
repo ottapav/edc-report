@@ -1484,8 +1484,8 @@ app.clientside_callback(
 )
 def _hourly(day, key, _rev, selected, _changed, name_values, lang,
             theme_name, name_ids, rows):
-    """Subplot 4: one day in 15-min steps; y axis fixed over the whole period (and
-    shared by both reports) so days and methods compare on one scale."""
+    """Subplot 4: one day in 15-min steps; y axis fitted to the selected day and
+    shared by both reports, so the two methods compare on one scale."""
     if _key_only_edit():
         raise dash.exceptions.PreventUpdate
     entry = _cache_get(key)
@@ -1497,7 +1497,7 @@ def _hourly(day, key, _rev, selected, _changed, name_values, lang,
     frames = [filter_dests(data, enabled)]
     if entry.exact is not None:
         frames.append(filter_dests(entry.exact.data, enabled))
-    y_max = max(intraday_ymax(f) for f in frames)
+    y_max = max(intraday_ymax(f, _day(day)) for f in frames)
     opts = dict(y_max=y_max, lang=lang, th=theme(theme_name),
                 top=top_dests(frames[0], data))
     fa = fig_intraday(frames[0], data, names, _day(day), **opts)

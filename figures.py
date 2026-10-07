@@ -449,10 +449,14 @@ INTRADAY_XEND_HOUR = 21
 
 
 @memoized
-def intraday_ymax(df: pd.DataFrame) -> float:
-    """Peak kWh per 15 min of the stacked flows over the whole dataset (one scale
-    for every day)."""
+def intraday_ymax(df: pd.DataFrame, day: str | None = None) -> float:
+    """Peak kWh per 15 min of the stacked flows. With ``day`` only that calendar
+    day counts, so the plot fills the panel; without it the whole dataset does
+    (one scale for every day)."""
     agg = aggregate_grid_flows(df).fillna(0)
+    if day is not None and not agg.empty:
+        lo = pd.Timestamp(day).normalize()
+        agg = agg.loc[(agg.index >= lo) & (agg.index < lo + pd.Timedelta(days=1))]
     if agg.empty or len(agg.columns) == 0:
         return 1.0
     peak = float(agg.sum(axis=1).max())
@@ -478,7 +482,7 @@ def fig_intraday(
     date_txt = day_ts.strftime("%d.%m.%Y" if lang == "cs" else "%Y-%m-%d")
     fig = _figure(t("sharing_on", lang).format(date=date_txt), lang, 440, th)
     if y_max is None:
-        y_max = intraday_ymax(df)
+        y_max = intraday_ymax(df, str(day_ts.date()))
     lo, hi = day_ts, day_ts + pd.Timedelta(days=1)
     day_df = agg.loc[(agg.index >= lo) & (agg.index < hi)].fillna(0)
     fig.update_layout(
@@ -487,7 +491,7 @@ def fig_intraday(
                    dtick=3 * 3600 * 1000, tickformat="%H:%M", hoverformat="%H:%M",
                    showgrid=True),
         yaxis=dict(title=t("intraday_ylabel", lang), showgrid=True, zeroline=False,
-                   range=[0, y_max * 1.02]),
+                   range=[0, y_max * 1.05]),
     )
     if day_df.empty or len(agg.columns) == 0:
         fig.add_annotation(text=t("no_data", lang), x=0.5, y=0.5, xref="paper",

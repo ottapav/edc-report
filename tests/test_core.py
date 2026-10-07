@@ -128,3 +128,20 @@ def test_figures_build_for_every_selection(small_group):
         figures.fig_intraday(df, data, names, "2026-06-10")
         pie = figures.fig_wasted_pie(core.compute_wasted_split(df))
         assert abs(sum(pie.data[0].values) - small_group[0].sum() / 100) < 0.05
+
+
+def test_intraday_axis_fits_the_selected_day(small_group):
+    import figures
+    data, _ = _group_data(small_group)
+    names = {e: f"M{i}" for i, e in enumerate(data.dest_eans + data.source_eans)}
+    df = core.filter_dests(data, set(data.dest_eans))
+    agg = figures.aggregate_grid_flows(df).fillna(0)
+    days = sorted(set(agg.index.normalize()))
+    for day in days[:3]:
+        d = str(day.date())
+        peak = float(agg.loc[agg.index.normalize() == day].sum(axis=1).max())
+        top = figures.intraday_ymax(df, d)
+        assert top == (peak if peak > 0 else 1.0)
+        assert top <= figures.intraday_ymax(df)               # never above the whole-period peak
+        fig = figures.fig_intraday(df, data, names, d)
+        assert abs(fig.layout.yaxis.range[1] - top * 1.05) < 1e-9
