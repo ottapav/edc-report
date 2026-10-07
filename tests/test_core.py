@@ -37,6 +37,26 @@ def test_grid_loss_matches_the_wasted_overlap(small_group):
     assert same.negligible and same.pct_of_production == 0
 
 
+def test_could_have_been_shared_matches_the_exact_gain_for_any_selection(small_group):
+    P, D, S, k = small_group
+    data = core.load_report(all_report_csv(P, D, S))
+    res = recompute.recompute(data, list(k), rounds=5)
+    a, b = core.per_destination(data).set_index("ean"), core.per_destination(res.data).set_index("ean")
+    E = data.dest_eans
+    for sel in ({E[0]}, set(E[:3]), set(E[1::2]), set(E)):
+        gain = core.exact_gain(data, res.data, sel)
+        table = sum(b.at[e, "shared"] - a.at[e, "shared"] for e in sel)
+        assert abs(gain - table) < 1e-6
+        assert abs(recompute.grid_loss(data, res.data, sel).lost - gain) < 1e-6
+        s = core.with_overlap(core.summarize(data, sel), gain)
+        assert abs(s.overlap - gain) < 1e-9 and abs(s.overlap + s.unshared_only - s.unshared) < 1e-6
+        sp = core.with_overlap(core.compute_wasted_split(core.filter_dests(data, sel)), gain)
+        total = sp.shared_total + sp.shared_others + sp.overlap + sp.unshared_only
+        assert abs(total - float(data.production.sum())) < 0.05
+        # before the recompute the tile is only an upper bound
+        assert gain <= core.summarize(data, sel).overlap + 0.05
+
+
 def test_recompute_timing_counts_every_interval(small_group):
     P, D, S, k = small_group
     data = core.load_report(all_report_csv(P, D, S))

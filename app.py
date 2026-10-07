@@ -48,8 +48,8 @@ from keyfit import KeyFit, estimate_keys
 from procjob import JobCancelled, JobTimeout, run_in_child
 from recompute import Recomputed, grid_loss, recompute, to_hundredths
 from edc_data import (
-    SharingData, compute_wasted_split, filter_dests, load_report,
-    per_destination, summarize,
+    SharingData, compute_wasted_split, exact_gain, filter_dests, load_report,
+    per_destination, summarize, with_overlap,
 )
 
 # ---------------------------------------------------------------------------
@@ -1011,12 +1011,23 @@ def _facts(filename: str, data: SharingData, enabled: set[str], names: dict, lan
     return html.Dl(className="facts", children=facts)
 
 
-def _tiles(data: SharingData, enabled: set[str], lang: str, ref: SharingData | None = None,
-           pad: bool = False):
-    """KPI tiles; with ``ref`` the sub-line also shows the difference to ``ref``.
-    ``pad`` reserves the same extra line so paired columns stay aligned."""
+def _summary(data: SharingData, enabled: set[str], exact: SharingData | None):
+    """``summarize`` where, once the exact recompute exists, "could have been shared"
+    of the EDC report is what the exact method really adds to the selection."""
     s = summarize(data, enabled)
-    r = summarize(ref, enabled) if ref is not None else None
+    if exact is None or data is exact or s.overlap is None:
+        return s
+    return with_overlap(s, exact_gain(data, exact, enabled))
+
+
+def _tiles(data: SharingData, enabled: set[str], lang: str, ref: SharingData | None = None,
+           pad: bool = False, exact: SharingData | None = None):
+    """KPI tiles; with ``ref`` the sub-line also shows the difference to ``ref``.
+    ``pad`` reserves the same extra line so paired columns stay aligned. ``exact`` is
+    the recomputed report (see :func:`_summary`)."""
+    s = _summary(data, enabled, exact)
+    r = _summary(ref, enabled, exact) if ref is not None else None
+    subset = len(enabled & set(data.dest_eans)) < len(data.dest_eans)
     kwh = lambda x: f"{fmt_num(x, lang)} kWh"  # noqa: E731
     pct = lambda x, base: fmt_pct(100 * x / base, lang) if base else "—"  # noqa: E731
 
@@ -1041,7 +1052,8 @@ def _tiles(data: SharingData, enabled: set[str], lang: str, ref: SharingData | N
         _tile(t("kpi_shared", lang), kwh(s.shared),
               sub(f"{pct(s.shared, prod)} {t('of_production', lang)}", s.shared, g("shared")),
               "#339933"),
-        _tile(t("kpi_wasted", lang), kwh(s.overlap),
+        _tile(t("kpi_wasted_max" if subset and exact is None else "kpi_wasted", lang),
+              kwh(s.overlap),
               sub(f"{pct(s.overlap, prod)} {t('of_production', lang)}", s.overlap, g("overlap"),
                   higher_is_better=False),
               "#cc3326"),
@@ -1054,7 +1066,9 @@ def _tiles(data: SharingData, enabled: set[str], lang: str, ref: SharingData | N
                   s.unmet, g("unmet"), higher_is_better=False), "#c7c7c7"),
     ]
     return [html.Div(className="tiles", children=tiles),
-            html.P(t("kpi_note", lang), className="hint")]
+            html.P(t("kpi_note", lang)
+                   + (t("kpi_note_max", lang) if subset and exact is None else ""),
+                   className="hint")]
 
 
 def _cell(text, cls: str = "", title: str = "") -> str:
@@ -1142,9 +1156,13 @@ def _cmp_table(data: SharingData, exact: Recomputed, enabled: set[str], names: d
                      + _cell(f"<b>{fmt_num(sb, lang, 1)}</b>", "num")
                      + _cell(fmt_pct(100 * d / sb, lang) if sb else "—", "num")
                      + _cell(f"{cov(sa, dem)} → {cov(sb, dem)}", "num")))
-    sa, sb, dem = a["shared"].sum(), bb["shared"].sum(), a["consumption"].sum()
+    sel = [e for e in data.dest_eans if e in enabled]
+    sa, sb = a.loc[sel, "shared"].sum(), bb.loc[sel, "shared"].sum()
+    dem = a.loc[sel, "consumption"].sum()
     b = lambda x: f"<b>{x}</b>"  # noqa: E731
-    foot = (_cell(b("Σ")) + _cell(b(fmt_pct(100 * sum(exact.keys), lang, 1)), "num")
+    sigma = ("Σ" if len(sel) == len(data.dest_eans)
+             else f"Σ {t('cmp_selected', lang).format(n=len(sel), m=len(data.dest_eans))}")
+    foot = (_cell(b(sigma)) + _cell(b(fmt_pct(100 * sum(keys[e] for e in sel), lang, 1)), "num")
             + _cell(b(fmt_num(dem, lang, 1)), "num") + _cell(b(fmt_num(sa, lang, 1)), "num")
             + _cell(b(fmt_num(sb, lang, 1)), "num")
             + _cell(b(fmt_pct(100 * (sb - sa) / sb if sb else None, lang)), "num")
@@ -1153,7 +1171,8 @@ def _cmp_table(data: SharingData, exact: Recomputed, enabled: set[str], names: d
             html.P(t("cmp_error_hint", lang), className="hint")]
 
 
-def _timing(exact: Recomputed, data: SharingData, names: dict, lang: str) -> list:
+def _timing(exact: Recomputed, data: SharingData, enabled: set[str], names: dict,
+            lang: str) -> list:
     tm = exact.timing
     n = lambda x: fmt_num(x, lang)  # noqa: E731
     stats = html.Div(className="timing-grid", children=[
@@ -1188,15 +1207,18 @@ def _timing(exact: Recomputed, data: SharingData, names: dict, lang: str) -> lis
     src = t("keys_est", lang) if exact.keys_estimated else t("keys_user", lang)
     reserve = (f" · {t('reserve', lang)}: {fmt_pct(100 * exact.reserve, lang, 1)}"
                if exact.reserve else "")
-    loss = grid_loss(data, exact.data)
+    loss = grid_loss(data, exact.data, enabled)
+    n_sel = len([e for e in data.dest_eans if e in enabled])
+    scope = ("" if n_sel == len(data.dest_eans)
+             else f" — {t('loss_selected', lang).format(n=n_sel, m=len(data.dest_eans))}")
     if loss.negligible:
         loss_box = html.Div(className="loss-box ok", children=[
-            html.Div(t("loss_title", lang), className="loss-title"),
+            html.Div(t("loss_title", lang) + scope, className="loss-title"),
             html.Div(t("loss_none", lang), className="loss-text")])
     else:
         loss_box = html.Div(className="loss-box", children=[
             html.Div([html.Span(fmt_pct(loss.pct_of_max, lang, 1), className="loss-pct"),
-                      html.Span(t("loss_title", lang), className="loss-title")]),
+                      html.Span(t("loss_title", lang) + scope, className="loss-title")]),
             html.Div(t("loss_text", lang).format(
                 max=fmt_num(loss.shared_exact, lang, 1), edc=fmt_num(loss.shared_edc, lang, 1),
                 kwh=fmt_num(loss.lost, lang, 1)), className="loss-text")])
@@ -1306,7 +1328,12 @@ def _render(key, _rev, selected, _changed, name_values, lang, group,
     sel_day = _day(sel_day)
     dy_a = fig_daily(df, data, names, sel_day=sel_day, **opts)
     has_grid = data.fmt == "all"
-    pie_a = fig_wasted_pie(compute_wasted_split(df), lang, th) if has_grid else {}
+    exact = entry.exact
+    split_a = compute_wasted_split(df) if has_grid else None
+    if has_grid and exact is not None:
+        split_a = with_overlap(split_a, exact_gain(data, exact.data, enabled))
+    pie_a = (fig_wasted_pie(split_a, lang, th, exact_based=exact is not None)
+             if has_grid else {})
 
     notes = []
     if data.notes:
@@ -1315,7 +1342,6 @@ def _render(key, _rev, selected, _changed, name_values, lang, group,
             html.Ul([html.Li(n) for n in data.notes]),
         ])
 
-    exact = entry.exact
     hidden = {"display": "none"}
     if exact is None:
         b = ([], {}, {}, {}, {}, {}, {}, hidden, [], [])
@@ -1327,9 +1353,9 @@ def _render(key, _rev, selected, _changed, name_values, lang, group,
         pie_b = fig_wasted_pie(compute_wasted_split(df_b), lang, th)
         _align_overview(ov_a, ov_b)
         _align_daily(dy_a, dy_b)
-        b = (_tiles(exact.data, enabled, lang, ref=data), ov_b, dy_b, pie_b,
+        b = (_tiles(exact.data, enabled, lang, ref=data, exact=exact.data), ov_b, dy_b, pie_b,
              h(ov_b), h(dy_b), h(pie_b), {}, _cmp_table(data, exact, enabled, names, lang, opts["top"]),
-             _timing(exact, data, names, lang))
+             _timing(exact, data, enabled, names, lang))
         mode = "compare dual"
         # keep paired graphs the same height
         for fa, fb in ((ov_a, ov_b),):
@@ -1357,7 +1383,8 @@ def _render(key, _rev, selected, _changed, name_values, lang, group,
         title,
         _facts(entry.filename, data, enabled, names, lang),
         notes,
-        _tiles(data, enabled, lang, pad=exact is not None),
+        _tiles(data, enabled, lang, pad=exact is not None,
+               exact=exact.data if exact is not None else None),
         ov_a, dy_a, pie_a,
         h(ov_a), h(dy_a), h(pie_a),
         {} if has_grid else hidden,

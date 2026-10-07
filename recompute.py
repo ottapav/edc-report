@@ -182,11 +182,13 @@ class GridLoss:
         return self.lost < 0.005
 
 
-def grid_loss(edc: SharingData, exact: SharingData) -> GridLoss:
-    """Compare the whole group's shared energy: EDC report vs. exact recompute."""
+def grid_loss(edc: SharingData, exact: SharingData, enabled: set[str] | None = None) -> GridLoss:
+    """Shared energy of the ``enabled`` members (default all): EDC report vs. exact recompute."""
+    enabled = set(edc.dest_eans) if enabled is None else enabled
+
     def shared(d: SharingData) -> float:
-        cols = [key_shared(d.source_eans[0], e) for e in d.dest_eans]
-        return float(d.frame[cols].to_numpy(dtype=float).sum())
+        cols = [key_shared(d.source_eans[0], e) for e in d.dest_eans if e in enabled]
+        return float(d.frame[cols].to_numpy(dtype=float).sum()) if cols else 0.0
 
     prod = float(edc.production.sum()) if edc.production is not None else 0.0
     a, b = shared(edc), shared(exact)

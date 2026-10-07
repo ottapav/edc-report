@@ -44,7 +44,10 @@ with the computation timed per 15-min interval.
 * **Pie "where the production went":** shared to the ticked members, shared to the unticked
   ones (hatched), *could have been shared* (min(unshared, unmet of the ticked members) in the
   same 15 min), and surplus nobody could use. The slices always add up to the production,
-  whatever is ticked.
+  whatever is ticked. For a subset of members that min is only an upper bound (as if the
+  ticked members got the whole surplus), so the tile says "at most"; once the exact method
+  has been computed, *could have been shared* is what it really adds to the ticked members,
+  and the tiles, the pie, the Σ row of the comparison table and the sharing-error box agree.
 * **Daily energy:** stacked areas (linear axis) with the grid flows, unshared and unmet, and
   the hatched energy that went to unticked members. **Click a day** to select it.
 * **Sharing on the selected day:** 15-min steps from 06:00 to 21:00, always directly under the
@@ -348,7 +351,8 @@ needed. It checks that:
 * keys are recovered, or fit as well as the truth with the truth inside the reported range,
   for 5 rounds and for a 150-member 1-round group;
 * the CSV round-trips through the parser;
-* the exact method adds exactly the "could have been shared" energy;
+* the exact method adds exactly the "could have been shared" energy, and for any selection
+  the tiles, the pie, the comparison table and the error box give the same number;
 * the timing counts every interval;
 * memoisation reuses frames.
 

@@ -29,7 +29,7 @@ import re
 import threading
 import weakref
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import wraps
 
 import numpy as np
@@ -458,6 +458,27 @@ def summarize(data: SharingData, enabled: set[str]) -> Summary:
         best_day_shared=float(daily_shared.max()) if len(daily_shared) else 0.0,
         days_with_sharing=int((daily_shared > 0.005).sum()) if len(daily_shared) else 0,
     )
+
+
+def exact_gain(approx: SharingData, exact: SharingData, enabled: set[str]) -> float:
+    """kWh the exact static method shares to the ``enabled`` members on top of ``approx``.
+
+    This is what "could have been shared" to a selection really means: the overlap
+    ``min(unshared, unmet of the selection)`` assumes the selection gets the whole
+    surplus, but the exact method splits it by keys between all members.
+    """
+    def shared(d: SharingData) -> float:
+        cols = [c for c in shared_cols(d.frame) if key_dest(c) in enabled]
+        return float(d.frame[cols].to_numpy(dtype=float).sum()) if cols else 0.0
+    return max(0.0, shared(exact) - shared(approx))
+
+
+def with_overlap(split, overlap: float):
+    """``split`` (WastedSplit or Summary) with "could have been shared" replaced by
+    ``overlap``; the rest of the surplus moves to the unshareable part."""
+    total = split.unshared_total if isinstance(split, WastedSplit) else (split.unshared or 0.0)
+    overlap = min(max(overlap, 0.0), total)
+    return replace(split, overlap=overlap, unshared_only=total - overlap)
 
 
 @memoized
