@@ -23,6 +23,7 @@ with the computation timed per 15-min interval.
 - [Using the app](#using-the-app)
 - [How the allocation keys are estimated](#how-the-allocation-keys-are-estimated)
 - [Exact static method and timing](#exact-static-method-and-timing)
+- [Portugal (prototype)](#portugal-prototype)
 - [Architecture](#architecture)
 - [Performance](#performance)
 - [Deployment on Render](#deployment-on-render)
@@ -215,6 +216,62 @@ everyone and 8 980 need H. That takes 50–65 ms in total, about 1.5–1.9 µs p
 about 4.5 µs with H. For 150 members and one month it takes about 70–80 ms and 25 µs per
 interval. Numbers vary with the machine; Render instances have less than one CPU.
 
+## Portugal (prototype)
+
+`portugal/` applies the same exact method to Portuguese collective self-consumption
+(*autoconsumo coletivo*, ERSE Regulamento n.º 2/2023). It is a command-line prototype for now,
+not part of the web app.
+
+**Why Portugal.** With **fixed coefficients** (art. 29), E-REDES imputes `coefficient × E` to
+each installation and anything above its consumption becomes surplus; nobody else gets it.
+That is the same loss as the one-round Czech method. But in the **dynamic mode** (art. 32) the
+EGAC sends E-REDES, after the month, a coefficient per consumer–producer pair and
+quarter-hour. So the exact allocation can be submitted as it is: keys kept as weights,
+everything usable shared.
+
+```bash
+python -m portugal.exemplo demo                     # synthetic collective, one billing month
+python -m portugal.cli demo/dados.csv demo/coeficientes.csv --out demo/out
+```
+
+Input: one CSV `timestamp;cpe;consumption_kwh;injection_kwh` (15-min, Lisbon time, net
+balances) and `cpe;coefficient`. Output in the folder:
+
+* `report.json` and `membros.csv` – fixed mode vs exact (and the proportional mode, art. 30,
+  for reference): shared kWh, energy lost to the grid, sharing error as % of the maximum,
+  per member;
+* `coeficientes_dinamicos.zip` – one `Coeficiente_Partilha_<consumer>_<producer>_<YYYYMM>_<date>_<seq>.csv`
+  per pair, every quarter-hour present (0 included), columns date, quarter-hour, consumption
+  CPE, production CPE, coefficient. The coefficient is the share of the producer's injection
+  in that quarter-hour that goes to the consumer.
+
+What it models from the regulation: E is the sum of all injections; an installation that
+injects in a quarter-hour cannot receive and its fixed coefficient is spread over the others
+(art. 28(4), 29(3)); with several producers each one gives the same share of its injection
+(`bazen()`, as art. 29(4)); coefficients adding up to less than 1 keep that part unallocated
+in both methods unless `--share-unallocated` is given.
+
+**Rounding.** The coefficients are rounded down and the freed units given back only where they
+cannot push a consumer above its consumption, so the file never allocates more than a member
+used. On the synthetic month (12 installations, two producers) rounding costs:
+
+| decimals | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|
+| loss, % of the maximum | 0.78 | 0.08 | 0.008 | 0.001 |
+
+On the same month the fixed mode loses 12.6 % of the maximum.
+
+**Still to confirm with E-REDES before a real submission:**
+
+* the input: E-REDES delivers `sgl_v2` files per installation; there is no parser yet because
+  there is no sample to test against;
+* the coefficient file: separator, decimal mark, number of decimals (the data model only shows
+  `0.000`), header row, and the quarter-hour labels. The prototype labels intervals by their
+  local end time `0015`…`2400`, counts `0015`…`2500` on the 100-interval autumn day and leaves
+  out the missing hour in spring; all of this is in `portugal/eredes.py`;
+* access: hierarchical and dynamic sharing still run through the E-REDES pilot (RAC art. 46),
+  which the EGAC joins by registering with E-REDES.
+
 ## Architecture
 
 | File | Role |
@@ -226,6 +283,7 @@ interval. Numbers vary with the machine; Render instances have less than one CPU
 | `recompute.py` | Exact static recompute (the `rozdel()` loop in a child process), timing |
 | `procjob.py` | Runs a function in a forked child with progress, cancellation and a time limit |
 | `presna_staticka.py` | Reference implementation of the exact static method |
+| `portugal/` | Portugal prototype: ERSE fixed/proportional modes vs exact (`partilha.py`), data input and dynamic-mode coefficient files (`eredes.py`), CLI (`cli.py`), synthetic data (`exemplo.py`) |
 | `figures.py` | Plotly figures, light/dark themes, folding of large groups into "Others" |
 | `i18n.py` | CZ/EN strings and number formatting |
 | `assets/style.css` | Styles, light/dark variables (Dash loads it automatically) |
@@ -354,7 +412,11 @@ needed. It checks that:
 * the exact method adds exactly the "could have been shared" energy, and for any selection
   the tiles, the pie, the comparison table and the error box give the same number;
 * the timing counts every interval;
-* memoisation reuses frames.
+* memoisation reuses frames;
+* Portugal: the fixed mode follows art. 28–29 on hand examples, the exact method always shares
+  min(E, usable consumption) and never less than the fixed mode, rounded dynamic coefficients
+  never allocate above consumption and lose at most one unit per pair and interval, quarter-hour
+  labels on both clock-change days, and the CLI output.
 
 ## Limitations
 
