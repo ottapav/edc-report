@@ -37,14 +37,17 @@ from dataclasses import dataclass
 from string import ascii_uppercase
 
 import numpy as np
+import pandas as pd
 import dash
 import dash_ag_grid as dag
 from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 from flask import Response, request
 
 from figures import (
-    colour_map, fig_daily, fig_heatmap, fig_intraday, fig_total_by_flow,
-    fig_wasted_pie, heat_metrics, heat_pivot, intraday_ymax, theme, top_dests,
+    PRODUCER, bill_columns, colour_map, fig_bill_daily, fig_bill_heatmap,
+    fig_bill_intraday, fig_bill_pie, fig_bill_split, fig_daily, fig_heatmap, fig_intraday,
+    fig_total_by_flow, fig_wasted_pie, heat_metrics, heat_pivot, intraday_ymax, theme,
+    top_dests,
 )
 from billing import ShapleyTotals, compute_shapley, settle
 from i18n import fmt_date, fmt_duration, fmt_num, fmt_pct, fmt_signed, t
@@ -96,6 +99,7 @@ class Entry:
     exact: Recomputed | None = None
     fit: KeyFit | None = None
     bill: ShapleyTotals | None = None
+    bill_cache: tuple | None = None      # (computation, settlement, Kč frame) for drawing
 
 
 _CACHE: "OrderedDict[str, Entry]" = OrderedDict()
@@ -595,6 +599,35 @@ app.layout = html.Div(className="page", children=[
                 html.Div(id="stale"),
                 html.Div(id="timing"),
             ]),
+            html.Section(id="bill-card", className="card recompute-card bill-card", children=[
+                html.H2(id="bill-title"),
+                html.P(id="bill-desc", className="hint"),
+                html.Div(className="rc-row", children=[
+                    html.Button(id="btn-bill", n_clicks=0, className="btn-primary"),
+                    html.Label(className="reserve", children=[
+                        html.Span(id="lbl-feed-in"),
+                        dcc.Input(id="feed-in", type="number", min=0, step=0.01,
+                                  debounce=True, className="num-in"),
+                    ]),
+                    html.Label(className="reserve", children=[
+                        html.Span(id="lbl-price-default"),
+                        dcc.Input(id="price-default", type="number", min=0, step=0.01,
+                                  debounce=True, className="num-in"),
+                    ]),
+                ]),
+                html.Div(id="bill-progress", className="progress idle", children=[
+                    html.Div(className="progress-track", children=html.Div(
+                        id="bill-progress-bar", className="progress-bar", style={"width": "0%"})),
+                    html.Div(id="bill-progress-text", className="progress-text"),
+                ]),
+                html.Div(id="bill-stale"),
+                html.Div(id="bill-result"),
+            ]),
+            # what the right column shows when both computations exist
+            html.Div(id="right-view-box", className="right-view", style={"display": "none"},
+                     children=[html.Span(id="lbl-right-view", className="field-label"),
+                               dcc.RadioItems(id="right-view", value="exact", inline=True,
+                                              className="seg")]),
             html.Div(id="compare", className="compare single", children=[
                 html.Div(className="col col-a", children=[
                     html.H2(id="head-a", className="col-head col-head-a"),
@@ -624,29 +657,10 @@ app.layout = html.Div(className="page", children=[
                 html.H2(id="cmp-title"),
                 html.Div(id="cmp-table", className="table-wrap"),
             ]),
-            html.Section(id="bill-card", className="card recompute-card bill-card", children=[
-                html.H2(id="bill-title"),
-                html.P(id="bill-desc", className="hint"),
-                html.Div(className="rc-row", children=[
-                    html.Button(id="btn-bill", n_clicks=0, className="btn-primary"),
-                    html.Label(className="reserve", children=[
-                        html.Span(id="lbl-feed-in"),
-                        dcc.Input(id="feed-in", type="number", min=0, step=0.01,
-                                  debounce=True, className="num-in"),
-                    ]),
-                    html.Label(className="reserve", children=[
-                        html.Span(id="lbl-price-default"),
-                        dcc.Input(id="price-default", type="number", min=0, step=0.01,
-                                  debounce=True, className="num-in"),
-                    ]),
-                ]),
-                html.Div(id="bill-progress", className="progress idle", children=[
-                    html.Div(className="progress-track", children=html.Div(
-                        id="bill-progress-bar", className="progress-bar", style={"width": "0%"})),
-                    html.Div(id="bill-progress-text", className="progress-text"),
-                ]),
-                html.Div(id="bill-stale"),
-                html.Div(id="bill-result"),
+            html.Section(id="table-card-b", className="card cmp-card",
+                         style={"display": "none"}, children=[
+                html.H2(id="table-title-b"),
+                html.Div(id="table-b", className="table-wrap"),
             ]),
         ]),
     ]),
@@ -697,7 +711,7 @@ app.clientside_callback(
     Output("btn-recompute", "children"),
     Output("lbl-reserve", "children"),
     Output("head-a", "children"),
-    Output("head-b", "children"),
+    Output("lbl-right-view", "children"),
     Output("cmp-title", "children"),
     Output("lbl-day", "children"),
     Output("lbl-day-hint", "children"),
@@ -733,7 +747,7 @@ def _labels(lang, key, heat_value):
         t("recompute_btn", lang),
         t("reserve", lang),
         t("col_edc", lang),
-        t("col_exact", lang),
+        t("right_view", lang),
         t("cmp_title", lang),
         t("sel_day", lang),
         t("sel_day_hint", lang),
@@ -1039,7 +1053,9 @@ def _poll_bill(_n, job_id, rev, lang):
     return _poll_state(job_id, rev, lang)
 
 
-def _bill_table(bill, data: SharingData, names: dict, lang: str, top=None):
+def _bill_table(bill, data: SharingData, names: dict, lang: str, top=None,
+                enabled: set[str] | None = None):
+    enabled = set(data.dest_eans) if enabled is None else enabled
     cmap = colour_map(data, top)
     kc = lambda x: f"{fmt_num(x, lang, 2)}"  # noqa: E731
     unit = lambda pay, kwh: fmt_num(pay / kwh, lang, 2) if kwh > 0 else "—"  # noqa: E731
@@ -1050,7 +1066,7 @@ def _bill_table(bill, data: SharingData, names: dict, lang: str, top=None):
     tot_kwh = float(bill.shared.sum())
     rows = []
     for j, e in enumerate(data.dest_eans):
-        rows.append(("", _name_cell(names[e], e, cmap[e])
+        rows.append(("" if e in enabled else "off", _name_cell(names[e], e, cmap[e])
                      + _cell(fmt_num(bill.prices[j], lang, 2), "num")
                      + _cell(fmt_num(bill.shared[j], lang, 1), "num")
                      + _cell(kc(bill.saving[j]), "num")
@@ -1076,34 +1092,156 @@ def _bill_table(bill, data: SharingData, names: dict, lang: str, top=None):
     return _html_table(head, rows, [total, producer])
 
 
+def _billing(entry: Entry):
+    """Settlement of the last billing computation (cached per computation)."""
+    res = entry.bill
+    if res is None:
+        return None
+    cached = entry.bill_cache
+    if cached is not None and cached[0] is res:
+        return cached[1]
+    data = entry.data
+    src = data.source_eans[0]
+    shared = [float(data.frame[key_shared(src, e)].sum()) for e in data.dest_eans]
+    bill = settle(res, shared)
+    entry.bill_cache = (res, bill, None)
+    return bill
+
+
+def _bill_frame(entry: Entry):
+    """Kč per 15 min (the benchmark's Shapley values scaled to the realized benefit):
+    one column per member and PRODUCER, on the report's index (0 without production)."""
+    bill = _billing(entry)
+    cached = entry.bill_cache
+    if cached[2] is not None:
+        return cached[2]
+    res, data = entry.bill, entry.data
+    scale = bill.realized / bill.maximum if bill.maximum > 0 else 0.0
+    vals = np.zeros((len(data.frame.index), len(data.dest_eans) + 1))
+    if len(res.t_index):
+        vals[res.t_index] = res.t_values.astype(float) * scale
+    frame = pd.DataFrame(vals, index=data.frame.index, columns=list(data.dest_eans) + [PRODUCER])
+    entry.bill_cache = (res, bill, frame)
+    return frame
+
+
+def _bill_cols(entry: Entry, enabled: set[str], top) -> tuple[pd.DataFrame, int]:
+    """Billing frame for the plots (ticked members, rest folded, unticked summed,
+    producer) and the number of folded members."""
+    data = entry.data
+    sel = [e for e in data.dest_eans if e in enabled]
+    n_rest = len([e for e in sel if e not in top]) if top is not None else 0
+    return bill_columns(_bill_frame(entry), data, enabled, top), n_rest
+
+
+def _bill_tiles(bill, data: SharingData, enabled: set[str], lang: str) -> list:
+    """Six tiles in Kč, two sub-lines each like the paired exact-method tiles."""
+    cur = t("currency", lang)
+    kc = lambda x: f"{fmt_num(x, lang)} {cur}"  # noqa: E731
+    pct = lambda x, base: fmt_pct(100 * x / base, lang) if base else "—"  # noqa: E731
+    sel = np.array([e in enabled for e in data.dest_eans])
+    n_sel, n = int(sel.sum()), len(data.dest_eans)
+    members = float(bill.share[sel].sum())
+    lost = max(0.0, bill.maximum - bill.realized)
+    kwh = float(bill.shared.sum())
+    two = lambda a, b="\u00a0": [a, html.Br(), b]  # noqa: E731
+    scope = (t("bt_selected", lang).format(n=n_sel, m=n) if n_sel < n else "\u00a0")
+    tiles = [
+        _tile(t("bt_benefit", lang), kc(bill.realized),
+              two(t("bt_benefit_sub", lang).format(eff=fmt_pct(100 * bill.efficiency, lang),
+                                                    max=kc(bill.maximum))), "#339933"),
+        _tile(t("bt_lost", lang), kc(lost),
+              two(f"{pct(lost, bill.maximum)} {t('bt_of_max', lang)}"), "#cc3326"),
+        _tile(t("bt_producer", lang), kc(bill.producer_share),
+              two(f"{pct(bill.producer_share, bill.realized)} {t('bt_of_benefit', lang)}"),
+              "#339933"),
+        _tile(t("bt_members", lang), kc(members),
+              two(f"{pct(members, bill.realized)} {t('bt_of_benefit', lang)}", scope), "#3b6fb6"),
+        _tile(t("bt_income", lang), kc(bill.producer_income),
+              two(t("bt_income_sub", lang).format(
+                  unit=f"{fmt_num(bill.producer_income / kwh, lang, 2)} {cur}" if kwh else "—")),
+              None),
+        _tile(t("bt_feed_in", lang), kc(bill.feed_in_value),
+              two(t("bt_feed_in_sub", lang).format(
+                  price=f"{fmt_num(bill.feed_in, lang, 2)} {cur}/kWh",
+                  kwh=fmt_num(kwh, lang, 1))), "#8c8c8c"),
+    ]
+    return [html.Div(className="tiles", children=tiles),
+            html.P(t("bt_note", lang), className="hint")]
+
+
+def _right_mode(entry: Entry | None, view: str | None) -> str | None:
+    """What the right column shows: "exact", "bill" or nothing."""
+    if entry is None:
+        return None
+    has_exact, has_bill = entry.exact is not None, entry.bill is not None
+    if view == "bill" and has_bill:
+        return "bill"
+    if has_exact:
+        return "exact"
+    return "bill" if has_bill else None
+
+
+@app.callback(
+    Output("right-view", "options"),
+    Output("right-view", "value"),
+    Output("right-view-box", "style"),
+    Input("result-rev", "data"),
+    Input("bill-rev", "data"),
+    Input("data-key", "data"),
+    Input("lang", "value"),
+    State("right-view", "value"),
+)
+def _right_view(_r, _b, key, lang, cur):
+    """The switch appears when both the recompute and the billing exist; a computation
+    that has just finished is shown."""
+    entry = _cache_get(key)
+    opts = [{"label": t("right_exact", lang), "value": "exact"},
+            {"label": t("right_bill", lang), "value": "bill"}]
+    if entry is None:
+        return opts, "exact", {"display": "none"}
+    trig = ctx.triggered_id
+    value = cur or "exact"
+    if trig == "bill-rev" and entry.bill is not None:
+        value = "bill"
+    elif trig == "result-rev" and entry.exact is not None:
+        value = "exact"
+    value = _right_mode(entry, value) or "exact"
+    both = entry.exact is not None and entry.bill is not None
+    return opts, value, ({} if both else {"display": "none"})
+
+
 @app.callback(
     Output("bill-result", "children"),
     Output("bill-stale", "children"),
     Output("btn-bill", "title"),
+    Output("table-b", "children"),
+    Output("table-title-b", "children"),
     Input("bill-rev", "data"),
     Input("data-key", "data"),
     Input("lang", "value"),
     Input("members", "cellValueChanged"),
+    Input("members", "selectedRows"),
     Input({"type": "name", "ean": ALL}, "value"),
     Input("feed-in", "value"),
     Input("price-default", "value"),
     State({"type": "name", "ean": ALL}, "id"),
     State("members", "rowData"),
 )
-def _bill_render(_rev, key, lang, _changed, name_values, feed_in, default, name_ids, rows):
-    """Billing table of the last computation; a note when the prices have changed."""
+def _bill_render(_rev, key, lang, _changed, selected, name_values, feed_in, default,
+                 name_ids, rows):
+    """Summary of the last billing in its card, the table in the right column; a note
+    when the prices have changed."""
     entry = _cache_get(key)
     if entry is None:
-        return [], [], ""
+        return [], [], "", [], ""
     data = entry.data
     title = t("part_no_bill", lang) if data.fmt != "all" else ""
     res = entry.bill
     if res is None:
-        return [], [], title
+        return [], [], title, [], ""
     names = effective_names(data, lang, name_ids, name_values, rows)
-    src = data.source_eans[0]
-    shared = [float(data.frame[key_shared(src, e)].sum()) for e in data.dest_eans]
-    bill = settle(res, shared)
+    bill = _billing(entry)
     cur = t("currency", lang)
     money = lambda x: f"{fmt_num(x, lang, 2)}\u00a0{cur}"  # noqa: E731
     summary = t("bill_summary", lang).format(
@@ -1113,15 +1251,15 @@ def _bill_render(_rev, key, lang, _changed, name_values, feed_in, default, name_
         secs=fmt_duration(res.seconds, lang), scarce=fmt_num(res.n_scarce, lang),
         covered=fmt_num(res.n_covered, lang), night=fmt_num(res.n_night, lang))
     out = [html.P(summary, className="fit-line"),
-           html.Div(_bill_table(bill, data, names, lang, top_dests(data.frame, data)),
-                    className="table-wrap"),
            html.P(t("bill_hint", lang), className="hint"),
            html.P(timing, className="hint")]
+    table = [_bill_table(bill, data, names, lang, top_dests(data.frame, data),
+                         _enabled(data, selected))]
     inputs, _problem = _bill_inputs(data, rows, feed_in, default)
     changed = (inputs is None or abs(inputs[1] - res.feed_in) > 1e-9
                or any(abs(a - b) > 1e-9 for a, b in zip(inputs[0], res.prices)))
     stale = html.P(t("bill_stale", lang), className="stale") if changed else []
-    return out, stale, title
+    return out, stale, title, table, t("bill_table_title", lang)
 
 
 # ---------------------------------------------------------------------------
@@ -1528,8 +1666,12 @@ def _align_daily(fa, fb) -> None:
     Output("fig-heat", "style"),
     Output("fig-heat-b", "figure"),
     Output("fig-heat-b", "style"),
+    Output("head-b", "children"),
+    Output("table-card-b", "style"),
     Input("data-key", "data"),
     Input("result-rev", "data"),
+    Input("bill-rev", "data"),
+    Input("right-view", "value"),
     Input("members", "selectedRows"),
     Input("members", "cellValueChanged"),
     Input({"type": "name", "ean": ALL}, "value"),
@@ -1542,7 +1684,7 @@ def _align_daily(fa, fb) -> None:
     State("day-picker", "date"),
     prevent_initial_call="initial_duplicate",
 )
-def _render(key, _rev, selected, _changed, name_values, lang, group,
+def _render(key, _rev, _bill_rev, view, selected, _changed, name_values, lang, group,
             heat_metric, theme_name, name_ids, rows, sel_day):
     if _key_only_edit():
         raise dash.exceptions.PreventUpdate      # a key cell changed: figures unaffected
@@ -1555,7 +1697,8 @@ def _render(key, _rev, selected, _changed, name_values, lang, group,
                   if key else no_update)
         e = {}
         return (title, [], [], [], e, e, e, e, e, e, e, [], "compare single",
-                [], e, e, e, e, e, e, {"display": "none"}, [], [], "", status, e, e, e, e)
+                [], e, e, e, e, e, e, {"display": "none"}, [], [], "", status, e, e, e, e,
+                "", {"display": "none"})
     data = entry.data
 
     enabled = _enabled(data, selected)
@@ -1585,10 +1728,13 @@ def _render(key, _rev, selected, _changed, name_values, lang, group,
         ])
 
     hidden = {"display": "none"}
-    if exact is None:
-        b = ([], {}, {}, {}, {}, {}, {}, hidden, [], [])
+    right = _right_mode(entry, view)
+    timing = _timing(exact, data, enabled, names, lang) if exact is not None else []
+    head_b, table_b = "", hidden
+    if right is None:
+        b = ([], {}, {}, {}, {}, {}, {}, hidden, [])
         mode = "compare single"
-    else:
+    elif right == "exact":
         df_b = filter_dests(exact.data, enabled)
         ov_b = fig_total_by_flow(df_b, exact.data, names, **opts)
         dy_b = fig_daily(df_b, exact.data, names, sel_day=sel_day, **opts)
@@ -1596,27 +1742,44 @@ def _render(key, _rev, selected, _changed, name_values, lang, group,
         _align_overview(ov_a, ov_b)
         _align_daily(dy_a, dy_b)
         b = (_tiles(exact.data, enabled, lang, ref=data, exact=exact.data), ov_b, dy_b, pie_b,
-             h(ov_b), h(dy_b), h(pie_b), {}, _cmp_table(data, exact, enabled, names, lang, opts["top"]),
-             _timing(exact, data, enabled, names, lang))
+             None, None, None, {}, _cmp_table(data, exact, enabled, names, lang, opts["top"]))
+        head_b = t("col_exact", lang)
+    else:                                   # billing by the Shapley value
+        bill = _billing(entry)
+        cols, n_rest = _bill_cols(entry, enabled, opts["top"])
+        bnames = dict(names, **{PRODUCER: names[data.source_eans[0]]})
+        ov_b = fig_bill_split(bill, data, bnames, enabled, **opts)
+        dy_b = fig_bill_daily(cols, data, bnames, n_rest=n_rest, sel_day=sel_day, **opts)
+        pie_b = fig_bill_pie(bill, data, enabled, lang, th)
+        b = (_bill_tiles(bill, data, enabled, lang), ov_b, dy_b, pie_b,
+             None, None, None, hidden, [])
+        head_b, table_b = t("col_bill", lang), {}
+    if right is not None:
         mode = "compare dual"
-        # keep paired graphs the same height
-        for fa, fb in ((ov_a, ov_b),):
-            hh = max(fa.layout.height, fb.layout.height)
-            fa.update_layout(height=hh)
-            fb.update_layout(height=hh)
-        b = (b[0], ov_b, dy_b, pie_b, h(ov_b), h(dy_b), h(pie_b), *b[7:])
+        # keep paired graphs the same height, so both columns stay aligned
+        hh = max(ov_a.layout.height, b[1].layout.height)
+        ov_a.update_layout(height=hh)
+        b[1].update_layout(height=hh)
+        b = (b[0], b[1], b[2], b[3], h(b[1]), h(b[2]), h(b[3]), *b[7:])
+    b = (*b, timing)
 
     # heatmap: total production or total consumption (part report: shared); in dual
-    # mode both reports share one colour scale
+    # mode both reports share one colour scale (the billing has its own, in Kč)
     metrics = heat_metrics(data)
     metric = heat_metric if heat_metric in metrics else metrics[0]
     pv_a = heat_pivot(data, enabled, metric)
-    pv_b = heat_pivot(exact.data, enabled, metric) if exact else None
+    pv_b = heat_pivot(exact.data, enabled, metric) if right == "exact" else None
     zs = [float(np.nanmax(p.to_numpy())) for p in (pv_a, pv_b)
           if p is not None and not p.empty]
     z_max = max(zs) if zs else None
     ht_a = fig_heatmap(pv_a, metric, z_max=z_max, lang=lang, th=th)
-    ht_b = fig_heatmap(pv_b, metric, z_max=z_max, lang=lang, th=th) if exact else {}
+    if right == "exact":
+        ht_b = fig_heatmap(pv_b, metric, z_max=z_max, lang=lang, th=th)
+    elif right == "bill":
+        ht_b = fig_bill_heatmap(_bill_cols(entry, set(data.dest_eans), None)[0],
+                                lang=lang, th=th)
+    else:
+        ht_b = {}
 
     btn_title = t("part_no_recompute", lang) if data.fmt != "all" else ""
     status = html.Div([html.Span("✓ ", className="ok"), f"{t('loaded', lang)}: ",
@@ -1625,7 +1788,7 @@ def _render(key, _rev, selected, _changed, name_values, lang, group,
         title,
         _facts(entry.filename, data, enabled, names, lang),
         notes,
-        _tiles(data, enabled, lang, pad=exact is not None,
+        _tiles(data, enabled, lang, pad=right is not None,
                exact=exact.data if exact is not None else None),
         ov_a, dy_a, pie_a,
         h(ov_a), h(dy_a), h(pie_a),
@@ -1636,6 +1799,7 @@ def _render(key, _rev, selected, _changed, name_values, lang, group,
         btn_title,
         status,
         ht_a, h(ht_a), ht_b, h(ht_b),
+        head_b, table_b,
     )
 
 
@@ -1716,6 +1880,8 @@ app.clientside_callback(
     Input("day-picker", "date"),
     Input("data-key", "data"),
     Input("result-rev", "data"),
+    Input("bill-rev", "data"),
+    Input("right-view", "value"),
     Input("members", "selectedRows"),
     Input("members", "cellValueChanged"),
     Input({"type": "name", "ean": ALL}, "value"),
@@ -1724,7 +1890,7 @@ app.clientside_callback(
     State({"type": "name", "ean": ALL}, "id"),
     State("members", "rowData"),
 )
-def _hourly(day, key, _rev, selected, _changed, name_values, lang,
+def _hourly(day, key, _rev, _bill_rev, view, selected, _changed, name_values, lang,
             theme_name, name_ids, rows):
     """Subplot 4: one day in 15-min steps; y axis fitted to the selected day and
     shared by both reports, so the two methods compare on one scale."""
@@ -1736,16 +1902,23 @@ def _hourly(day, key, _rev, selected, _changed, name_values, lang,
     data = entry.data
     enabled = _enabled(data, selected)
     names = effective_names(data, lang, name_ids, name_values, rows)
+    right = _right_mode(entry, view)
     frames = [filter_dests(data, enabled)]
-    if entry.exact is not None:
+    if right == "exact":
         frames.append(filter_dests(entry.exact.data, enabled))
     y_max = max(intraday_ymax(f, _day(day)) for f in frames)
     opts = dict(y_max=y_max, lang=lang, th=theme(theme_name),
                 top=top_dests(frames[0], data))
     fa = fig_intraday(frames[0], data, names, _day(day), **opts)
     style = {"height": f"{fa.layout.height}px"}
-    if entry.exact is None:
+    if right is None:
         return fa, style, {}, {}
+    if right == "bill":                     # the billing in Kč has its own y axis
+        cols, n_rest = _bill_cols(entry, enabled, opts["top"])
+        bnames = dict(names, **{PRODUCER: names[data.source_eans[0]]})
+        fb = fig_bill_intraday(cols, data, bnames, _day(day), n_rest=n_rest, lang=lang,
+                               th=opts["th"], top=opts["top"])
+        return fa, style, fb, style
     fb = fig_intraday(frames[1], entry.exact.data, names, _day(day), **opts)
     return fa, style, fb, style
 

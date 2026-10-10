@@ -87,10 +87,15 @@ with the computation timed per 15-min interval.
   or a default price for the empty cells) and the producer's feed-in price.
 * **Compute:** one button computes the exact Shapley values over the whole report in the
   background, with a progress bar.
-* **Settlement table:** per member the shared energy, its value at the supplier price, the
-  fair share of the benefit, the payment to the producer and the effective price per kWh;
-  the producer's income, its share and the feed-in value it gave up.
-* **Efficiency:** the benefit of the EDC report's sharing next to the best possible one.
+* **Right column:** like the exact method, the billing is drawn next to the EDC report, with
+  the same cards in Kč: tiles (benefit, what the EDC sharing missed, producer's and members'
+  shares, producer's income, feed-in value), the value of the shared electricity per member
+  (share + payment), where the benefit went, the daily share (click a day), the selected day
+  in 15-min steps and the hour × month heatmap. When both the recompute and the billing
+  exist, a switch chooses the right column; a computation that has just finished is shown.
+* **Settlement table** (full width below): per member the shared energy, its value at the
+  supplier price, the fair share of the benefit, the payment to the producer and the
+  effective price per kWh; the producer's income, its share and the feed-in value it gave up.
 
 **Interface:**
 
@@ -265,6 +270,10 @@ report really achieved, `Σ (p_j − f) · s_j`. Member *j* pays the producer
 `p_j · s_j − share_j` (in whole haléř); the producer's share is the sum of the payments minus
 the feed-in value of the shared energy. The page shows how much of the best possible
 benefit the report achieved.
+
+**Plots.** The computation also keeps the Shapley values of every 15-min interval with
+production (float32, about 4 bytes per member and interval), scaled the same way, so the
+daily, hourly and heatmap figures add up to the settlement.
 
 **Time** (one core, synthetic groups, `compute_shapley`):
 

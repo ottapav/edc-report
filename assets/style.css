@@ -341,3 +341,7 @@ input, .name-in, .text-in, .key-in, .num-in { background: var(--field); color: v
 .loss-pct { font-size: 22px; font-weight: 700; color: var(--warn); margin-right: 10px; }
 .loss-title { font-weight: 600; }
 .loss-text { font-size: 13px; margin-top: 4px; }
+
+/* switch for the right column (exact method / billing) */
+.right-view { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
+.right-view .field-label { margin: 0; }

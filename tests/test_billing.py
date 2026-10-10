@@ -8,6 +8,7 @@ import pytest
 
 import app
 import billing as B
+import figures
 import edc_data as core
 from conftest import all_report_csv, synthetic_group
 
@@ -134,11 +135,41 @@ def test_bill_job_and_render(entry_key):
     state = app._poll_state(job_id, 0, "cs")
     assert state[2] == "progress done" and state[5] == 1
     assert entry.bill is not None and len(entry.bill.consumers) == 5
-    result, stale, _title = app._bill_render(1, entry_key, "cs", None, [], 1.2, 4.3, [], rows)
-    assert result and stale == []
+    result, stale, _title, table, _tt = app._bill_render(1, entry_key, "cs", None, None, [],
+                                                          1.2, 4.3, [], rows)
+    assert result and table and stale == []
     # a changed price marks the billing as stale until the button is pressed again
-    _result, stale, _title = app._bill_render(1, entry_key, "cs", None, [], 1.2, 4.4, [], rows)
+    _r, stale, *_ = app._bill_render(1, entry_key, "cs", None, None, [], 1.2, 4.4, [], rows)
     assert stale
+
+
+def test_billing_in_the_right_column(entry_key):
+    """The billing draws the same five figures as the exact method, in Kč; its
+    per-interval values add up to the settlement."""
+    entry = app._cache_get(entry_key)
+    data = entry.data
+    rows = [{"ean": e, "price": 4.0 + 0.3 * j} for j, e in enumerate(data.dest_eans)]
+    _wait(app._JOBS[app._start_bill(1, entry_key, rows, 1.2, None, "en")[0]])
+    assert app._right_mode(entry, "bill") == "bill"
+    assert app._right_mode(entry, "exact") == "bill"          # no recompute yet
+    bill = app._billing(entry)
+    enabled = set(data.dest_eans[:3])                         # two members unticked
+    cols, n_rest = app._bill_cols(entry, enabled, None)
+    assert list(cols.columns) == list(data.dest_eans[:3]) + [figures.UNSELECTED, figures.PRODUCER]
+    member_sum = cols.drop(columns=figures.PRODUCER).to_numpy().sum()
+    assert member_sum == pytest.approx(bill.share.sum(), rel=1e-5)
+    assert cols[figures.PRODUCER].sum() == pytest.approx(bill.producer_share, abs=0.05)
+    names = dict(app.default_names(data, "en"), **{figures.PRODUCER: "Source A"})
+    th = figures.theme("dark")
+    split = figures.fig_bill_split(bill, data, names, enabled, lang="en", th=th)
+    assert len(split.data) == 2 and split.layout.height >= 320
+    pie = figures.fig_bill_pie(bill, data, enabled, "en", th)
+    assert sum(pie.data[0].values) == pytest.approx(bill.maximum, abs=0.01 * len(data.dest_eans))
+    day = str(data.frame.index[len(data.frame) // 2].date())
+    assert figures.fig_bill_daily(cols, data, names, lang="en", sel_day=day, th=th).data
+    assert figures.fig_bill_intraday(cols, data, names, day, lang="en", th=th).data
+    assert figures.fig_bill_heatmap(cols, lang="en", th=th).data
+    assert app._bill_tiles(bill, data, enabled, "cs")
 
 
 def test_bill_needs_prices(entry_key):

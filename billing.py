@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 import numpy as np
@@ -231,6 +231,10 @@ class ShapleyTotals:
     n_covered: int = 0             # production covers every layer: closed form
     n_scarce: int = 0              # exact quadrature
     seconds: float = 0.0           # CPU time
+    #: per 15-min interval with production: row indices into the report, and the
+    #: Shapley values in Kč (float32, columns = consumers…, producer) for the plots
+    t_index: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
+    t_values: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), dtype=np.float32))
 
 
 def compute_shapley(P: np.ndarray, D: np.ndarray, prices, feed_in: float,
@@ -249,6 +253,7 @@ def compute_shapley(P: np.ndarray, D: np.ndarray, prices, feed_in: float,
                         consumers=np.zeros(n), producer=0.0, maximum=0.0, n_intervals=T)
     if len(dl) == 0:
         res.n_night = int((P <= 0).sum())
+        res.t_values = np.zeros((0, n + 1), dtype=np.float32)
         progress("bill", 1.0)
         return res
     gain = p - feed_in                                      # Kč/kWh per consumer
@@ -257,10 +262,16 @@ def compute_shapley(P: np.ndarray, D: np.ndarray, prices, feed_in: float,
     night = P <= 0
     covered = ~night & (dem1 <= P)
     res.n_night, res.n_covered = int(night.sum()), int(covered.sum())
+    day = np.flatnonzero(~night)
+    pos = np.full(T, -1, dtype=np.int64)
+    pos[day] = np.arange(len(day))
+    vals = np.zeros((len(day), n + 1), dtype=np.float32)    # Kč · hundredths of kWh
     # closed form for all covered intervals at once: φ_j = (p_j − f) d_j / 2
-    Dc = D[covered].astype(float)
-    res.consumers += (Dc * np.where(in_any, gain, 0.0)).sum(axis=0) / 2
-    res.maximum += float((Dc * np.where(in_any, gain, 0.0)).sum())
+    Dc = D[covered].astype(float) * np.where(in_any, gain, 0.0)
+    res.consumers += Dc.sum(axis=0) / 2
+    res.maximum += float(Dc.sum())
+    vals[pos[covered], :n] = Dc / 2
+    vals[pos[covered], n] = Dc.sum(axis=1) / 2
     scarce = np.flatnonzero(~night & ~covered)
     res.n_scarce = len(scarce)
     # progress by the work that costs: grid length × active members
@@ -272,6 +283,8 @@ def compute_shapley(P: np.ndarray, D: np.ndarray, prices, feed_in: float,
         phi, phi0, vmax, _ = shapley_interval(int(P[t]), D[t], level, dl)
         res.consumers += phi
         res.maximum += vmax
+        vals[pos[t], :n] = phi
+        vals[pos[t], n] = phi0
         done += work[i]
         if done - last >= 0.01 * total:
             last = done
@@ -279,6 +292,8 @@ def compute_shapley(P: np.ndarray, D: np.ndarray, prices, feed_in: float,
     res.consumers /= 100
     res.maximum /= 100
     res.producer = res.maximum - float(res.consumers.sum())
+    res.t_index = day
+    res.t_values = vals / 100
     res.seconds = time.process_time() - c0
     progress("bill", 1.0)
     return res

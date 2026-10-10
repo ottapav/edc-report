@@ -5,6 +5,7 @@
 * Figure 1, subplot 3 - heatmap hour × month       (:func:`fig_heatmap`)
 * Figure 1, subplot 4 - sharing on one day         (:func:`fig_intraday`)
 * Figure 2            - shared / wasted pie        (:func:`fig_wasted_pie`)
+* Billing (right column) - the same five figures in Kč (``fig_bill_*``)
 
 Colours follow the script: tab10 per destination (fixed by destination order, so
 unticking one never repaints the others), greys for grid flows, a blue-grey for
@@ -36,7 +37,7 @@ THEMES: dict[str, dict] = {
         unshared="#8c8c8c", unmet="#c7c7c7", total="rgba(0,0,0,0.9)", others="#a9b8cc",
         source="#339933", wasted="#cc3326", marker="#000000",
         label_bg="rgba(255,255,255,0.85)", hover_bg="#ffffff", hover_border="#d0d7de",
-        heat="YlOrRd", area_alpha=0.75,
+        heat="YlOrRd", area_alpha=0.75, members="#3b6fb6",
     ),
     "dark": dict(
         paper="#161b22", ink="#e6edf3", muted="#9da7b3", grid="#2a313c",
@@ -46,7 +47,7 @@ THEMES: dict[str, dict] = {
         # dark surface: low values stay near the surface, high values glow
         heat=[[0.0, "#1c2128"], [0.2, "#4a1d1a"], [0.45, "#a52a22"],
               [0.7, "#e8742a"], [1.0, "#ffe08a"]],
-        area_alpha=0.85,
+        area_alpha=0.85, members="#5b8fd6",
     ),
 }
 
@@ -555,6 +556,272 @@ def fig_heatmap(pivot: pd.DataFrame, metric: str = "production", *,
         colorbar=dict(title=dict(text=t("heatmap_cbar", lang), side="right"),
                       thickness=12, tickformat=",.2f", outlinewidth=0),
         hovertemplate="%{x}, %{y}:00<br>%{z:,.3f} kWh<extra></extra>",
+        xgap=1, ygap=1,
+    )
+    fig.update_layout(
+        yaxis=dict(title=t("hour_of_day", lang), dtick=2, range=[-0.5, 23.5], showgrid=False),
+        xaxis=dict(tickangle=-30, type="category", showgrid=False),
+    )
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Billing by the Shapley value: the five figures again, in Kč
+# ---------------------------------------------------------------------------
+
+PRODUCER = "__producer__"      # column of the producer's share in a billing frame
+UNSELECTED = "__unselected__"  # shares of the unticked members, summed
+
+
+def bill_columns(frame: pd.DataFrame, data: SharingData, enabled: set[str],
+                 top: tuple[str, ...] | None) -> pd.DataFrame:
+    """Per-interval Kč for plotting: ticked members (the rest of a large group folded
+    into OTHER), the unticked members summed (UNSELECTED), the producer."""
+    sel = [e for e in data.dest_eans if e in enabled]
+    out = {}
+    if top is None:
+        for e in sel:
+            out[e] = frame[e]
+    else:
+        for e in top:
+            if e in enabled:
+                out[e] = frame[e]
+        rest = [e for e in sel if e not in top]
+        if rest:
+            out[OTHER] = frame[rest].sum(axis=1)
+    unsel = [e for e in data.dest_eans if e not in enabled]
+    if unsel:
+        out[UNSELECTED] = frame[unsel].sum(axis=1)
+    out[PRODUCER] = frame[PRODUCER]
+    return pd.DataFrame(out, index=frame.index)
+
+
+def _bill_label(col: str, names: dict[str, str], lang: str, n_rest: int = 0) -> str:
+    if col == PRODUCER:
+        return t("bill_producer", lang).format(name=names.get(PRODUCER, t("source_a", lang)))
+    if col == UNSELECTED:
+        return t("bill_unselected", lang)
+    if col == OTHER:
+        return t("others", lang).format(n=n_rest)
+    return names.get(col, col)
+
+
+def _bill_colour(col: str, cmap: dict[str, str], th: dict) -> str:
+    if col == PRODUCER:
+        return th["source"]
+    if col == UNSELECTED:
+        return th["others"]
+    return cmap.get(col, OTHER_COLOUR)
+
+
+def _bill_areas(fig: go.Figure, df: pd.DataFrame, cmap: dict, th: dict, names: dict,
+                lang: str, n_rest: int) -> None:
+    for col in df.columns:
+        colour = _bill_colour(col, cmap, th)
+        fill = (dict(fillpattern=_hatch(th)) if col == UNSELECTED
+                else dict(fillcolor=_rgba(colour, th["area_alpha"])))
+        fig.add_scatter(x=df.index, y=df[col].to_numpy(), mode="lines", stackgroup="one",
+                        name=_bill_label(col, names, lang, n_rest),
+                        hovertemplate="%{y:,.2f} " + t("currency", lang),
+                        line=dict(color=colour, width=0.6 if col != UNSELECTED else 1.0), **fill)
+
+
+def fig_bill_split(bill, data: SharingData, names: dict[str, str], enabled: set[str], *,
+                   lang: str = "cs", th: dict | None = None,
+                   top: tuple[str, ...] | None = None) -> go.Figure:
+    """Value of the shared electricity per member: share of the benefit (member's
+    colour) + payment to the producer (grey) = value at the supplier price; the
+    producer: feed-in value (grey) + its share (green) = what the members pay."""
+    th = th or THEMES["light"]
+    cur = t("currency", lang)
+    fig = _figure(t("bill_split_title", lang), lang, 420, th)
+    idx = {e: j for j, e in enumerate(data.dest_eans)}
+    sel = [e for e in data.dest_eans if e in enabled]
+    if not sel and bill.producer_income <= 0:
+        return _no_data(fig, lang, th)
+    cmap = colour_map(data, top)
+    groups: list[tuple[str, list[str]]] = []
+    if top is None:
+        groups = [(e, [e]) for e in sel]
+    else:
+        groups = [(e, [e]) for e in top if e in enabled]
+        rest = [e for e in sel if e not in top]
+        if rest:
+            groups.append((OTHER, rest))
+    n_rest = len(groups[-1][1]) if groups and groups[-1][0] == OTHER else 0
+    rows = []
+    for key, members in groups:
+        share = float(sum(bill.share[idx[e]] for e in members))
+        pay = float(sum(bill.payment[idx[e]] for e in members))
+        rows.append(dict(label=_bill_label(key, names, lang, n_rest), a=share, b=pay,
+                         ca=cmap.get(key, OTHER_COLOUR), cb=th["unmet"],
+                         la=t("bill_col_share_short", lang), lb=t("bill_pays", lang),
+                         summary=False))
+    rows.sort(key=lambda r: r["a"] + r["b"])
+    rows.append(dict(label=_bill_label(PRODUCER, names, lang), a=bill.producer_share,
+                     b=bill.feed_in_value, ca=th["source"], cb=th["unshared"],
+                     la=t("bill_col_share_short", lang), lb=t("bill_feed_in_value", lang),
+                     summary=False))
+    if len(sel) > 1:
+        rows.append(None)
+        rows.append(dict(label=t("bill_total_members", lang),
+                         a=float(sum(bill.share[idx[e]] for e in sel)),
+                         b=float(sum(bill.payment[idx[e]] for e in sel)),
+                         ca=th["total"], cb=th["unmet"], la=t("bill_col_share_short", lang),
+                         lb=t("bill_pays", lang), summary=True))
+    real = [(i, r) for i, r in enumerate(rows) if r is not None]
+    ys = [i for i, _ in real]
+    max_val = max((max(r["a"], 0) + max(r["b"], 0) for _, r in real), default=0.0) or 1.0
+    fig.add_bar(y=ys, x=[r["a"] for _, r in real], orientation="h",
+                marker=dict(color=[r["ca"] for _, r in real], line=dict(color=th["paper"], width=1)),
+                customdata=[[r["label"], r["la"]] for _, r in real],
+                hovertemplate="%{customdata[0]}<br>%{customdata[1]}: %{x:,.2f} " + cur
+                + "<extra></extra>")
+    fig.add_bar(y=ys, x=[r["b"] for _, r in real], orientation="h",
+                base=[max(r["a"], 0) for _, r in real],
+                marker=dict(color=[r["cb"] for _, r in real], line=dict(color=th["paper"], width=1)),
+                customdata=[[r["label"], r["lb"]] for _, r in real],
+                hovertemplate="%{customdata[0]}<br>%{customdata[1]}: %{x:,.2f} " + cur
+                + "<extra></extra>")
+    annotations = []
+    for i, r in real:
+        width = max(r["a"], 0) + max(r["b"], 0)
+        txt = f"{fmt_num(r['a'], lang, 0)} + {fmt_num(r['b'], lang, 0)} ({r['lb']}) {cur}"
+        if r["summary"]:
+            txt = f"<b>{txt}</b>"
+        inside = width > 0.75 * max_val
+        annotations.append(dict(
+            x=width - max_val * 0.01 if inside else width + max_val * 0.01, y=i, text=txt,
+            showarrow=False, xanchor="right" if inside else "left",
+            font=dict(size=11, color=th["ink"]), bgcolor=th["label_bg"] if inside else None,
+            borderpad=2))
+    fig.update_layout(
+        annotations=annotations, barmode="overlay", showlegend=False, bargap=0.25,
+        height=max(320, 90 + 38 * len(rows)),
+        xaxis=dict(title=t("bill_split_xlabel", lang), range=[0, max_val * 1.5],
+                   showgrid=True, zeroline=False, tickformat=",.0f"),
+        yaxis=dict(tickvals=list(range(len(rows))),
+                   ticktext=[("" if r is None else (f"<b>{r['label']}</b>" if r["summary"]
+                                                    else r["label"])) for r in rows],
+                   range=[-0.6, len(rows) - 0.4], showgrid=False, ticklabelstandoff=8),
+    )
+    return fig
+
+
+def fig_bill_pie(bill, data: SharingData, enabled: set[str], lang: str = "cs",
+                 th: dict | None = None) -> go.Figure:
+    """Where the benefit went: the producer's share, the shares of the ticked and the
+    unticked members, and what the EDC sharing missed against the best possible one.
+    The slices add up to the best possible benefit."""
+    th = th or THEMES["light"]
+    cur = t("currency", lang)
+    fig = _figure(t("bill_pie_title", lang), lang, 500, th)
+    if bill.maximum <= 0:
+        return _no_data(fig, lang, th)
+    sel = np.array([e in enabled for e in data.dest_eans])
+    lost = max(0.0, bill.maximum - bill.realized)
+    slices = [
+        (t("bill_pie_producer", lang), max(0.0, bill.producer_share), th["source"], ""),
+        (t("bill_pie_members", lang), max(0.0, float(bill.share[sel].sum())), th["members"], ""),
+        (t("bill_pie_unselected", lang), max(0.0, float(bill.share[~sel].sum())), th["others"], "/"),
+        (t("bill_pie_lost", lang), lost, th["wasted"], ""),
+    ]
+    slices = [s for s in slices if s[1] > 0.005]
+    fig.add_pie(
+        labels=[s[0] for s in slices], values=[s[1] for s in slices],
+        marker=dict(colors=[s[2] for s in slices], line=dict(color=th["paper"], width=2),
+                    pattern=dict(shape=[s[3] for s in slices], size=7, solidity=0.45,
+                                 fgcolor=th["others"], bgcolor=_rgba(th["others"], 0.25))),
+        pull=[0.06 if s[0] == t("bill_pie_lost", lang) else 0 for s in slices],
+        sort=False, direction="clockwise", rotation=0,
+        texttemplate="%{label}<br>%{value:,.0f} " + cur + "<br>%{percent:.1%}",
+        textposition="outside",
+        hovertemplate="%{label}: %{value:,.2f} " + cur + " (%{percent:.1%})<extra></extra>",
+        showlegend=False,
+    )
+    note = [t("bill_pie_total", lang).format(total=fmt_num(bill.maximum, lang), cur=cur),
+            t("bill_pie_subtitle", lang)]
+    fig.update_layout(
+        annotations=[dict(text="<br>".join(note), x=0.5, y=0, yshift=-58, xref="paper",
+                          yref="paper", yanchor="top", showarrow=False,
+                          font=dict(size=11, color=th["muted"]))],
+        margin=dict(l=40, r=40, t=60, b=100),
+    )
+    return fig
+
+
+def fig_bill_daily(cols: pd.DataFrame, data: SharingData, names: dict[str, str], *,
+                   n_rest: int = 0, lang: str = "cs", sel_day: str | None = None,
+                   th: dict | None = None, top: tuple[str, ...] | None = None) -> go.Figure:
+    """Stacked areas of the daily share of the benefit per member and the producer.
+    Click a day to select it, like in the daily energy plot."""
+    th = th or THEMES["light"]
+    fig = _figure(t("bill_daily_title", lang), lang, 460, th)
+    daily = cols.resample("D").sum()
+    if daily.empty:
+        return _no_data(fig, lang, th)
+    _bill_areas(fig, daily, colour_map(data, top), th, names, lang, n_rest)
+    tickvals, ticktext = _month_ticks(daily.index, lang)
+    fig.update_layout(
+        xaxis=dict(tickvals=tickvals, ticktext=ticktext, tickangle=-30, showgrid=True,
+                   hoverformat="%d.%m.%Y" if lang == "cs" else "%Y-%m-%d"),
+        yaxis=dict(title=t("bill_daily_ylabel", lang), showgrid=True, zeroline=False),
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="left", x=0,
+                    font=dict(size=11)),
+        shapes=day_marker(sel_day, th), clickmode="event",
+    )
+    return fig
+
+
+def fig_bill_intraday(cols: pd.DataFrame, data: SharingData, names: dict[str, str],
+                      day: str | None, *, n_rest: int = 0, lang: str = "cs",
+                      th: dict | None = None, top: tuple[str, ...] | None = None) -> go.Figure:
+    """The share of the benefit per 15 min on one calendar day."""
+    th = th or THEMES["light"]
+    day_ts = pd.Timestamp(day).normalize() if day else cols.index.normalize().max()
+    date_txt = day_ts.strftime("%d.%m.%Y" if lang == "cs" else "%Y-%m-%d")
+    fig = _figure(t("bill_on", lang).format(date=date_txt), lang, 440, th)
+    lo, hi = day_ts, day_ts + pd.Timedelta(days=1)
+    day_df = cols.loc[(cols.index >= lo) & (cols.index < hi)]
+    peak = float(day_df.clip(lower=0).sum(axis=1).max()) if not day_df.empty else 0.0
+    fig.update_layout(
+        xaxis=dict(range=[day_ts + pd.Timedelta(hours=INTRADAY_XSTART_HOUR),
+                          day_ts + pd.Timedelta(hours=INTRADAY_XEND_HOUR)],
+                   dtick=3 * 3600 * 1000, tickformat="%H:%M", hoverformat="%H:%M",
+                   showgrid=True),
+        yaxis=dict(title=t("bill_intraday_ylabel", lang), showgrid=True, zeroline=False,
+                   range=[0, (peak if peak > 0 else 1.0) * 1.05]),
+    )
+    if day_df.empty:
+        fig.add_annotation(text=t("no_data", lang), x=0.5, y=0.5, xref="paper",
+                           yref="paper", showarrow=False, font=dict(size=14, color=th["muted"]))
+        return fig
+    _bill_areas(fig, day_df, colour_map(data, top), th, names, lang, n_rest)
+    fig.update_layout(hovermode="x unified",
+                      legend=dict(orientation="h", yanchor="top", y=-0.12, xanchor="left",
+                                  x=0, font=dict(size=11)))
+    return fig
+
+
+def fig_bill_heatmap(cols: pd.DataFrame, *, lang: str = "cs", th: dict | None = None) -> go.Figure:
+    """Mean benefit of the whole group (Kč per 15 min), hour of day × month."""
+    th = th or THEMES["light"]
+    fig = _figure(t("bill_heat_title", lang), lang, 440, th)
+    total = cols.sum(axis=1).to_frame("total")
+    if total.empty:
+        return _no_data(fig, lang, th)
+    total["hour"] = total.index.hour
+    total["month"] = total.index.to_period("M")
+    pivot = total.pivot_table(values="total", index="hour", columns="month", aggfunc="mean")
+    months = [month_label(p.to_timestamp(), lang) for p in pivot.columns]
+    cur = t("currency", lang)
+    fig.add_heatmap(
+        z=pivot.to_numpy(), x=months, y=list(pivot.index), colorscale=th["heat"], zmin=0,
+        zmax=float(np.nanmax(pivot.to_numpy())) or 1.0,
+        colorbar=dict(title=dict(text=t("bill_heat_cbar", lang), side="right"),
+                      thickness=12, tickformat=",.2f", outlinewidth=0),
+        hovertemplate="%{x}, %{y}:00<br>%{z:,.3f} " + cur + "<extra></extra>",
         xgap=1, ygap=1,
     )
     fig.update_layout(
