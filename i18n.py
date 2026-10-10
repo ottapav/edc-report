@@ -181,6 +181,39 @@ STRINGS: dict[str, dict[str, str]] = {
         "cmp_error_hint": "EDC error = (Shared exact − Shared approx.) ÷ Shared exact: the part of the sharing the exact method makes possible that the approximate method (EDC) missed. Per member it is relative to that member's exact sharing; the Σ row adds up the selected members and matches the box above and the “Could have been shared” tile.",
         "cmp_cov": "Covered by sharing: approx. → exact",
         "cmp_key": "Key",
+        # --- billing by the Shapley value ---
+        "price_col": "Price",
+        "price_col_tip": "Supplier price of electricity [CZK/kWh], for the billing",
+        "bill_title": "Billing of shared electricity by the Shapley value (proposal)",
+        "bill_desc": "Splits the benefit of sharing fairly between the producer and the members. "
+                     "Enter each member's supplier price of electricity (commodity, without "
+                     "distribution) in the Price column, or a default price below, and the "
+                     "producer's feed-in price. The billing uses the shared energy of the EDC report.",
+        "bill_btn": "Compute the billing by the Shapley value",
+        "feed_in": "Producer's feed-in price [CZK/kWh]",
+        "price_default": "Default supplier price [CZK/kWh]",
+        "phase_bill": "Computing Shapley values",
+        "bill_need_feed_in": "Enter the producer's feed-in price.",
+        "bill_need_prices": "Enter the supplier price for every member (Price column), or a default price.",
+        "part_no_bill": "Billing needs an all report (members' consumption is required).",
+        "bill_summary": "Benefit of the sharing in the EDC report: {real} out of at most {max} with the best "
+                        "possible sharing ({eff}). The Shapley values of the best sharing are scaled to the real benefit.",
+        "bill_timing": "Computed in {secs}: {scarce} intervals by exact quadrature, {covered} with "
+                       "enough production for everyone (closed form), {night} without production.",
+        "bill_stale": "Prices changed since the last billing; press the button again.",
+        "bill_hint": "Payment = price × shared − share of the benefit. The producer receives the sum of the "
+                     "payments; its share is that sum minus what the shared energy would have earned at "
+                     "the feed-in price. Members whose price is not above the feed-in price get no share.",
+        "bill_col_price": "Price [CZK/kWh]",
+        "bill_col_shared": "Shared [kWh]",
+        "bill_col_saving": "At supplier price [CZK]",
+        "bill_col_share": "Share of benefit [CZK]",
+        "bill_col_payment": "Pays producer [CZK]",
+        "bill_col_unit": "Per kWh [CZK]",
+        "bill_producer": "{name} (producer)",
+        "bill_feed_in_value": "feed-in value",
+        "bill_receives": "receives",
+        "currency": "CZK",
     },
     "cs": {
         "report_title": "Report sdílení elektřiny",
@@ -350,6 +383,38 @@ STRINGS: dict[str, dict[str, str]] = {
         "cmp_error_hint": "Chyba EDC = (Nasdíleno přesně − Nasdíleno přibl.) ÷ Nasdíleno přesně: jaká část sdílení, které přesná metoda umožní, přibližné metodě (EDC) unikla. U člena se počítá z jeho přesného sdílení; řádek Σ sčítá vybraná místa a odpovídá boxu nahoře i dlaždici „Mohlo být sdíleno“.",
         "cmp_cov": "Pokryto sdílením: přibl. → přesně",
         "cmp_key": "Klíč",
+        "price_col": "Cena",
+        "price_col_tip": "Cena elektřiny od prodejce [Kč/kWh], pro vyúčtování",
+        "bill_title": "Vyúčtování sdílené elektřiny podle Shapleyho hodnoty (návrh)",
+        "bill_desc": "Spravedlivě rozdělí přínos sdílení mezi výrobce a členy. Do sloupce Cena v tabulce "
+                     "odběrných míst zadejte cenu elektřiny od prodejce (silová elektřina, bez distribuce), "
+                     "nebo níže výchozí cenu, a výkupní cenu výrobny. Vyúčtování vychází z nasdílené "
+                     "energie v reportu EDC.",
+        "bill_btn": "Spočítat vyúčtování podle Shapleyho hodnoty",
+        "feed_in": "Výkupní cena výrobny [Kč/kWh]",
+        "price_default": "Výchozí cena od prodejce [Kč/kWh]",
+        "phase_bill": "Výpočet Shapleyho hodnot",
+        "bill_need_feed_in": "Zadejte výkupní cenu výrobny.",
+        "bill_need_prices": "Zadejte cenu od prodejce pro každého člena (sloupec Cena), nebo výchozí cenu.",
+        "part_no_bill": "Vyúčtování potřebuje úplný report (odběry členů).",
+        "bill_summary": "Přínos sdílení podle reportu EDC: {real} z nejvýše {max} při nejlepším možném "
+                        "sdílení ({eff}). Shapleyho hodnoty nejlepšího sdílení jsou přepočteny na skutečný přínos.",
+        "bill_timing": "Spočteno za {secs}: {scarce} čtvrthodin přesnou kvadraturou, {covered} s výrobou "
+                       "pro všechny (uzavřený vzorec), {night} bez výroby.",
+        "bill_stale": "Ceny se od posledního vyúčtování změnily; stiskněte tlačítko znovu.",
+        "bill_hint": "Platba = cena × nasdíleno − podíl na přínosu. Výrobce dostane součet plateb; jeho podíl "
+                     "je tento součet minus to, co by nasdílená energie vynesla za výkupní cenu. Člen, jehož "
+                     "cena není vyšší než výkupní, podíl nedostane.",
+        "bill_col_price": "Cena [Kč/kWh]",
+        "bill_col_shared": "Nasdíleno [kWh]",
+        "bill_col_saving": "Za cenu prodejce [Kč]",
+        "bill_col_share": "Podíl na přínosu [Kč]",
+        "bill_col_payment": "Platí výrobci [Kč]",
+        "bill_col_unit": "Za kWh [Kč]",
+        "bill_producer": "{name} (výrobce)",
+        "bill_feed_in_value": "výkupní hodnota",
+        "bill_receives": "dostane",
+        "currency": "Kč",
     },
 }
 

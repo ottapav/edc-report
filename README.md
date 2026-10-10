@@ -12,6 +12,8 @@ with the computation timed per 15-min interval.
 > souhrny, denní a hodinové grafy, teplotní mapu a podíl, který „mohl být sdílen“.
 > Z reportu odhadne alokační klíče (přibližná statická metoda EDC s 1 nebo 5 koly, i pro velké skupiny).
 > Jedním tlačítkem přepočítá sdílení přesnou statickou metodou a porovná ji s dneškem.
+> Dalším tlačítkem spočítá vyúčtování sdílené elektřiny podle Shapleyho hodnoty
+> (zadáte ceny od prodejce a výkupní cenu výrobny).
 > Rozhraní je v češtině i angličtině, se světlým i tmavým režimem.
 
 ![Report of one group, light mode](docs/screenshot-light.png)
@@ -23,6 +25,7 @@ with the computation timed per 15-min interval.
 - [Using the app](#using-the-app)
 - [How the allocation keys are estimated](#how-the-allocation-keys-are-estimated)
 - [Exact static method and timing](#exact-static-method-and-timing)
+- [Billing by the Shapley value](#billing-by-the-shapley-value)
 - [Architecture](#architecture)
 - [Performance](#performance)
 - [Deployment on Render](#deployment-on-render)
@@ -77,6 +80,17 @@ with the computation timed per 15-min interval.
   kWh missed.
 * **Timing:** the number of intervals evaluated, total time, and time per interval, split by
   the method's fast paths.
+
+**Billing by the Shapley value (proposal):**
+
+* **Prices:** each member's supplier price (the *Price* column of the grid, next to the keys,
+  or a default price for the empty cells) and the producer's feed-in price.
+* **Compute:** one button computes the exact Shapley values over the whole report in the
+  background, with a progress bar.
+* **Settlement table:** per member the shared energy, its value at the supplier price, the
+  fair share of the benefit, the payment to the producer and the effective price per kWh;
+  the producer's income, its share and the feed-in value it gave up.
+* **Efficiency:** the benefit of the EDC report's sharing next to the best possible one.
 
 **Interface:**
 
@@ -215,6 +229,56 @@ everyone and 8 980 need H. That takes 50–65 ms in total, about 1.5–1.9 µs p
 about 4.5 µs with H. For 150 members and one month it takes about 70–80 ms and 25 µs per
 interval. Numbers vary with the machine; Render instances have less than one CPU.
 
+## Billing by the Shapley value
+
+`billing.py` splits the benefit of sharing between the producer and the members by the
+Shapley value. The benefit of a kWh shared to member *j* is `p_j − f` (supplier price minus
+feed-in price). The keys do not enter the Shapley value: they decide who got the energy, the
+Shapley value decides who deserves the money.
+
+**The game.** In every 15-min interval a coalition is worth what it could save with the best
+sharing: the producer's surplus goes first to the members with the highest price,
+`v(S) = 1[producer ∈ S] · Σ_k Δλ_k · min(P, D_k(S))`, where the price layer *k* holds the
+members whose price is at least λ_k (λ_0 = f). Shapley values add up, so the year is the sum
+of the intervals and the layers.
+
+**Exact algorithm** (energies in hundredths of kWh, like EDC data, so nothing is rounded):
+
+* night: nothing; enough production for a layer: every member gets `d_j / 2` of it
+  (closed form, all such intervals at once);
+* otherwise `φ_j = ∫₀¹ u · E[min(d_j, P − X₋ⱼ(u))⁺] du` (Owen's multilinear extension). The
+  integrand is a Bernstein polynomial with coefficients in [0, d_j], so Gauss–Legendre needs
+  far fewer than m/2 nodes: a rigorous error bound (Bernstein ellipse) picks the smallest
+  even count for 10⁻¹³ relative error (12 nodes for 20 members, 46 for 150);
+* one DP per node gives the distribution of the members' demand, sorted by price, so every
+  price layer is a prefix of the same DP; node 1 − u is the mirror image of u, so half the
+  nodes need a DP;
+* leaving member *j* out needs no deconvolution: a finite geometric series turns
+  `E[h(X₋ⱼ)]` into lookups in the running sum of the CDF of *X*, summed over the layers that
+  contain *j* with weights Δλ. The producer gets `v(N) − Σ φ_j`.
+
+The suite checks the result against brute force over all coalitions (mixed prices, members
+without demand, prices below the feed-in price) to 10⁻⁹ Kč.
+
+**Settlement.** The Shapley values of the best sharing are scaled to the benefit the EDC
+report really achieved, `Σ (p_j − f) · s_j`. Member *j* pays the producer
+`p_j · s_j − share_j` (in whole haléř); the producer's share is the sum of the payments minus
+the feed-in value of the shared energy. The page shows how much of the best possible
+benefit the report achieved.
+
+**Time** (one core, synthetic groups, `compute_shapley`):
+
+| Members | Period | Distinct prices | Time |
+|---|---|---|---|
+| 5 | 1 year | 1–5 | 1.6–2 s |
+| 20 | 3 months | 20 | 4 s |
+| 50 | 1 month | 44 | 12 s |
+| 150 | 1 month | 1 | 31 s |
+| 150 | 1 month | 100 | 2 min |
+
+The cost grows with the number of members, the size of the production in hundredths of kWh,
+and the number of distinct prices. Expect several times longer on the free Render instance.
+
 ## Architecture
 
 | File | Role |
@@ -226,6 +290,7 @@ interval. Numbers vary with the machine; Render instances have less than one CPU
 | `recompute.py` | Exact static recompute (the `rozdel()` loop in a child process), timing |
 | `procjob.py` | Runs a function in a forked child with progress, cancellation and a time limit |
 | `presna_staticka.py` | Reference implementation of the exact static method |
+| `billing.py` | Shapley values of the billing (exact, price layers) and the settlement in Kč |
 | `figures.py` | Plotly figures, light/dark themes, folding of large groups into "Others" |
 | `i18n.py` | CZ/EN strings and number formatting |
 | `assets/style.css` | Styles, light/dark variables (Dash loads it automatically) |
@@ -241,8 +306,8 @@ This is the failure mode fixed in robopid-simulator: there, with two workers, th
 polls of a job reached the worker that did not start it, and the button looked dead. More
 workers here would need a shared store such as Redis, not a bigger worker count.
 
-**Background jobs.** Key estimation (after upload) and the `rozdel()` loop of the recompute
-each run in a **forked child process** (`procjob.py`), started from a job thread. The web
+**Background jobs.** Key estimation (after upload), the `rozdel()` loop of the recompute and
+the Shapley values of the billing each run in a **forked child process** (`procjob.py`), started from a job thread. The web
 server's request threads therefore stay free for progress polls and page renders, the child
 gets a core of its own, and its arguments (big numpy arrays) are shared with the parent by
 `fork` instead of being pickled; only progress messages and the small result travel back.
@@ -354,6 +419,8 @@ needed. It checks that:
 * the exact method adds exactly the "could have been shared" energy, and for any selection
   the tiles, the pie, the comparison table and the error box give the same number;
 * the timing counts every interval;
+* the Shapley values of the billing equal brute force over all coalitions, the bounded node
+  count matches the exact one, and the settlement adds up (payments, shares, haléř);
 * memoisation reuses frames.
 
 ## Limitations
