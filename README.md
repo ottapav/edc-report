@@ -261,6 +261,27 @@ used. On the synthetic month (12 installations, two producers) rounding costs:
 
 On the same month the fixed mode loses 12.6 % of the maximum.
 
+**On real data.** `portugal/gecad.py` converts the public GECAD dataset of a building in
+Portugal (Zenodo [10.5281/zenodo.5106455](https://doi.org/10.5281/zenodo.5106455), CC BY 4.0):
+15 consumers and the common services, three PV producers, 15-min data for 2019. The
+dataset has no coefficients, so two typical fixed keys are tried:
+
+```bash
+python -m portugal.gecad "Data_PV and consumptions.xlsx" gecad
+python -m portugal.cli gecad/dados.csv gecad/coef_iguais.csv --out gecad/iguais
+python -m portugal.cli gecad/dados.csv gecad/coef_consumo.csv --out gecad/consumo
+```
+
+| fixed key | PV 2019 | shared, fixed mode | shared, exact | lost by the fixed mode |
+|---|---|---|---|---|
+| equal shares (1/16) | 13 329 kWh | 11 238 kWh | 13 329 kWh | 2 091 kWh = **15.7 %** |
+| shares of annual consumption | 13 329 kWh | 12 744 kWh | 13 329 kWh | 585 kWh = **4.4 %** |
+
+The building could use all of its PV in every quarter-hour, so the exact method shares
+100 %. Every member gets more than with the fixed mode (at least 28 kWh/year with equal
+shares, 12 kWh with consumption shares). The dynamic files with 3 decimals lose 3.2 and
+0.1 kWh to rounding.
+
 **Still to confirm with E-REDES before a real submission:**
 
 * the input: E-REDES delivers `sgl_v2` files per installation; there is no parser yet because
@@ -283,7 +304,7 @@ On the same month the fixed mode loses 12.6 % of the maximum.
 | `recompute.py` | Exact static recompute (the `rozdel()` loop in a child process), timing |
 | `procjob.py` | Runs a function in a forked child with progress, cancellation and a time limit |
 | `presna_staticka.py` | Reference implementation of the exact static method |
-| `portugal/` | Portugal prototype: ERSE fixed/proportional modes vs exact (`partilha.py`), data input and dynamic-mode coefficient files (`eredes.py`), CLI (`cli.py`), synthetic data (`exemplo.py`) |
+| `portugal/` | Portugal prototype: ERSE fixed/proportional modes vs exact (`partilha.py`), data input and dynamic-mode coefficient files (`eredes.py`), CLI (`cli.py`), synthetic data (`exemplo.py`), converter for the public GECAD dataset (`gecad.py`) |
 | `figures.py` | Plotly figures, light/dark themes, folding of large groups into "Others" |
 | `i18n.py` | CZ/EN strings and number formatting |
 | `assets/style.css` | Styles, light/dark variables (Dash loads it automatically) |

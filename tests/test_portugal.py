@@ -154,3 +154,12 @@ def test_cli_writes_report_members_and_one_file_per_pair(period_and_matrices, tm
     assert names[0] == f"Coeficiente_Partilha_{cons}_{prod}_202606_20261010_01.csv"
     assert date == "20260601" and qh == "0015" and len(val.split(".")[1]) == 3
     assert os.path.exists(tmp_path / "membros.csv")
+
+
+def test_gecad_times_accept_text_serials_with_float_noise_and_cpes_are_20_chars():
+    from portugal import gecad
+    col = pd.Series(["31/03/2019 00:45:00", 43555.041666666664, 43555.0520833334])
+    assert list(gecad.parse_times(col)) == [pd.Timestamp("2019-03-31 00:45"),
+                                            pd.Timestamp("2019-03-31 01:00"),
+                                            pd.Timestamp("2019-03-31 01:15")]
+    assert {len(gecad.cpe(k, 15)) for k in "PCS"} == {20}
