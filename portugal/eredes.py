@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import io
 import math
+import os
 import zipfile
 from dataclasses import dataclass
 
@@ -52,6 +53,7 @@ class Period:
     consumption: list[list[int]]     # [t][i], Wh
     injections: list[list[int]]      # [t][i], Wh
     warnings: list[str]
+    equal_shares: bool = False       # coefficients not given, equal shares assumed
 
     @property
     def producers(self) -> list[int]:
@@ -59,7 +61,14 @@ class Period:
 
 
 def _read_csv(src) -> pd.DataFrame:
-    raw = src.read() if hasattr(src, "read") else open(src, "rb").read()
+    """``src``: path, file object, bytes or str."""
+    if isinstance(src, (bytes, str)) and not (isinstance(src, str) and os.path.exists(src)):
+        raw = src
+    elif hasattr(src, "read"):
+        raw = src.read()
+    else:
+        with open(src, "rb") as f:
+            raw = f.read()
     text = raw.decode("utf-8-sig") if isinstance(raw, bytes) else raw
     first = text.splitlines()[0] if text else ""
     sep = ";" if first.count(";") >= first.count(",") else ","
@@ -99,8 +108,10 @@ def _localize(ts: pd.Series) -> pd.DatetimeIndex:
     return naive.tz_localize(TZ, ambiguous="infer", nonexistent="raise")
 
 
-def read_period(data_src, coef_src) -> Period:
-    coefs = read_coefficients(coef_src)
+def read_period(data_src, coef_src=None) -> Period:
+    """Read the 15-min data; without a coefficients file every installation that consumes
+    and never injects gets an equal share (``Period.equal_shares`` is then True)."""
+    coefs = read_coefficients(coef_src) if coef_src is not None else None
     df = _read_csv(data_src)
     need = {"timestamp", "cpe", "consumption_kwh", "injection_kwh"}
     if not need <= set(df.columns):
@@ -125,7 +136,18 @@ def read_period(data_src, coef_src) -> Period:
         net = df["c"] - df["j"]
         df["c"], df["j"] = net.clip(lower=0), (-net).clip(lower=0)
 
-    cpes = list(coefs) + sorted(set(df["cpe"]) - set(coefs))
+    equal = coefs is None
+    if equal:
+        injecting = set(df.loc[df["j"] > 0, "cpe"])
+        only_consume = [c for c in dict.fromkeys(df["cpe"]) if c not in injecting]
+        if not only_consume:
+            raise ValueError("no installation only consumes, so equal coefficients "
+                             "cannot be set; upload a coefficients file")
+        n = len(only_consume)
+        coefs = {c: 1 / n for c in only_consume}
+        warnings.append(f"no coefficients file: equal shares of {100 / n:.2f} % "
+                        f"for the {n} installations that only consume")
+    cpes = list(coefs) + [c for c in dict.fromkeys(df["cpe"]) if c not in coefs]
     missing = sorted(set(coefs) - set(df["cpe"]))
     if missing:
         warnings.append("no data for " + ", ".join(missing) + " (taken as 0)")
@@ -155,7 +177,7 @@ def read_period(data_src, coef_src) -> Period:
     J = J.fillna(0).astype("int64")
     return Period(cpes=cpes, coef=[float(coefs.get(c, 0.0)) for c in cpes], starts=starts,
                   consumption=C.values.tolist(), injections=J.values.tolist(),
-                  warnings=warnings)
+                  warnings=warnings, equal_shares=equal)
 
 
 # ---------------------------------------------------------------------------
@@ -251,24 +273,37 @@ def to_coefficients(period: Period, matrices: list[list[list[int]]],
 def coefficient_files(period: Period, coefs: Coefficients, generated: str,
                       sep: str = ";", decimal: str = ".", header: bool = False,
                       seq: int = 1) -> dict[str, str]:
-    """{file name: content} for every consumer–producer pair."""
+    """{file name: content} for every consumer–producer pair and calendar month.
+
+    E-REDES takes the coefficients month by month (deadline day 27), so a longer period
+    gives one file per pair and month, named after that month.
+    """
     labels = quarter_hour_labels(period.starts)
-    month = labels[-1][0][:6] if labels else ""
+    months: dict[str, list[int]] = {}
+    for t, (d, _q) in enumerate(labels):
+        months.setdefault(d[:6], []).append(t)
     files = {}
     for (c, p), vals in coefs.values.items():
         cons, prod = period.cpes[c], period.cpes[p]
-        name = f"Coeficiente_Partilha_{cons}_{prod}_{month}_{generated}_{seq:02d}.csv"
-        lines = []
-        if header:
-            lines.append(sep.join(["data", "quarto_hora", "cpe_consumo", "cpe_producao",
-                                   "coeficiente"]))
-        for (d, q), v in zip(labels, vals):
-            num = f"{v:.{coefs.decimals}f}"
-            if decimal != ".":
-                num = num.replace(".", decimal)
-            lines.append(sep.join([d, q, cons, prod, num]))
-        files[name] = "\n".join(lines) + "\n"
+        for month, rows in months.items():
+            name = f"Coeficiente_Partilha_{cons}_{prod}_{month}_{generated}_{seq:02d}.csv"
+            lines = []
+            if header:
+                lines.append(sep.join(["data", "quarto_hora", "cpe_consumo", "cpe_producao",
+                                       "coeficiente"]))
+            for t in rows:
+                d, q = labels[t]
+                num = f"{vals[t]:.{coefs.decimals}f}"
+                if decimal != ".":
+                    num = num.replace(".", decimal)
+                lines.append(sep.join([d, q, cons, prod, num]))
+            files[name] = "\n".join(lines) + "\n"
     return files
+
+
+def months_of(files: dict[str, str]) -> list[str]:
+    """Sorted months (YYYYMM) present in the names from :func:`coefficient_files`."""
+    return sorted({n.split("_")[-3] for n in files})
 
 
 def zip_files(files: dict[str, str]) -> bytes:

@@ -13,6 +13,12 @@ the EDC report (the approximate static method), with a progress bar and timing o
 Phase 3: hourly plot of a selected day, heatmap, allocation keys estimated
 right after upload (1 or 5 EDC rounds, any group size), dark mode.
 
+Portugal: the country is detected from the uploaded file(s) (``portugal.report``).
+Portuguese data gives the same two columns - E-REDES fixed coefficients vs the exact
+method on the same coefficients - plus the dynamic-mode coefficient files for E-REDES.
+Czech reports are shown in Czech or English, Portuguese reports in English only
+(language value ``"pt"`` = English text with the Portuguese terms).
+
 Run:  python app.py            (http://127.0.0.1:8050)
       python app.py --host 0.0.0.0 --port 8050 --debug
 """
@@ -47,6 +53,7 @@ from i18n import fmt_date, fmt_duration, fmt_num, fmt_pct, fmt_signed, t
 from keyfit import KeyFit, estimate_keys
 from procjob import JobCancelled, JobTimeout, run_in_child
 from recompute import Recomputed, grid_loss, recompute, to_hundredths
+from portugal import report as ptr
 from edc_data import (
     SharingData, compute_wasted_split, exact_gain, filter_dests, load_report,
     per_destination, summarize, with_overlap,
@@ -91,6 +98,7 @@ class Entry:
     data: SharingData
     exact: Recomputed | None = None
     fit: KeyFit | None = None
+    pt: ptr.PTInput | None = None        # Portuguese upload: inputs for the recompute
 
 
 _CACHE: "OrderedDict[str, Entry]" = OrderedDict()
@@ -98,11 +106,11 @@ _CACHE_MAX = max(1, CACHE_MAX)
 _LOCK = threading.Lock()
 
 
-def _cache_put(filename: str, data: SharingData) -> str:
+def _cache_put(filename: str, data: SharingData, pt: ptr.PTInput | None = None) -> str:
     key = uuid.uuid4().hex
     evicted: list[str] = []
     with _LOCK:
-        _CACHE[key] = Entry(filename, data)
+        _CACHE[key] = Entry(filename, data, pt=pt)
         while len(_CACHE) > _CACHE_MAX:
             evicted.append(_CACHE.popitem(last=False)[0])
     _cancel_jobs(evicted)                 # nobody can see their result any more
@@ -169,25 +177,16 @@ def _run_job(job_id: str, kind: str, data_key: str, keys: list[float | None],
             entry = _cache_get(data_key)
             if entry is None:
                 raise JobCancelled()
-            need_fit = kind == "fit" or (entry.fit is None and any(k is None for k in keys))
-            if need_fit:
-                job["had_fit"] = kind == "recompute"
-                progress("fit", 0.0)
-                P, D, S = to_hundredths(entry.data)
-                entry.fit = run_in_child(estimate_keys, (P, D, S), progress=progress,
-                                         cancelled=stop, timeout=FIT_TIMEOUT_S)
-            if kind == "recompute":
-                fit = entry.fit
-                merged = [k if k is not None else (fit.keys[i] if fit else None)
-                          for i, k in enumerate(keys)]
-                if any(k is None for k in merged):
-                    raise RuntimeError("missing allocation keys")
-                progress("compute", 0.0)
-                entry.exact = recompute(
-                    entry.data, merged, reserve, progress=progress, fit=fit,
-                    keys_estimated=fit is not None and merged == list(fit.keys),
-                    rounds=fit.rounds if fit else 5, cancelled=stop,
-                )
+            if entry.pt is not None:
+                # Portugal: coefficients are given (file or equal shares), no fit; the
+                # recompute rebuilds column A (fixed mode) and B (exact) for them
+                if kind == "recompute":
+                    merged = [k if k is not None else entry.pt.base_coef[i]
+                              for i, k in enumerate(keys)]
+                    progress("compute", 0.0)
+                    entry.data, entry.exact = ptr.recompute(entry.pt, merged, progress, stop)
+            else:
+                _czech_job(job, kind, entry, keys, reserve, progress, stop)
         finally:
             _JOB_SLOTS.release()
         job["done"] = True
@@ -201,6 +200,30 @@ def _run_job(job_id: str, kind: str, data_key: str, keys: list[float | None],
         traceback.print_exc()
         job["error"] = str(exc)
         job["done"] = True
+
+
+def _czech_job(job: dict, kind: str, entry: Entry, keys: list[float | None],
+               reserve: float, progress, stop) -> None:
+    """EDC report: estimate the keys if needed, then (recompute) the exact method."""
+    need_fit = kind == "fit" or (entry.fit is None and any(k is None for k in keys))
+    if need_fit:
+        job["had_fit"] = kind == "recompute"
+        progress("fit", 0.0)
+        P, D, S = to_hundredths(entry.data)
+        entry.fit = run_in_child(estimate_keys, (P, D, S), progress=progress,
+                                 cancelled=stop, timeout=FIT_TIMEOUT_S)
+    if kind == "recompute":
+        fit = entry.fit
+        merged = [k if k is not None else (fit.keys[i] if fit else None)
+                  for i, k in enumerate(keys)]
+        if any(k is None for k in merged):
+            raise RuntimeError("missing allocation keys")
+        progress("compute", 0.0)
+        entry.exact = recompute(
+            entry.data, merged, reserve, progress=progress, fit=fit,
+            keys_estimated=fit is not None and merged == list(fit.keys),
+            rounds=fit.rounds if fit else 5, cancelled=stop,
+        )
 
 
 def _start_background(kind: str, data_key: str, keys: list[float | None],
@@ -234,6 +257,8 @@ def default_names(data: SharingData, lang: str) -> dict[str, str]:
     names: dict[str, str] = {}
     for i, e in enumerate(data.source_eans):
         names[e] = f"{t('source_a', lang)} {ascii_uppercase[i % 26]}"
+    if data.country == "PT":                     # one pooled source
+        names = {e: t("source_a", lang) for e in data.source_eans}
     for i, e in enumerate(data.dest_eans, 1):
         names[e] = f"{t('destination', lang)} {i}"
     return names
@@ -313,7 +338,7 @@ def _member_columns(lang: str, can_key: bool) -> list[dict]:
          "valueFormatter": {"function": f"params.value || params.data.default_{lang}"},
          "cellClassRules": {"muted-name": "!params.value"},
          "cellStyle": {"function": "({borderLeft: '6px solid ' + params.data.colour})"}},
-        {"field": "tail", "headerName": "EAN", "width": 64, "cellClass": "mono-cell",
+        {"field": "tail", "headerName": t("col_id_short", lang), "width": 64, "cellClass": "mono-cell",
          "tooltipField": "ean"},
         {"field": "key", "headerName": t("keys", lang), "editable": can_key, "width": 70,
          "type": "rightAligned", "cellEditor": "agNumberCellEditor",
@@ -326,13 +351,35 @@ def _member_columns(lang: str, can_key: bool) -> list[dict]:
     ]
 
 
-def _member_rows(data: SharingData) -> list[dict]:
+def _member_rows(data: SharingData, keys: list[float] | None = None) -> list[dict]:
+    """Grid rows; ``keys`` (fractions) prefill the key column (Portugal: coefficients)."""
     cmap = colour_map(data, top_dests(data.frame, data))
-    names = {lg: default_names(data, lg) for lg in ("cs", "en")}
+    names = {lg: default_names(data, lg) for lg in ("cs", "en", "pt")}
+    keys = keys or [None] * len(data.dest_eans)
     return [{"ean": e, "tail": f"…{e[-6:]}", "name": "",
              "default_cs": names["cs"][e], "default_en": names["en"][e],
-             "colour": cmap[e], "key": None, "range": "", "warn": False}
-            for e in data.dest_eans]
+             "default_pt": names["pt"][e],
+             "colour": cmap[e], "key": None if k is None else _pct_key(k),
+             "range": "", "warn": False}
+            for e, k in zip(data.dest_eans, keys)]
+
+
+LANGS_CZ = [{"label": "CZ", "value": "cs"}, {"label": "EN", "value": "en"}]
+LANGS_PT = [{"label": "EN", "value": "pt"}]   # Portuguese reports: English only
+
+
+def _read_upload(contents, filename) -> list[tuple[str, bytes]]:
+    """(name, bytes) of every selected file; one or several (Portugal: data + coefficients)."""
+    contents = contents if isinstance(contents, list) else [contents]
+    names = filename if isinstance(filename, list) else [filename]
+    files, size = [], 0.0
+    for c, n in zip(contents, names):
+        _header, b64 = c.split(",", 1)
+        size += len(b64) * 3 / 4
+        files.append((n or "report.csv", base64.b64decode(b64)))
+    if size > MAX_UPLOAD_MB * 2**20:
+        raise ValueError(f"upload is larger than {MAX_UPLOAD_MB:g} MB")
+    return files
 
 
 def _grid_options(many: bool) -> dict:
@@ -473,6 +520,8 @@ app.layout = html.Div(className="page", children=[
     dcc.Store(id="theme-pref", storage_type="local"),   # "light" / "dark" / None = system
     dcc.Store(id="theme", data="light"),                 # resolved theme for the figures
     dcc.Store(id="data-key"),
+    dcc.Store(id="lang-cz"),                 # last CZ/EN choice, restored after a PT report
+    dcc.Download(id="download-zip"),
     dcc.Store(id="job-id"),
     dcc.Store(id="result-rev", data=0),
     dcc.Interval(id="poll", interval=200, disabled=True),
@@ -488,7 +537,7 @@ app.layout = html.Div(className="page", children=[
         ]),
     ]),
     dcc.Upload(
-        id="upload", multiple=False, accept=".csv,text/csv",
+        id="upload", multiple=True, accept=".csv,text/csv,.xlsx",
         className="upload upload-big",
         # static content in the layout: the box is never empty, even before the
         # label callback answers; the callback replaces Upload.children as a whole
@@ -536,7 +585,7 @@ app.layout = html.Div(className="page", children=[
                 html.P(id="rc-desc", className="hint"),
                 html.Div(className="rc-row", children=[
                     html.Button(id="btn-recompute", n_clicks=0, className="btn-primary"),
-                    html.Label(className="reserve", children=[
+                    html.Label(id="reserve-box", className="reserve", children=[
                         html.Span(id="lbl-reserve"),
                         dcc.Input(id="reserve", type="number", min=0, max=100, step=0.1,
                                   value=0, debounce=True, className="num-in"),
@@ -550,6 +599,12 @@ app.layout = html.Div(className="page", children=[
                 html.Div(id="fit-info"),
                 html.Div(id="stale"),
                 html.Div(id="timing"),
+                html.Div(id="export-box", style={"display": "none"}, children=[
+                    html.Button(id="btn-export", n_clicks=0, className="mini"),
+                    html.P(id="export-hint", className="hint"),
+                    dcc.Loading(type="dot", color="#339933",
+                                children=html.Div(id="export-info", className="hint")),
+                ]),
             ]),
             html.Div(id="compare", className="compare single", children=[
                 html.Div(className="col col-a", children=[
@@ -641,6 +696,7 @@ app.clientside_callback(
     Output("heat-metric", "value"),
     Output("heat-box", "style"),
     Output("theme-btn", "title"),
+    Output("reserve-box", "style"),
     Input("lang", "value"),
     Input("data-key", "data"),
     State("heat-metric", "value"),
@@ -672,6 +728,7 @@ def _labels(lang, key, heat_value):
         heat_value if heat_value in metrics else metrics[0],
         {"display": "none"} if len(metrics) < 2 else {},   # nothing to choose (part report)
         t("theme_toggle", lang),
+        {"display": "none"} if entry is not None and entry.pt is not None else {},
     )
 
 
@@ -697,40 +754,62 @@ def _labels(lang, key, heat_value):
     Output("members", "selectedRows", allow_duplicate=True),
     Output("members", "dashGridOptions"),
     Output("members", "style"),
+    Output("lang", "value"),
+    Output("lang", "options"),
+    Output("lang-cz", "data"),
     Input("upload", "contents"),
     State("upload", "filename"),
     State("lang", "value"),
+    State("lang-cz", "data"),
     State("data-key", "data"),
     prevent_initial_call=True,
 )
-def _on_upload(contents, filename, lang, old_key):
+def _on_upload(contents, filename, lang, lang_cz, old_key):
+    """Czech EDC report or Portuguese data, told apart by the file contents.
+
+    Czech reports keep the CZ/EN switch; a Portuguese report switches the page to
+    English ("pt") and offers no other language until a Czech report is loaded again.
+    """
     nu = no_update
     idle = (nu, True)
     if not contents:
-        return (nu,) * 9 + (nu,) * 2 + (nu,) * 5
+        return (nu,) * 9 + (nu,) * 2 + (nu,) * 5 + (nu,) * 3
     _cache_drop(old_key)       # this browser replaces its report: free it, stop its jobs
+    names = filename if isinstance(filename, list) else [filename]
+    pt = None
     try:
-        _header, b64 = contents.split(",", 1)
-        if len(b64) * 3 / 4 > MAX_UPLOAD_MB * 2**20:
-            raise ValueError(f"file is larger than {MAX_UPLOAD_MB:g} MB")
-        data = load_report(base64.b64decode(b64))
+        files = _read_upload(contents, filename)
+        if ptr.country_of(files) == "PT":
+            data, pt = ptr.load(files)
+        else:
+            data = load_report(files[0][1])
     except Exception as exc:  # show any parse error to the user
-        msg = html.Div([html.B(f"{t('error', lang)}: "), f"{filename} — {exc}"],
+        shown = ", ".join(str(n) for n in names if n)
+        msg = html.Div([html.B(f"{t('error', lang)}: "), f"{shown} — {exc}"],
                        className="status-error")
         return ((None, msg, [], "report hidden", "upload upload-big", nu, nu, nu, nu) + idle
-                + (nu,) * 5)
-    key = _cache_put(filename or "report.csv", data)
+                + (nu,) * 5 + (nu,) * 3)
+    if pt is not None:
+        new_lang, options = "pt", LANGS_PT
+        keep_cz = lang if lang in ("cs", "en") else nu
+    else:
+        new_lang = lang if lang in ("cs", "en") else (lang_cz or "cs")
+        options, keep_cz = LANGS_CZ, nu
+    key = _cache_put(" + ".join(n for n, _ in files), data, pt)
     days = data.frame.index.normalize()
     first, last = days.min().date().isoformat(), days.max().date().isoformat()
     # estimate the allocation keys right away, so they can be checked before the recompute
-    job = (_start_background("fit", key, [None] * len(data.dest_eans), 0.0, lang)
-           if data.fmt == "all" else idle)
+    # (Portugal: the coefficients are given)
+    job = (_start_background("fit", key, [None] * len(data.dest_eans), 0.0, new_lang)
+           if data.fmt == "all" and pt is None else idle)
     many = len(data.dest_eans) > 12
-    grid = (_member_rows(data), _member_columns(lang, data.fmt == "all"),
+    grid = (_member_rows(data, pt.base_coef if pt else None),
+            _member_columns(new_lang, data.fmt == "all"),
             {"ids": list(data.dest_eans)}, _grid_options(many),
             {"height": "440px"} if many else {"height": None})
-    return (key, nu, _source_rows(data, lang), "report", "upload upload-small",
-            first, last, last, last) + job + grid
+    return ((key, nu, _source_rows(data, new_lang), "report", "upload upload-small",
+             first, last, last, last) + job + grid
+            + (new_lang if new_lang != lang else nu, options, keep_cz))
 
 
 @app.callback(
@@ -782,11 +861,12 @@ def _all_none(_a, _n, key):
     prevent_initial_call=True,
 )
 def _reset_keys(n, rows, key):
-    """Put the estimated keys back (after manual edits)."""
+    """Put the estimated keys back (after manual edits); Portugal: the file's coefficients."""
     entry = _cache_get(key)
-    if not n or entry is None or entry.fit is None:
+    if not n or entry is None or (entry.fit is None and entry.pt is None):
         raise dash.exceptions.PreventUpdate
-    by_ean = dict(zip(entry.data.dest_eans, entry.fit.keys))
+    base = entry.pt.base_coef if entry.pt is not None else entry.fit.keys
+    by_ean = dict(zip(entry.data.dest_eans, base))
     return {"update": [dict(r, key=_pct_key(by_ean[r["ean"]])) for r in rows or []
                        if r.get("ean") in by_ean]}
 
@@ -902,6 +982,8 @@ def _fit_info(_rev, lang, key, rows):
     """Summary of the key estimate; per member: estimated key into empty key cells,
     consistency range as tooltip, warning mark where the report cannot pin it down."""
     entry = _cache_get(key)
+    if entry is not None and entry.pt is not None:
+        return [html.P(t("pt_check", lang), className="hint")], no_update
     if entry is None or entry.fit is None or not rows:
         return [], no_update
     fit = entry.fit
@@ -965,7 +1047,7 @@ def _stale(_changed, rows, reserve, _rev, lang, key):
     cur = _keys_from_rows(entry.data, rows)
     cur_res = min(max(float(reserve or 0), 0.0), 100.0) / 100
     changed = (any(k is not None and abs(k - u) > 1e-6 for k, u in zip(cur, exact.keys))
-               or abs(cur_res - exact.reserve) > 1e-9)
+               or (entry.pt is None and abs(cur_res - exact.reserve) > 1e-9))
     return html.P(t("stale", lang), className="stale") if changed else []
 
 
@@ -998,7 +1080,8 @@ def _facts(filename: str, data: SharingData, enabled: set[str], names: dict, lan
             f"{fmt_date(s.date_from, lang)} – {fmt_date(s.date_to, lang)} "
             f"({s.n_days} {t('days', lang)}, {fmt_num(s.n_rows, lang)} {t('intervals', lang)})"),
         _kv(t("producer", lang),
-            ", ".join(f"{names[e]} ({e})" for e in data.source_eans)),
+            ", ".join(data.producer_ids) if data.country == "PT"
+            else ", ".join(f"{names[e]} ({e})" for e in data.source_eans)),
         _kv(t("n_dest", lang),
             t("selected_of", lang).format(sel=s.n_selected, n=s.n_dests)),
     ]
@@ -1172,7 +1255,7 @@ def _cmp_table(data: SharingData, exact: Recomputed, enabled: set[str], names: d
 
 
 def _timing(exact: Recomputed, data: SharingData, enabled: set[str], names: dict,
-            lang: str) -> list:
+            lang: str, equal_shares: bool = False) -> list:
     tm = exact.timing
     n = lambda x: fmt_num(x, lang)  # noqa: E731
     stats = html.Div(className="timing-grid", children=[
@@ -1204,9 +1287,12 @@ def _timing(exact: Recomputed, data: SharingData, enabled: set[str], names: dict
     ])
     key_txt = " · ".join(f"{names[e]} {fmt_pct(100 * k, lang, 1)}"
                          for e, k in zip(data.dest_eans, exact.keys))
-    src = t("keys_est", lang) if exact.keys_estimated else t("keys_user", lang)
-    reserve = (f" · {t('reserve', lang)}: {fmt_pct(100 * exact.reserve, lang, 1)}"
-               if exact.reserve else "")
+    portugal = data.country == "PT"
+    src = (t("keys_equal" if portugal and equal_shares else "keys_est", lang)
+           if exact.keys_estimated else t("keys_user", lang))
+    res_label = t("pt_unallocated" if portugal else "reserve", lang)
+    reserve = (f" · {res_label}: {fmt_pct(100 * exact.reserve, lang, 1)}"
+               if exact.reserve > 1e-9 else "")
     loss = grid_loss(data, exact.data, enabled)
     n_sel = len([e for e in data.dest_eans if e in enabled])
     scope = ("" if n_sel == len(data.dest_eans)
@@ -1229,10 +1315,11 @@ def _timing(exact: Recomputed, data: SharingData, enabled: set[str], names: dict
         html.P([html.B(f"{t('keys_used', lang)} ({src}): "), key_txt,
                 f" ({t('keys_sum', lang)} {fmt_pct(100 * sum(exact.keys), lang, 1)}){reserve}"],
                className="keys-line"),
-        html.P(t("edc_check", lang).format(rounds=t(f"rounds_{exact.rounds}", lang),
-                                           pct=fmt_pct(100 * exact.edc_match, lang, 1)),
-               className="hint"),
     ]
+    if not portugal:
+        out.append(html.P(t("edc_check", lang).format(
+            rounds=t(f"rounds_{exact.rounds}", lang),
+            pct=fmt_pct(100 * exact.edc_match, lang, 1)), className="hint"))
     return out
 
 
@@ -1355,7 +1442,8 @@ def _render(key, _rev, selected, _changed, name_values, lang, group,
         _align_daily(dy_a, dy_b)
         b = (_tiles(exact.data, enabled, lang, ref=data, exact=exact.data), ov_b, dy_b, pie_b,
              h(ov_b), h(dy_b), h(pie_b), {}, _cmp_table(data, exact, enabled, names, lang, opts["top"]),
-             _timing(exact, data, enabled, names, lang))
+             _timing(exact, data, enabled, names, lang,
+                     equal_shares=entry.pt is not None and entry.pt.period.equal_shares))
         mode = "compare dual"
         # keep paired graphs the same height
         for fa, fb in ((ov_a, ov_b),):
@@ -1395,6 +1483,48 @@ def _render(key, _rev, selected, _changed, name_values, lang, group,
         status,
         ht_a, h(ht_a), ht_b, h(ht_b),
     )
+
+
+# ---------------------------------------------------------------------------
+# Portugal: dynamic-mode coefficient files for E-REDES
+# ---------------------------------------------------------------------------
+
+
+@app.callback(
+    Output("export-box", "style"),
+    Output("btn-export", "children"),
+    Output("export-hint", "children"),
+    Output("export-info", "children"),
+    Input("result-rev", "data"),
+    Input("data-key", "data"),
+    Input("lang", "value"),
+)
+def _export_box(_rev, key, lang):
+    """Shown for a Portuguese report once the exact method has run."""
+    entry = _cache_get(key)
+    if entry is None or entry.pt is None or entry.exact is None:
+        return {"display": "none"}, "", "", ""
+    return {}, t("export_btn", lang), t("export_hint", lang), ""
+
+
+@app.callback(
+    Output("download-zip", "data"),
+    Output("export-info", "children", allow_duplicate=True),
+    Input("btn-export", "n_clicks"),
+    State("data-key", "data"),
+    State("lang", "value"),
+    prevent_initial_call=True,
+)
+def _export(n, key, lang):
+    entry = _cache_get(key)
+    if not n or entry is None or entry.pt is None or entry.exact is None:
+        raise dash.exceptions.PreventUpdate
+    blob, summ = ptr.export_zip(entry.pt, list(entry.exact.keys))
+    months = "-".join(dict.fromkeys([summ["months"][0], summ["months"][-1]]))
+    info = t("export_done", lang).format(
+        files=summ["files"], pairs=summ["pairs"], months=len(summ["months"]),
+        kwh=fmt_num(summ["delivered_kwh"], lang, 1), exact=fmt_num(summ["exact_kwh"], lang, 1))
+    return dcc.send_bytes(blob, f"coeficientes_dinamicos_{months}.zip"), info
 
 
 # ---------------------------------------------------------------------------

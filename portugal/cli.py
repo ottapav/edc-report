@@ -65,7 +65,7 @@ def summary(r: dict) -> str:
         f"= {r['sharing_error_pct_of_max']:.2f} % of the maximum, "
         f"{r['lost_pct_of_energy']:.2f} % of the energy for sharing, "
         f"in {r['intervals_with_loss']} intervals",
-        f"Dynamic files: {r['coefficient_files']} pairs, {r['coefficient_decimals']} decimals, "
+        f"Dynamic files: {r['coefficient_files']} (pair × month), {r['coefficient_decimals']} decimals, "
         f"deliver {r['applied_by_rounded_coefficients_kwh']:.3f} kWh "
         f"(rounding loss {r['rounding_loss_kwh']:.3f} kWh)",
     ]

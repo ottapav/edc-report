@@ -40,9 +40,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "pie_union": "Total source: {total} kWh",
         # --- web UI ---
         "app_title": "EDC sharing report",
-        "upload_prompt": "Drag and drop the CSV report from edc-cr.cz here, or click to choose a file",
-        "upload_hint": "Part report (<ean>-<ean> columns) or all report (IN/OUT-<ean>-D/O columns). "
-                       "The file is processed in memory and not stored.",
+        "upload_prompt": "Drag and drop the CSV report from edc-cr.cz (or Portuguese meter data) here, or click to choose files",
+        "upload_hint": "Czech EDC: part report (<ean>-<ean> columns) or all report (IN/OUT-<ean>-D/O columns). "
+                       "Portugal: 15-min data (timestamp;cpe;consumption_kwh;injection_kwh) with an optional "
+                       "coefficients file (cpe;coefficient) selected together, or the GECAD workbook (.xlsx); "
+                       "the report is then in English. Files are processed in memory and not stored.",
         "upload_other": "Upload another file",
         "loaded": "Loaded",
         "error": "Could not read the file",
@@ -85,6 +87,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "table_title": "Per destination",
         "col_name": "Name",
         "col_ean": "EAN",
+        "col_id_short": "EAN",
         "col_consumption": "Consumption [kWh]",
         "col_shared": "Shared [kWh]",
         "col_unmet": "Unmet [kWh]",
@@ -213,9 +216,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "pie_no_overlap": "Žádný souběžný překryv",
         "pie_union": "Celkem výroba: {total} kWh",
         "app_title": "Report sdílení EDC",
-        "upload_prompt": "Přetáhněte sem CSV report z portálu edc-cr.cz, nebo klikněte a vyberte soubor",
-        "upload_hint": "Dílčí report (sloupce <ean>-<ean>) nebo úplný report (sloupce IN/OUT-<ean>-D/O). "
-                       "Soubor se zpracuje v paměti a neukládá se.",
+        "upload_prompt": "Přetáhněte sem CSV report z portálu edc-cr.cz (nebo portugalská data), nebo klikněte a vyberte soubory",
+        "upload_hint": "EDC: dílčí report (sloupce <ean>-<ean>) nebo úplný report (sloupce IN/OUT-<ean>-D/O). "
+                       "Portugalsko: 15min data (timestamp;cpe;consumption_kwh;injection_kwh), případně spolu "
+                       "se souborem koeficientů (cpe;coefficient), nebo sešit GECAD (.xlsx); report je pak anglicky. "
+                       "Soubory se zpracují v paměti a neukládají se.",
         "upload_other": "Nahrát jiný soubor",
         "loaded": "Načteno",
         "error": "Soubor se nepodařilo načíst",
@@ -257,6 +262,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "table_title": "Podle odběrného místa",
         "col_name": "Název",
         "col_ean": "EAN",
+        "col_id_short": "EAN",
         "col_consumption": "Odběr [kWh]",
         "col_shared": "Nasdíleno [kWh]",
         "col_unmet": "Nepokryto [kWh]",
@@ -350,6 +356,68 @@ STRINGS: dict[str, dict[str, str]] = {
         "cmp_error_hint": "Chyba EDC = (Nasdíleno přesně − Nasdíleno přibl.) ÷ Nasdíleno přesně: jaká část sdílení, které přesná metoda umožní, přibližné metodě (EDC) unikla. U člena se počítá z jeho přesného sdílení; řádek Σ sčítá vybraná místa a odpovídá boxu nahoře i dlaždici „Mohlo být sdíleno“.",
         "cmp_cov": "Pokryto sdílením: přibl. → přesně",
         "cmp_key": "Klíč",
+    },
+    # Portugal: English text with the Portuguese terms (lang value "pt"; anything missing
+    # falls back to "en"). Portuguese reports are shown in English only.
+    "pt": {
+        "report_title": "Electricity sharing report — Portugal",
+        "report_title_group": "Electricity sharing report — Portugal — {group}",
+        "destination": "Member",
+        "source_a": "PV",
+        "panel_dest": "Members",
+        "panel_dest_hint": "Tick to include; type a name to relabel. CPE in the tooltip.",
+        "panel_source": "Production (all producers pooled)",
+        "panel_group": "Collective (ACC/CER)",
+        "panel_group_ph": "e.g. Rua das Flores 12",
+        "report_type": "Data",
+        "type_all": "15-min meter data (consumption + injection)",
+        "producer": "Producer CPEs",
+        "n_dest": "Members",
+        "col_ean": "CPE",
+        "col_id_short": "CPE",
+        "kpi_note": "Figures follow the member selection; production and grid export are totals of all producers.",
+        "keys": "Coef. [%]",
+        "keys_hint": "Sharing coefficients from the coefficients file (equal shares without one). Edit them "
+                     "and recompute: both columns use the same coefficients. A sum below 100 % leaves the "
+                     "rest unallocated (sold to the grid) in both columns.",
+        "clear_keys": "From file",
+        "recompute_title": "Exact method on the same coefficients (proposal)",
+        "recompute_desc": "Column A is the E-REDES fixed mode (ERSE RAC art. 28–29): each member gets its "
+                          "coefficient × the production of the interval, at most its consumption; what it cannot "
+                          "use goes to the grid. Column B recomputes every 15-min interval with the exact method "
+                          "(presna_staticka.rozdel) on the same coefficients: s_i = min(D_i, k_i · H), with the "
+                          "level H computed to the end, so energy one member cannot use goes to the others.",
+        "recompute_btn": "Recompute with the exact method",
+        "col_edc": "E-REDES fixed coefficients",
+        "col_exact": "Exact method (recomputed)",
+        "vs_edc": "vs fixed",
+        "keys_used": "Coefficients used",
+        "keys_est": "from the coefficients file",
+        "keys_equal": "equal shares (no coefficients file)",
+        "keys_user": "entered",
+        "loss_title": "Sharing error of the fixed coefficients",
+        "loss_text": "The exact method shares {max} kWh (the maximum). With fixed coefficients the collective "
+                     "shares {edc} kWh and sends {kwh} kWh to the grid that members could have used.",
+        "loss_none": "No sharing error: the fixed coefficients share as much as the exact method.",
+        "stale": "Coefficients changed since the last recompute; press the button again.",
+        "cmp_shared_edc": "Shared fixed [kWh]",
+        "cmp_delta_pct": "Fixed-mode error [%]",
+        "cmp_error_hint": "Fixed-mode error = (Shared exact − Shared fixed) ÷ Shared exact: the part of the "
+                          "sharing the exact method makes possible that the fixed coefficients miss. Per member "
+                          "it is relative to that member's exact sharing; the Σ row adds up the selected members "
+                          "and matches the box above.",
+        "cmp_cov": "Covered by sharing: fixed → exact",
+        "cmp_key": "Coefficient",
+        "pt_unallocated": "unallocated",
+        "pt_check": "Column A is computed here from the meter data and the coefficients (the data has no "
+                    "E-REDES allocation of its own). Producers are pooled; the per-producer split matters only "
+                    "for the dynamic-mode files.",
+        "export_btn": "Download dynamic-mode coefficients for E-REDES (ZIP)",
+        "export_hint": "One CSV per consumer–producer pair (ERSE RAC art. 32) with the exact method's "
+                       "coefficients for the coefficients of the last recompute, 3 decimals, rounded down so no "
+                       "member is allocated above its consumption. Confirm separator, header and quarter-hour "
+                       "labels with E-REDES before submitting.",
+        "export_done": "{files} files ({pairs} pairs × {months} month(s)); the rounded coefficients deliver {kwh} of {exact} kWh.",
     },
 }
 

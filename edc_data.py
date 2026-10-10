@@ -152,6 +152,10 @@ class SharingData:
         Destination EAN -> first timestamp with data.
     notes
         Human-readable warnings produced while loading.
+    country
+        ``"CZ"`` (EDC report) or ``"PT"`` (Portuguese data, see :mod:`portugal.report`).
+    producer_ids
+        Portugal: the producers' CPEs pooled into the single source.
     """
 
     frame: pd.DataFrame
@@ -164,6 +168,8 @@ class SharingData:
     first_data: dict[str, pd.Timestamp | None] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     n_rows: int = 0
+    country: str = "CZ"
+    producer_ids: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

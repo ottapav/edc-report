@@ -80,6 +80,44 @@ def parse_times(col: pd.Series) -> pd.Series:
     return pd.to_datetime(out).dt.round("s")
 
 
+def to_period(xlsx, coefs: dict[str, float] | None = None):
+    """The workbook as an :class:`portugal.eredes.Period` (Lisbon time), without a CSV.
+
+    ``coefs`` by CPE; default equal shares for the consumers.
+    """
+    from portugal.eredes import TZ, Period
+    starts, cons, prod = load(xlsx)
+    names = list(cons) + list(prod)
+    equal = coefs is None
+    if equal:
+        coefs = {c: 1 / len(cons) for c in cons}
+    T = len(starts)
+    C = np.zeros((T, len(names)), dtype=np.int64)
+    J = np.zeros((T, len(names)), dtype=np.int64)
+    for i, c in enumerate(cons):
+        C[:, i] = cons[c]
+    for i, p in enumerate(prod, start=len(cons)):
+        J[:, i] = prod[p]
+    notes = [f"GECAD workbook: {len(cons)} consumers, {len(prod)} PV producers, 2019"]
+    if equal:
+        notes.append(f"no coefficients file: equal shares of {100 / len(cons):.2f} % "
+                     f"for the {len(cons)} consumers")
+    if load.mismatches:
+        notes.append("timestamps not matching the PV sheet (rows aligned by position): "
+                     + ", ".join(f"{k} {v}" for k, v in load.mismatches.items()))
+    return Period(cpes=names, coef=[float(coefs.get(c, 0.0)) for c in names],
+                  starts=starts.tz_convert(TZ), consumption=C.tolist(),
+                  injections=J.tolist(), warnings=notes, equal_shares=equal)
+
+
+def is_gecad(xlsx) -> bool:
+    """True for the GECAD workbook (its PV sheet name)."""
+    try:
+        return PV_SHEET in pd.ExcelFile(xlsx).sheet_names
+    except Exception:
+        return False
+
+
 def tidy(starts, cons, prod) -> pd.DataFrame:
     ts = starts.strftime("%Y-%m-%dT%H:%M:%S+00:00")
     rows = []

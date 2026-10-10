@@ -219,8 +219,27 @@ interval. Numbers vary with the machine; Render instances have less than one CPU
 ## Portugal (prototype)
 
 `portugal/` applies the same exact method to Portuguese collective self-consumption
-(*autoconsumo coletivo*, ERSE Regulamento n.º 2/2023). It is a command-line prototype for now,
-not part of the web app.
+(*autoconsumo coletivo*, ERSE Regulamento n.º 2/2023), in the web app and on the command line.
+
+**In the web app.** Drop Portuguese data on the upload box instead of an EDC report: the 15-min
+CSV (`timestamp;cpe;consumption_kwh;injection_kwh`) and, selected together with it, the
+coefficients CSV (`cpe;coefficient`; without it every member gets an equal share), or the GECAD
+workbook (`.xlsx`, ~30 s to read). The app tells the country from the file contents
+(`portugal/report.py`):
+
+| | Czech EDC report | Portuguese data |
+|---|---|---|
+| language | CZ / EN switch | English only (the switch shows just EN) |
+| column A | the EDC report (approximate static method) | E-REDES fixed coefficients, computed from the data |
+| keys | estimated from the report after upload | from the coefficients file, editable |
+| reserve for sale | input field | the part the coefficients leave unallocated |
+| column B | exact static method | exact method on the same coefficients |
+| extra | – | ZIP of dynamic-mode coefficient files for E-REDES, one per pair and month |
+
+All producers (IPr and members that inject) are pooled into one source called `PV`: in the
+fixed mode and in the exact method a member's share does not depend on which producer it comes
+from; the per-producer split only matters for the coefficient files. Loading a Czech report
+again brings the CZ/EN switch back with the earlier choice.
 
 **Why Portugal.** With **fixed coefficients** (art. 29), E-REDES imputes `coefficient × E` to
 each installation and anything above its consumption becomes surplus; nobody else gets it.
@@ -241,7 +260,7 @@ balances) and `cpe;coefficient`. Output in the folder:
   for reference): shared kWh, energy lost to the grid, sharing error as % of the maximum,
   per member;
 * `coeficientes_dinamicos.zip` – one `Coeficiente_Partilha_<consumer>_<producer>_<YYYYMM>_<date>_<seq>.csv`
-  per pair, every quarter-hour present (0 included), columns date, quarter-hour, consumption
+  per pair and calendar month, every quarter-hour present (0 included), columns date, quarter-hour, consumption
   CPE, production CPE, coefficient. The coefficient is the share of the producer's injection
   in that quarter-hour that goes to the consumer.
 
@@ -304,7 +323,7 @@ shares, 12 kWh with consumption shares). The dynamic files with 3 decimals lose 
 | `recompute.py` | Exact static recompute (the `rozdel()` loop in a child process), timing |
 | `procjob.py` | Runs a function in a forked child with progress, cancellation and a time limit |
 | `presna_staticka.py` | Reference implementation of the exact static method |
-| `portugal/` | Portugal prototype: ERSE fixed/proportional modes vs exact (`partilha.py`), data input and dynamic-mode coefficient files (`eredes.py`), CLI (`cli.py`), synthetic data (`exemplo.py`), converter for the public GECAD dataset (`gecad.py`) |
+| `portugal/` | Portugal: ERSE fixed/proportional modes vs exact (`partilha.py`), data input and dynamic-mode coefficient files (`eredes.py`), the web-app adapter – country detection, pooled report, both columns, ZIP export (`report.py`), CLI (`cli.py`), synthetic data (`exemplo.py`), converter for the public GECAD dataset (`gecad.py`) |
 | `figures.py` | Plotly figures, light/dark themes, folding of large groups into "Others" |
 | `i18n.py` | CZ/EN strings and number formatting |
 | `assets/style.css` | Styles, light/dark variables (Dash loads it automatically) |
@@ -437,7 +456,11 @@ needed. It checks that:
 * Portugal: the fixed mode follows art. 28–29 on hand examples, the exact method always shares
   min(E, usable consumption) and never less than the fixed mode, rounded dynamic coefficients
   never allocate above consumption and lose at most one unit per pair and interval, quarter-hour
-  labels on both clock-change days, and the CLI output.
+  labels on both clock-change days, one coefficient file per pair and month, and the CLI output;
+* Portugal in the app: the country is detected from the files, column A equals the reference
+  fixed mode in every interval and column B the exact reference, a Portuguese upload switches
+  the page to English only and a Czech one brings CZ/EN back, the recompute runs as a
+  background job and the ZIP export works.
 
 ## Limitations
 

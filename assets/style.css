@@ -214,6 +214,8 @@ body {
 .tstat-value { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
 .tstat-sub { font-size: 12px; color: var(--ink-2); }
 .keys-line { font-size: 13px; margin: 12px 0 4px; }
+#export-box { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+#export-box .hint { margin: 6px 0 0; }
 .stale { font-size: 13px; color: var(--warn); background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 6px; padding: 6px 10px; margin: 8px 0 0; }
 
 /* ---- single / side-by-side ----------------------------------------- */

@@ -163,3 +163,19 @@ def test_gecad_times_accept_text_serials_with_float_noise_and_cpes_are_20_chars(
                                             pd.Timestamp("2019-03-31 01:00"),
                                             pd.Timestamp("2019-03-31 01:15")]
     assert {len(gecad.cpe(k, 15)) for k in "PCS"} == {20}
+
+
+def test_a_period_over_two_months_gives_one_file_per_pair_and_month(tmp_path):
+    data, coefs = exemplo.synthetic("2026-05-30", "2026-06-02", seed=3)
+    data.to_csv(tmp_path / "d.csv", sep=";", index=False)
+    coefs.to_csv(tmp_path / "k.csv", sep=";", index=False)
+    period = eredes.read_period(tmp_path / "d.csv", tmp_path / "k.csv")
+    _, mats = partilha.compare(period.cpes, period.injections, period.consumption, period.coef)
+    co = eredes.to_coefficients(period, mats)
+    files = eredes.coefficient_files(period, co, "20261010")
+    assert eredes.months_of(files) == ["202605", "202606"]
+    assert len(files) == 2 * len(co.values)
+    may = [n for n in files if "_202605_" in n][0]
+    rows = files[may].splitlines()
+    assert len(rows) == 2 * 96 and rows[-1].split(";")[:2] == ["20260531", "2400"]
+    assert sum(len(files[n].splitlines()) for n in files) == len(co.values) * 4 * 96
