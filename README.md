@@ -293,21 +293,34 @@ and the number of distinct prices. Expect several times longer on the free Rende
 
 ## Architecture
 
-| File | Role |
-|---|---|
-| `app.py` | Dash layout and callbacks, in-memory store, background jobs, config, `/healthz`, optional basic auth |
-| `edc_data.py` | CSV parsing (both layouts), per-member frames keyed by EAN, statistics; memoised derived data |
-| `keyfit.py` | Replay of the approximate static method (EDC) (numpy, in blocks), rough key estimation for 1 and 5 rounds |
-| `bench/keyfit_bench.py` | Reproducible accuracy / time benchmark of the key estimate (synthetic data) |
-| `recompute.py` | Exact static recompute (the `rozdel()` loop in a child process), timing |
-| `procjob.py` | Runs a function in a forked child with progress, cancellation and a time limit |
-| `presna_staticka.py` | Reference implementation of the exact static method |
-| `billing.py` | Shapley values of the billing (exact, price layers) and the settlement in Kč |
-| `figures.py` | Plotly figures, light/dark themes, folding of large groups into "Others" |
-| `i18n.py` | CZ/EN strings and number formatting |
-| `assets/style.css` | Styles, light/dark variables (Dash loads it automatically) |
-| `gunicorn.conf.py`, `render.yaml`, `.python-version` | Deployment |
-| `tests/` | pytest suite (synthetic data, no real CSV needed) |
+The code is in three layers. The domain modules know nothing about the web page; the
+server state keeps uploads and running computations; the UI builds the page and its
+callbacks from both.
+
+| Layer | File | Role |
+|---|---|---|
+| Domain | `edc_data.py` | CSV parsing (both layouts), per-member frames keyed by EAN, statistics; memoised derived data |
+| | `keyfit.py` | Replay of the approximate static method (EDC) (numpy, in blocks), rough key estimation for 1 and 5 rounds |
+| | `presna_staticka.py` | Reference implementation of the exact static method |
+| | `recompute.py` | Exact static recompute (the `rozdel()` loop in a child process), timing, sharing error |
+| | `billing.py` | Shapley values of the billing (exact, price layers), the settlement in Kč, values per 15 min |
+| | `procjob.py` | Runs a function in a forked child with progress, cancellation and a time limit |
+| | `figures/` | Plotly figures: `base.py` themes, member colours and the shared chart shapes (stacked bars, pie, stacked areas by day and within a day, heatmap, pairing of the two columns); `energy.py` the report in kWh; `money.py` the billing in Kč |
+| | `i18n.py` | CZ/EN strings and number formatting |
+| Server state | `config.py` | Settings from environment variables |
+| | `store.py` | Uploaded reports and their results (key estimate, recompute, billing), newest `EDC_CACHE_MAX` kept |
+| | `jobs.py` | Background computations: queue, child process, cancellation, progress |
+| UI | `ui/layout.py` | The page; both computation cards come from one `job_card()` with ids `<kind>-btn`, `<kind>-progress`, … |
+| | `ui/members.py` | The members grid (tick, name, key, price) and reading what was typed in it |
+| | `ui/widgets.py`, `ui/views.py` | Tiles, facts, tables, result summaries (pure functions of the data) |
+| | `ui/panel.py` | Callbacks: labels (one table of id, property and string), theme, upload, grid buttons |
+| | `ui/compute.py` | Callbacks of the computation cards: start, one shared progress poll, results |
+| | `ui/report.py` | Callbacks of the report: the two columns, the hourly plot, the selected day |
+| App | `app.py` | Creates the Dash app, `/healthz`, optional basic auth |
+| | `assets/style.css` | Styles, light/dark variables (Dash loads it automatically) |
+| | `gunicorn.conf.py`, `render.yaml`, `.python-version` | Deployment |
+| Checks | `tests/` | pytest suite (synthetic data, no real CSV needed) |
+| | `bench/keyfit_bench.py` | Reproducible accuracy / time benchmark of the key estimate (synthetic data) |
 
 **One process on purpose.** An upload, its key estimate, a running recompute and its progress
 live in the memory of one process, and every request of that browser session must reach it.
@@ -318,8 +331,9 @@ This is the failure mode fixed in robopid-simulator: there, with two workers, th
 polls of a job reached the worker that did not start it, and the button looked dead. More
 workers here would need a shared store such as Redis, not a bigger worker count.
 
-**Background jobs.** Key estimation (after upload), the `rozdel()` loop of the recompute and
-the Shapley values of the billing each run in a **forked child process** (`procjob.py`), started from a job thread. The web
+**Background jobs** (`jobs.py`). Key estimation (after upload), the `rozdel()` loop of the
+recompute and the Shapley values of the billing each run in a **forked child process**
+(`procjob.py`), started from a job thread. The web
 server's request threads therefore stay free for progress polls and page renders, the child
 gets a core of its own, and its arguments (big numpy arrays) are shared with the parent by
 `fork` instead of being pickled; only progress messages and the small result travel back.
@@ -327,8 +341,8 @@ At most `EDC_MAX_JOBS` jobs run at once, and the rest wait in a visible queue. T
 polls every 200 ms, and only the poll callback draws the progress bar and the button state.
 Because a job is a process, it can be **cancelled**, and the slot is freed at once:
 
-* when the same browser uploads another file (the old report and its jobs are dropped), or
-  the report is evicted from the cache;
+* when its report is gone: the same browser uploaded another file, or the report was evicted
+  from the store (a job checks this itself, so the store needs no knowledge of jobs);
 * when the page stops polling for `EDC_JOB_IDLE_S` seconds (tab closed). A waiting job leaves
   the queue the same way;
 * when a key estimate runs longer than `EDC_FIT_TIMEOUT` seconds. It stops itself after about

@@ -11,13 +11,13 @@ Only the all report with one producer is supported (demand is needed).
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 
 import numpy as np
 import pandas as pd
 
-from keyfit import KeyFit, replay_match
+from keyfit import replay_match
 from procjob import run_in_child
 from presna_staticka import rozdel
 from edc_data import (
@@ -125,7 +125,6 @@ class Timing:
     t_enough: float = 0.0
     t_full: float = 0.0
     t_prepare: float = 0.0      # s, data conversion + building the result
-    t_fit: float = 0.0          # s, key fitting (0 if keys were given)
     t_wall: float = 0.0         # s, whole job
     clock: str = ""             # which clock measured the rozdel calls
 
@@ -147,8 +146,6 @@ class Recomputed:
     timing: Timing
     edc_match: float           # replay of today's method with these keys vs report
     rounds: int = 5            # EDC rounds used for that replay
-    fit: KeyFit | None = None
-    notes: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -164,18 +161,6 @@ class GridLoss:
     def pct_of_max(self) -> float:
         """Sharing error: the part of the maximum (exact-method) sharing EDC missed."""
         return 100 * self.lost / self.shared_exact if self.shared_exact > 0 else 0.0
-
-    @property
-    def pct_of_production(self) -> float:
-        return 100 * self.lost / self.production if self.production > 0 else 0.0
-
-    @property
-    def grid_edc(self) -> float:
-        return max(0.0, self.production - self.shared_edc)
-
-    @property
-    def pct_of_grid(self) -> float:
-        return 100 * self.lost / self.grid_edc if self.grid_edc > 0 else 0.0
 
     @property
     def negligible(self) -> bool:
@@ -202,7 +187,6 @@ def recompute(
     progress: ProgressFn = _noop,
     chunk: int = 96,
     *,
-    fit: KeyFit | None = None,
     keys_estimated: bool = False,
     rounds: int = 5,
     cancelled: Callable[[], bool] | None = None,
@@ -255,4 +239,4 @@ def recompute(
     tm.t_wall = time.perf_counter() - t_job
     progress("done", 1.0)
     return Recomputed(data=new, keys=keys, keys_estimated=keys_estimated, reserve=reserve,
-                      timing=tm, edc_match=edc_match, rounds=rounds, fit=fit)
+                      timing=tm, edc_match=edc_match, rounds=rounds)
