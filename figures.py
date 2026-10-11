@@ -37,7 +37,7 @@ THEMES: dict[str, dict] = {
         unshared="#8c8c8c", unmet="#c7c7c7", total="rgba(0,0,0,0.9)", others="#a9b8cc",
         source="#339933", wasted="#cc3326", marker="#000000",
         label_bg="rgba(255,255,255,0.85)", hover_bg="#ffffff", hover_border="#d0d7de",
-        heat="YlOrRd", area_alpha=0.75, members="#3b6fb6",
+        heat="YlOrRd", area_alpha=0.75, members="#3b6fb6", source_ink="#1d5c1d",
     ),
     "dark": dict(
         paper="#161b22", ink="#e6edf3", muted="#9da7b3", grid="#2a313c",
@@ -47,7 +47,7 @@ THEMES: dict[str, dict] = {
         # dark surface: low values stay near the surface, high values glow
         heat=[[0.0, "#1c2128"], [0.2, "#4a1d1a"], [0.45, "#a52a22"],
               [0.7, "#e8742a"], [1.0, "#ffe08a"]],
-        area_alpha=0.85, members="#5b8fd6",
+        area_alpha=0.85, members="#5b8fd6", source_ink="#b9efb9",
     ),
 }
 
@@ -631,12 +631,23 @@ def _bill_colour(col: str, cmap: dict[str, str], th: dict) -> str:
     return cmap.get(col, OTHER_COLOUR)
 
 
+def _producer_fill(th: dict) -> dict:
+    """The producer's area: its green with a cross-hatch, so it never reads as the
+    member that got tab10 green (the third one)."""
+    return dict(shape="x", size=6, solidity=0.3, fgcolor=th["source_ink"],
+                bgcolor=_rgba(th["source"], th["area_alpha"]))
+
+
 def _bill_areas(fig: go.Figure, df: pd.DataFrame, cmap: dict, th: dict, names: dict,
                 lang: str, n_rest: int) -> None:
     for col in df.columns:
         colour = _bill_colour(col, cmap, th)
-        fill = (dict(fillpattern=_hatch(th)) if col == UNSELECTED
-                else dict(fillcolor=_rgba(colour, th["area_alpha"])))
+        if col == UNSELECTED:
+            fill = dict(fillpattern=_hatch(th))
+        elif col == PRODUCER:
+            fill = dict(fillpattern=_producer_fill(th))
+        else:
+            fill = dict(fillcolor=_rgba(colour, th["area_alpha"]))
         fig.add_scatter(x=df.index, y=df[col].to_numpy(), mode="lines", stackgroup="one",
                         name=_bill_label(col, names, lang, n_rest),
                         hovertemplate="%{y:,.2f} " + t("currency", lang),
@@ -681,7 +692,7 @@ def fig_bill_split(bill, data: SharingData, names: dict[str, str], enabled: set[
     else:
         rows.sort(key=lambda r: r["a"] + r["b"])
     many = len(rows) > 1
-    rows.append(dict(label=_bill_label(PRODUCER, names, lang), a=bill.producer_share,
+    rows.append(dict(key=PRODUCER, label=_bill_label(PRODUCER, names, lang), a=bill.producer_share,
                      b=bill.feed_in_value, ca=th["source"], cb=th["unshared"],
                      la=t("bill_col_share_short", lang), lb=t("bill_feed_in_value", lang),
                      summary=False))
@@ -695,8 +706,12 @@ def fig_bill_split(bill, data: SharingData, names: dict[str, str], enabled: set[
     real = [(i, r) for i, r in enumerate(rows) if r is not None]
     ys = [i for i, _ in real]
     max_val = max((max(r["a"], 0) + max(r["b"], 0) for _, r in real), default=0.0) or 1.0
+    prod = _producer_fill(th)
     fig.add_bar(y=ys, x=[r["a"] for _, r in real], orientation="h",
-                marker=dict(color=[r["ca"] for _, r in real], line=dict(color=th["paper"], width=1)),
+                marker=dict(color=[r["ca"] for _, r in real], line=dict(color=th["paper"], width=1),
+                            pattern=dict(shape=["x" if r.get("key") == PRODUCER else ""
+                                                for _, r in real],
+                                         size=6, solidity=0.3, fgcolor=prod["fgcolor"])),
                 customdata=[[r["label"], r["la"]] for _, r in real],
                 hovertemplate="%{customdata[0]}<br>%{customdata[1]}: %{x:,.2f} " + cur
                 + "<extra></extra>")
