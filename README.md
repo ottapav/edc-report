@@ -12,8 +12,8 @@ with the computation timed per 15-min interval.
 > souhrny, denní a hodinové grafy, teplotní mapu a podíl, který „mohl být sdílen“.
 > Z reportu odhadne alokační klíče (přibližná statická metoda EDC s 1 nebo 5 koly, i pro velké skupiny).
 > Jedním tlačítkem přepočítá sdílení přesnou statickou metodou a porovná ji s dneškem.
-> Dalším tlačítkem spočítá vyúčtování sdílené elektřiny podle Shapleyho hodnoty
-> (zadáte ceny od prodejce a výkupní cenu výrobny).
+> Dalším tlačítkem spočítá vyúčtování sdílené elektřiny podle přínosu (Shapleyho hodnota)
+> (zadáte ceny od prodejce a výkupní ceny výroben).
 > Rozhraní je v češtině i angličtině, se světlým i tmavým režimem.
 
 ![Report of one group, light mode](docs/screenshot-light.png)
@@ -25,7 +25,7 @@ with the computation timed per 15-min interval.
 - [Using the app](#using-the-app)
 - [How the allocation keys are estimated](#how-the-allocation-keys-are-estimated)
 - [Exact static method and timing](#exact-static-method-and-timing)
-- [Billing by the Shapley value](#billing-by-the-shapley-value)
+- [Billing by contribution (the Shapley value)](#billing-by-contribution-the-shapley-value)
 - [Architecture](#architecture)
 - [Performance](#performance)
 - [Deployment on Render](#deployment-on-render)
@@ -84,7 +84,7 @@ with the computation timed per 15-min interval.
 * **Timing:** the number of intervals evaluated, total time, and time per interval, split by
   the method's fast paths.
 
-**Billing by the Shapley value (proposal):**
+**Billing by contribution (the Shapley value; proposal):**
 
 * **Prices:** each member's supplier price (the *Price* column of the grid, next to the keys)
   and each producer's feed-in price (next to its name), or default prices for the empty ones.
@@ -242,7 +242,7 @@ everyone and 8 980 need H. That takes 50–65 ms in total, about 1.5–1.9 µs p
 about 4.5 µs with H. For 150 members and one month it takes about 70–80 ms and 25 µs per
 interval. Numbers vary with the machine; Render instances have less than one CPU.
 
-## Billing by the Shapley value
+## Billing by contribution (the Shapley value)
 
 `billing.py` splits the benefit of sharing between the producers and the members by the
 Shapley value. The benefit of a kWh that producer *i* shares to member *j* is `p_j − f_i`
