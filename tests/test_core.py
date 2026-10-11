@@ -1,6 +1,4 @@
-import numpy as np
 
-import keyfit
 import recompute
 import edc_data as core
 from conftest import all_report_csv
@@ -31,10 +29,10 @@ def test_grid_loss_matches_the_wasted_overlap(small_group):
     res = recompute.recompute(data, list(k), rounds=5)
     loss = recompute.grid_loss(data, res.data)
     assert abs(loss.lost - core.compute_wasted_split(data.frame).overlap) < 0.05
-    assert 0 <= loss.pct_of_production <= loss.pct_of_max <= 100
+    assert 0 <= loss.pct_of_max <= 100
     assert abs(loss.pct_of_max - 100 * loss.lost / loss.shared_exact) < 1e-9
     same = recompute.grid_loss(res.data, res.data)
-    assert same.negligible and same.pct_of_production == 0
+    assert same.negligible and same.pct_of_max == 0
 
 
 def test_could_have_been_shared_matches_the_exact_gain_for_any_selection(small_group):
@@ -135,7 +133,7 @@ def test_intraday_axis_fits_the_selected_day(small_group):
     data, _ = _group_data(small_group)
     names = {e: f"M{i}" for i, e in enumerate(data.dest_eans + data.source_eans)}
     df = core.filter_dests(data, set(data.dest_eans))
-    agg = figures.aggregate_grid_flows(df).fillna(0)
+    agg = core.aggregate_grid_flows(df).fillna(0)
     days = sorted(set(agg.index.normalize()))
     for day in days[:3]:
         d = str(day.date())

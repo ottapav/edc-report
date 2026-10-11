@@ -39,7 +39,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "pie_no_overlap": "No concurrent overlap",
         "pie_union": "Total source: {total} kWh",
         # --- web UI ---
-        "app_title": "EDC sharing report",
         "upload_prompt": "Drag and drop the CSV report from edc-cr.cz here, or click to choose a file",
         "upload_hint": "Part report (<ean>-<ean> columns) or all report (IN/OUT-<ean>-D/O columns). "
                        "The file is processed in memory and not stored.",
@@ -55,7 +54,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "panel_group_ph": "e.g. 0000018947",
         "all": "All",
         "none": "None",
-        "language": "Language",
         # info section
         "info_title": "General information",
         "file": "File",
@@ -136,7 +134,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "keys_hint": "Allocation keys are estimated from the report right after upload "
                      "(so that the approximate static method reproduces it); correct them before the "
                      "recompute. Keys act as ratios; 0 = member gets nothing.",
-        "key_ph": "auto",
         "clear_keys": "Estimate",
         "reserve": "Reserve for sale [%]",
         "recompute_title": "Exact static method (proposal)",
@@ -147,7 +144,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "part_no_recompute": "Recompute needs an all report (members' consumption is required).",
         "phase_fit": "Estimating keys from the report",
         "phase_compute": "Recomputing 15-min intervals",
-        "phase_done": "Done",
         "phase_error": "Recompute failed",
         "col_edc": "Approximate static method (EDC report)",
         "col_exact": "Exact static method (recomputed)",
@@ -161,7 +157,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "t_members": "Group members",
         "t_clock_cpu": "CPU time of the compute thread",
         "t_clock_wall": "wall-clock time",
-        "t_fit": "Key estimation",
         "t_wall": "Whole job (incl. data preparation)",
         "keys_used": "Keys used",
         "keys_est": "estimated from report",
@@ -282,7 +277,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "pie_subtitle_exact": "Mohlo být sdíleno = kolik vybraným přidá přesná statická metoda",
         "pie_no_overlap": "Žádný souběžný překryv",
         "pie_union": "Celkem výroba: {total} kWh",
-        "app_title": "Report sdílení EDC",
         "upload_prompt": "Přetáhněte sem CSV report z portálu edc-cr.cz, nebo klikněte a vyberte soubor",
         "upload_hint": "Dílčí report (sloupce <ean>-<ean>) nebo úplný report (sloupce IN/OUT-<ean>-D/O). "
                        "Soubor se zpracuje v paměti a neukládá se.",
@@ -298,7 +292,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "panel_group_ph": "např. 0000018947",
         "all": "Vše",
         "none": "Nic",
-        "language": "Jazyk",
         "info_title": "Obecné informace",
         "file": "Soubor",
         "report_type": "Typ reportu",
@@ -375,7 +368,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "keys_hint": "Alokační klíče se odhadnou z reportu hned po nahrání (tak, aby je "
                      "přibližná statická metoda reprodukovala); před přepočtem je můžete opravit. "
                      "Klíče se berou jako poměry; 0 = člen nedostane nic.",
-        "key_ph": "auto",
         "clear_keys": "Odhad",
         "reserve": "Rezerva k prodeji [%]",
         "recompute_title": "Přesná statická metoda (návrh)",
@@ -386,7 +378,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "part_no_recompute": "Přepočet potřebuje úplný report (odběry členů).",
         "phase_fit": "Odhad klíčů z reportu",
         "phase_compute": "Přepočet čtvrthodin",
-        "phase_done": "Hotovo",
         "phase_error": "Přepočet selhal",
         "col_edc": "Přibližná statická metoda (report EDC)",
         "col_exact": "Přesná statická metoda (přepočet)",
@@ -400,7 +391,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "t_members": "Členů skupiny",
         "t_clock_cpu": "CPU čas výpočetního vlákna",
         "t_clock_wall": "čas na hodinách",
-        "t_fit": "Odhad klíčů",
         "t_wall": "Celá úloha (vč. přípravy dat)",
         "keys_used": "Použité klíče",
         "keys_est": "odhad z reportu",

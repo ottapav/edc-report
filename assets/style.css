@@ -8,7 +8,6 @@
   --line: #e3e6e8;
   --line-soft: #f0f2f3;
   --field: #ffffff;
-  --field-off: #f3f4f5;
   --accent: #339933;
   --accent-hover: #2b832b;
   --accent-off: #9cc79c;
@@ -40,7 +39,6 @@
   --line: #2a313c;
   --line-soft: #21262d;
   --field: #0d1117;
-  --field-off: #1c2128;
   --accent: #3da63d;
   --accent-hover: #4cb84c;
   --accent-off: #2c5a2c;
@@ -62,7 +60,7 @@
   :root:not([data-theme]) {
     color-scheme: dark;
     --bg: #0d1117; --card: #161b22; --ink: #e6edf3; --ink-2: #9da7b3; --ink-3: #7d8590;
-    --line: #2a313c; --line-soft: #21262d; --field: #0d1117; --field-off: #1c2128;
+    --line: #2a313c; --line-soft: #21262d; --field: #0d1117;
     --accent: #3da63d; --accent-hover: #4cb84c; --accent-off: #2c5a2c; --accent-soft: #15301a;
     --accent-ink: #8fd88f; --track: #21262d; --upload-border: #3d444d; --head-a: #21262d;
     --good: #56d364; --err: #ff7b72; --err-bg: #2d1416; --err-line: #5c2227;
@@ -110,8 +108,6 @@ body {
 .report { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; align-items: start; }
 .report.hidden { display: none; }
 .main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-.grid-2-pie { grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
 .card h2 { font-size: 15px; margin: 0 0 12px; font-weight: 650; }
 
@@ -127,17 +123,14 @@ body {
 .mini:hover { border-color: var(--ink-3); color: var(--ink); }
 .hint { color: var(--ink-3); font-size: 12px; margin: 0 0 8px; }
 .dest-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
-.dest-check { display: inline-flex; }
-.dest-check label { display: inline-flex; margin: 0; cursor: pointer; }
-.dest-check input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; margin: 0; }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; margin-right: 6px; vertical-align: middle; }
 .dest-row .swatch { margin-right: 0; }
 .name-in, .text-in { font: inherit; font-size: 13px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; min-width: 0; flex: 1; width: 100%; }
 .name-in:focus, .text-in:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 .ean { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--ink-3); flex: none; }
 .field-label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
-.radios label, .checks label { display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 3px 0; cursor: pointer; }
-.radios input, .checks input { accent-color: var(--accent); margin: 0; }
+.radios label { display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 3px 0; cursor: pointer; }
+.radios input { accent-color: var(--accent); margin: 0; }
 .radios { margin-bottom: 8px; }
 
 /* ---- info ------------------------------------------------------------ */
@@ -179,20 +172,18 @@ body {
 #lbl-day-hint { margin: 6px 0 0; }
 
 /* ---- panel: keys --------------------------------------------------- */
-.dest-head { display: flex; justify-content: flex-end; font-size: 11px; color: var(--ink-3); padding-right: 2px; margin-bottom: 2px; }
 .name-cell { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .name-cell .ean { font-size: 10px; margin-top: 1px; padding-left: 2px; }
 .dest-row { align-items: flex-start; }
-.dest-row .dest-check, .dest-row .swatch { margin-top: 8px; }
-.key-in, .num-in { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; width: 72px; text-align: right; font-variant-numeric: tabular-nums; }
-.key-in:focus, .num-in:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-.key-in:disabled { background: var(--field-off); }
+.dest-row .swatch { margin-top: 8px; }
+.num-in { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; width: 72px; text-align: right; font-variant-numeric: tabular-nums; }
+.num-in:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 .keys-foot { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; }
 .keys-foot .hint { margin: 0; flex: 1; }
 
 /* ---- recompute card ------------------------------------------------- */
-.recompute-card h2 { margin-bottom: 4px; }
-.recompute-card > .hint { margin: 0 0 12px; }
+.job-card h2 { margin-bottom: 4px; }
+.job-card > .hint { margin: 0 0 12px; }
 .rc-row { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
 .btn-primary { font: inherit; font-weight: 600; font-size: 14px; color: var(--on-accent); background: var(--accent); border: 0; border-radius: 8px; padding: 9px 16px; cursor: pointer; }
 .btn-primary:hover { background: var(--accent-hover); }
@@ -254,7 +245,7 @@ body {
 .tbl td.pos { color: var(--good); font-weight: 600; }
 
 @media (max-width: 1250px) {
-  .grid-2, .grid-2-pie, .compare.single .col-a, .compare.dual { grid-template-columns: minmax(0, 1fr); }
+  .compare.single .col-a, .compare.dual { grid-template-columns: minmax(0, 1fr); }
   /* one column: the two reports follow each other */
   .compare.dual { grid-template-rows: none; }
   .compare.dual .col { display: flex; flex-direction: column; grid-row: auto; }
@@ -274,8 +265,8 @@ body {
 }
 
 /* ---- inputs follow the theme ---------------------------------------- */
-input, .name-in, .text-in, .key-in, .num-in { background: var(--field); color: var(--ink); }
-.name-in::placeholder, .text-in::placeholder, .key-in::placeholder { color: var(--ink-3); }
+input, .name-in, .text-in, .num-in { background: var(--field); color: var(--ink); }
+.name-in::placeholder, .text-in::placeholder { color: var(--ink-3); }
 
 /* ---- theme icon next to the language switch ------------------------ */
 .lang { display: flex; align-items: center; gap: 8px; }
@@ -286,10 +277,6 @@ input, .name-in, .text-in, .key-in, .num-in { background: var(--field); color: v
 .icon-btn:hover { border-color: var(--ink-3); }
 
 /* ---- key estimate --------------------------------------------------- */
-.key-cell { display: flex; flex-direction: column; align-items: flex-end; flex: none; }
-.key-info { font-size: 10px; color: var(--ink-3); min-height: 12px; margin-top: 1px;
-            white-space: nowrap; font-variant-numeric: tabular-nums; }
-.key-info.warn { color: var(--warn); }
 .fit-line { font-size: 13px; margin: 12px 0 2px; }
 
 /* ---- Dash date picker (Dash 4) in dark mode ------------------------- */

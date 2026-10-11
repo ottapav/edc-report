@@ -39,11 +39,16 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Callable
 
 import numpy as np
+import pandas as pd
 
 ProgressFn = Callable[[str, float], None]
+
+#: column of the producer's share in :attr:`BillResult.per_interval`
+PRODUCER = "__producer__"
 
 #: float elements per block of layer snapshots (layers × nodes × grid)
 _BLOCK = 1_500_000
@@ -317,7 +322,6 @@ class Billing:
     feed_in_value: float           # Kč: what the shared energy would have earned as feed-in
     realized: float                # Kč: benefit of the report's sharing
     maximum: float                 # Kč: benefit of the best possible sharing
-    shapley: np.ndarray            # Kč: unscaled Shapley values of the benchmark
 
     @property
     def efficiency(self) -> float:
@@ -344,5 +348,31 @@ def settle(res: ShapleyTotals, shared_kwh) -> Billing:
     fiv = f * float(shared.sum())
     return Billing(prices=p, feed_in=f, shared=shared, saving=saving, share=share,
                    payment=payment, producer_share=income - fiv, producer_income=income,
-                   feed_in_value=fiv, realized=realized, maximum=res.maximum,
-                   shapley=res.consumers.copy())
+                   feed_in_value=fiv, realized=realized, maximum=res.maximum)
+
+
+@dataclass
+class BillResult:
+    """A finished billing of one report: the Shapley values, the settlement, and the
+    values per 15-min interval for the plots."""
+
+    totals: ShapleyTotals
+    settlement: Billing
+    index: pd.DatetimeIndex        # the report's 15-min intervals
+    members: list[str]             # consumer EANs in report order
+
+    @classmethod
+    def build(cls, totals: ShapleyTotals, shared_kwh, index: pd.DatetimeIndex,
+              members: list[str]) -> "BillResult":
+        return cls(totals, settle(totals, shared_kwh), index, list(members))
+
+    @cached_property
+    def per_interval(self) -> pd.DataFrame:
+        """Kč per 15 min, scaled like the settlement (to the realized benefit): one
+        column per member and :data:`PRODUCER`; 0 in intervals without production."""
+        bill, res = self.settlement, self.totals
+        scale = bill.realized / bill.maximum if bill.maximum > 0 else 0.0
+        vals = np.zeros((len(self.index), len(self.members) + 1))
+        if len(res.t_index):
+            vals[res.t_index] = res.t_values.astype(float) * scale
+        return pd.DataFrame(vals, index=self.index, columns=self.members + [PRODUCER])

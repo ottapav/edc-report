@@ -6,9 +6,11 @@ from math import factorial
 import numpy as np
 import pytest
 
-import app
 import billing as B
 import figures
+import jobs
+import store
+from ui import compute, members, report, views
 import edc_data as core
 from conftest import all_report_csv, synthetic_group
 
@@ -101,17 +103,27 @@ def test_settlement_adds_up():
 @pytest.fixture
 def entry_key():
     P, D, S, _ = synthetic_group(5, 96 * 30, 5, seed=3)
-    data = core.load_report(all_report_csv(P, D, S))
-    key = app._cache_put("t.csv", data)
+    key = store.put("t.csv", core.load_report(all_report_csv(P, D, S)))
     yield key
-    app._cache_drop(key)
+    store.drop(key)
 
 
-def _wait(job, seconds=60):
+def _wait(job_id, seconds=60):
+    job = jobs.get(job_id)
     t0 = time.perf_counter()
-    while not job["done"] and time.perf_counter() - t0 < seconds:
+    while not job.done and time.perf_counter() - t0 < seconds:
         time.sleep(0.05)
-    assert job["done"]
+    assert job.done and job.error is None and job.error_key is None
+
+
+def _billed(key, lang="cs", default=None):
+    """Run the billing of the stored report with prices 4.0, 4.3, … Kč/kWh."""
+    entry = store.get(key)
+    rows = [{"ean": e, "price": None if default else 4.0 + 0.3 * j}
+            for j, e in enumerate(entry.data.dest_eans)]
+    job_id = compute.start_bill(1, key, rows, 1.2, default, lang)["job"]
+    _wait(job_id)
+    return entry, rows, job_id
 
 
 def test_prices_from_the_grid_with_default():
@@ -119,47 +131,46 @@ def test_prices_from_the_grid_with_default():
     d = core.load_report(all_report_csv(P, D, S))
     rows = [{"ean": d.dest_eans[0], "price": 4.5}, {"ean": d.dest_eans[1], "price": "3,9"},
             {"ean": d.dest_eans[2], "price": None}]
-    assert app._prices_from_rows(d, rows, None) == [4.5, 3.9, None]
-    assert app._prices_from_rows(d, rows, 4.1) == [4.5, 3.9, 4.1]
-    assert app._bill_inputs(d, rows, None, 4.1) == (None, "bill_need_feed_in")
-    assert app._bill_inputs(d, rows, 1.2, None) == (None, "bill_need_prices")
-    assert app._bill_inputs(d, rows, "1,2", 4.1) == (([4.5, 3.9, 4.1], 1.2), None)
+    assert members.prices(d, rows, None) == [4.5, 3.9, None]
+    assert members.prices(d, rows, 4.1) == [4.5, 3.9, 4.1]
+    assert compute.bill_inputs(d, rows, None, 4.1) == (None, "bill_need_feed_in")
+    assert compute.bill_inputs(d, rows, 1.2, None) == (None, "bill_need_prices")
+    assert compute.bill_inputs(d, rows, "1,2", 4.1) == (([4.5, 3.9, 4.1], 1.2), None)
 
 
-def test_bill_job_and_render(entry_key):
-    entry = app._cache_get(entry_key)
-    rows = [{"ean": e, "price": None} for e in entry.data.dest_eans]
-    out = app._start_bill(1, entry_key, rows, 1.2, 4.3, "cs")
-    job_id = out[0]
-    _wait(app._JOBS[job_id])
-    state = app._poll_state(job_id, 0, "cs")
+def test_bill_job_and_result(entry_key):
+    entry, rows, job_id = _billed(entry_key, default=4.3)
+    state = compute.poll_state(job_id, 0, "cs")
     assert state[2] == "progress done" and state[5] == 1
-    assert entry.bill is not None and len(entry.bill.consumers) == 5
-    result, stale, _title, table, _tt = app._bill_render(1, entry_key, "cs", None, None, [],
-                                                          1.2, 4.3, [], rows)
-    assert result and table and stale == []
+    assert len(entry.bill.totals.consumers) == 5
+    out = compute.bill_result(1, entry_key, "cs", None, None, 1.2, 4.3, [], [], rows)
+    assert out["result"] and out["table"] and out["stale"] == []
     # a changed price marks the billing as stale until the button is pressed again
-    _r, stale, *_ = app._bill_render(1, entry_key, "cs", None, None, [], 1.2, 4.4, [], rows)
-    assert stale
+    assert compute.bill_result(1, entry_key, "cs", None, None, 1.2, 4.4, [], [], rows)["stale"]
+
+
+def test_bill_needs_prices(entry_key):
+    entry = store.get(entry_key)
+    rows = [{"ean": e, "price": None} for e in entry.data.dest_eans]
+    out = compute.start_bill(1, entry_key, rows, 1.2, None, "en")
+    assert out["cls"] == "progress error" and "price" in out["text"]
 
 
 def test_billing_in_the_right_column(entry_key):
     """The billing draws the same five figures as the exact method, in Kč; its
     per-interval values add up to the settlement."""
-    entry = app._cache_get(entry_key)
-    data = entry.data
-    rows = [{"ean": e, "price": 4.0 + 0.3 * j} for j, e in enumerate(data.dest_eans)]
-    _wait(app._JOBS[app._start_bill(1, entry_key, rows, 1.2, None, "en")[0]])
-    assert app._right_mode(entry, "bill") == "bill"
-    assert app._right_mode(entry, "exact") == "bill"          # no recompute yet
-    bill = app._billing(entry)
-    enabled = set(data.dest_eans[:3])                         # two members unticked
-    cols, n_rest = app._bill_cols(entry, enabled, None)
-    assert list(cols.columns) == list(data.dest_eans[:3]) + [figures.UNSELECTED, figures.PRODUCER]
-    member_sum = cols.drop(columns=figures.PRODUCER).to_numpy().sum()
-    assert member_sum == pytest.approx(bill.share.sum(), rel=1e-5)
-    assert cols[figures.PRODUCER].sum() == pytest.approx(bill.producer_share, abs=0.05)
-    names = dict(app.default_names(data, "en"), **{figures.PRODUCER: "Source A"})
+    entry, _rows, _job = _billed(entry_key, "en")
+    data, bill = entry.data, entry.bill.settlement
+    assert report.right_mode(entry, "bill") == "bill"
+    assert report.right_mode(entry, "exact") == "bill"          # no recompute yet
+    enabled = set(data.dest_eans[:3])                           # two members unticked
+    cols, n_rest = figures.bill_columns(entry.bill.per_interval, data, enabled, None)
+    assert n_rest == 0
+    assert list(cols.columns) == list(data.dest_eans[:3]) + [figures.UNSELECTED, B.PRODUCER]
+    assert cols.drop(columns=B.PRODUCER).to_numpy().sum() == pytest.approx(bill.share.sum(),
+                                                                           rel=1e-5)
+    assert cols[B.PRODUCER].sum() == pytest.approx(bill.producer_share, abs=0.05)
+    names = members.default_names(data, "en")
     th = figures.theme("dark")
     split = figures.fig_bill_split(bill, data, names, enabled, lang="en", th=th)
     assert len(split.data) == 2 and split.layout.height >= 320
@@ -168,37 +179,26 @@ def test_billing_in_the_right_column(entry_key):
     day = str(data.frame.index[len(data.frame) // 2].date())
     assert figures.fig_bill_daily(cols, data, names, lang="en", sel_day=day, th=th).data
     assert figures.fig_bill_intraday(cols, data, names, day, lang="en", th=th).data
-    assert figures.fig_bill_heatmap(cols, lang="en", th=th).data
-    assert app._bill_tiles(bill, data, enabled, "cs")
-
-
-def test_bill_needs_prices(entry_key):
-    entry = app._cache_get(entry_key)
-    rows = [{"ean": e, "price": None} for e in entry.data.dest_eans]
-    out = app._start_bill(1, entry_key, rows, 1.2, None, "en")
-    assert out[3] == "progress error" and "price" in out[5]
+    assert figures.fig_bill_heatmap(entry.bill.per_interval.sum(axis=1), lang="en", th=th).data
+    assert views.bill_tiles(bill, data, enabled, "cs")
 
 
 def test_paired_figures_line_up(entry_key):
     """Right-column figures take the left one's member order, height and legend rows."""
-    entry = app._cache_get(entry_key)
-    data = entry.data
-    rows = [{"ean": e, "price": 4.0 + 0.3 * j} for j, e in enumerate(data.dest_eans)]
-    _wait(app._JOBS[app._start_bill(1, entry_key, rows, 1.2, None, "cs")[0]])
+    entry, _rows, _job = _billed(entry_key)
+    data, bill = entry.data, entry.bill.settlement
     enabled = set(data.dest_eans)
-    names = app.default_names(data, "cs")
+    names = members.default_names(data, "cs")
     df = core.filter_dests(data, enabled)
     order = figures.flow_order(df, data)
     left = figures.fig_total_by_flow(df, data, names, lang="cs")
-    bill = app._billing(entry)
-    right = figures.fig_bill_split(bill, data, dict(names, **{figures.PRODUCER: "A"}), enabled,
-                                   lang="cs", order=order)
+    right = figures.fig_bill_split(bill, data, names, enabled, lang="cs", order=order)
     member_rows = lambda f: list(f.layout.yaxis.ticktext[:len(order)])  # noqa: E731
     assert member_rows(left) == member_rows(right) == [names[e] for e in order]
-    cols, _ = app._bill_cols(entry, enabled, None)
+    cols, _ = figures.bill_columns(entry.bill.per_interval, data, enabled, None)
     fa = figures.fig_daily(df, data, names, lang="cs")
-    fb = figures.fig_bill_daily(cols, data, dict(names, **{figures.PRODUCER: "A"}), lang="cs")
+    fb = figures.fig_bill_daily(cols, data, names, lang="cs")
     figures.pair_figures(fa, fb)
     assert fa.layout.height == fb.layout.height
-    assert figures._legend_entries(fa) == figures._legend_entries(fb)
-    assert figures._legend_entries(fa) % 2 == 0
+    assert figures.legend_entries(fa) == figures.legend_entries(fb)
+    assert figures.legend_entries(fa) % 2 == 0
