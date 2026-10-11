@@ -1,37 +1,46 @@
-"""Billing of shared electricity by the Shapley value (one producer).
+"""Billing of shared electricity by the Shapley value, for one or more producers.
 
 The group's benefit from sharing in a 15-min interval is what the consumers save on their
-supplier's price minus the feed-in revenue the producer gives up. The *benchmark* game
-values a coalition S by the best it could do with the producer's surplus P: it goes first
-to the consumers with the highest supplier price,
+supplier's price minus the feed-in revenue the producers give up. The *benchmark* game
+values a coalition S by the best it could do with its producers' surplus, shared as a
+pool (any producer can supply any consumer): the cheapest production goes first to the
+consumers with the highest supplier price. With the distinct prices of everybody (feed-in
+and supplier) sorted, λ_0 < λ_1 < …, that is
 
-    v(S) = 1[producer in S] · Σ_k Δλ_k · min(P, D_k(S)),
+    v(S) = Σ_k Δλ_k · min(G_k(S), D_k(S)),      Δλ_k = λ_{k+1} − λ_k,
 
-where λ_0 = feed-in price < λ_1 < … are the distinct supplier prices above it, Δλ_k =
-λ_k − λ_{k-1}, and D_k(S) is the demand of the consumers in S whose price is at least λ_k
-(price layer k). Shapley values add up, so every interval and every layer is a game
-``1[producer] · min(P, D(S))``, and the results are summed.
+where layer k holds the producers with feed-in price f ≤ λ_k (surplus G_k) and the
+consumers with supplier price p ≥ λ_{k+1} (demand D_k). Shapley values add up, so every
+interval and every layer is a game ``min(G(S), D(S))``, and the results are summed.
 
 Exact algorithm for one interval (hundredths of kWh, like EDC data):
 
-* P = 0: nothing to share. A layer with Σ d ≤ P covers everyone: φ_j = d_j / 2.
-* otherwise, with Owen's multilinear extension (every other player joins with
-  probability u):  φ_j = ∫_0^1 u · E[min(d_j, P − X_{-j}(u))^+] du.
-  The integrand is a Bernstein polynomial of degree m with coefficients in [0, d_j], so
-  Gauss–Legendre needs far fewer than m/2 nodes: :func:`nodes_needed` takes the smallest
-  even count whose rigorous error bound (Bernstein ellipse) is below 1e-13 · d_j.
-* One DP per node gives the distribution of X over the consumers sorted by price; every
-  layer is a prefix of that order, so all layers come from the same DP. The node 1 − u is
-  the mirror image of u, so only half the nodes need a DP.
-* Leaving member j out needs no deconvolution of arrays: X_{-j} = X − B_j d_j turns
-  E[h(X_{-j})] into a finite geometric series of E[h(X + c)], and h is piecewise linear,
-  so each term is two lookups in G = running sum of the CDF of X. Summing G over the
-  layers that contain j, weighted by Δλ_k, gives all layers with the same lookups.
-* The producer gets the rest: φ_0 = v(N) − Σ φ_j.
+* Closed forms: a layer with one producer whose surplus covers the layer's demand gives
+  every consumer d / 2 and the producer the rest (D / 2); a layer with one consumer whose
+  demand takes all the layer's surplus gives every producer g / 2.
+* Otherwise, write min(G, D) = D − (D − G)^+ and let Z = D(S) − G(S) (the balance:
+  consumers +d, producers −g). With Owen's multilinear extension (every other player
+  joins with probability u) and H(a) = Σ_{s≤a} P(Z ≤ s),
+
+      consumer j:  φ_j = ∫_0^1 H_{-j}(−1) − H_{-j}(−1 − d_j) du,
+      producer i:  φ_i = g_i − ∫_0^1 H_{-i}(g_i − 1) − H_{-i}(−1) du.
+
+  The integrand is a Bernstein polynomial of degree < m (players) with coefficients in
+  [0, d_j] (or [0, g_i]), so Gauss–Legendre needs far fewer than m/2 nodes:
+  :func:`nodes_needed` takes the smallest even count whose rigorous error bound
+  (Bernstein ellipse) is below 1e-13 of the player's weight.
+* One DP per node gives the distribution of Z: the consumers sorted by price (every layer
+  takes a prefix of them, snapshots), then each layer's producers. The node 1 − u is the
+  mirror image of u (Z ↦ D − G − Z), so only half the nodes need a DP.
+* Leaving player i out needs no deconvolution of arrays: Z_{-i} = Z − B_i z_i turns
+  H_{-i} into a finite geometric series of H shifted by multiples of z_i, each term a
+  lookup. A consumer's layers are the first ones and a producer's the last ones, so
+  running sums of Δλ_k · H_k over the layers give all layers with the same lookups.
 
 Settlement: the benchmark's Shapley values are scaled to the benefit the group really got
-from the report's sharing (``realized / maximum``), and each consumer pays the producer
-``price · shared − its share``.
+from the report's sharing (``realized / maximum``). Each consumer pays the pool
+``price · shared − its share``; each producer gets ``feed-in price · its shared energy +
+its share`` from the pool.
 """
 
 from __future__ import annotations
@@ -47,13 +56,22 @@ import pandas as pd
 
 ProgressFn = Callable[[str, float], None]
 
-#: column of the producer's share in :attr:`BillResult.per_interval`
-PRODUCER = "__producer__"
+#: prefix of the producers' columns in :attr:`BillResult.per_interval`
+PRODUCER = "__producer__|"
 
 #: float elements per block of layer snapshots (layers × nodes × grid)
-_BLOCK = 1_500_000
-#: relative accuracy of the quadrature (rigorous bound, relative to d_j · Δλ)
+_BLOCK = 1_000_000
+#: relative accuracy of the quadrature (rigorous bound, relative to the weight · Δλ)
 REL_TOL = 1e-13
+
+
+def producer_col(ean: str) -> str:
+    """Column of a producer in :attr:`BillResult.per_interval`."""
+    return f"{PRODUCER}{ean}"
+
+
+def is_producer_col(col: str) -> bool:
+    return isinstance(col, str) and col.startswith(PRODUCER)
 
 
 def _noop(_phase: str, _frac: float) -> None:
@@ -65,10 +83,37 @@ def _noop(_phase: str, _frac: float) -> None:
 # ---------------------------------------------------------------------------
 
 
-def price_levels(prices, feed_in: float) -> np.ndarray:
-    """Feed-in price followed by the distinct supplier prices above it."""
-    p = np.asarray(prices, dtype=float)
-    return np.concatenate([[float(feed_in)], np.unique(p[p > feed_in])])
+@dataclass(frozen=True)
+class Layers:
+    """The price layers where sharing pays: consumer j is in layers ``k < top[j]``,
+    producer i in layers ``k >= first[i]``; ``dl[k]`` is the layer's Δλ (Kč/kWh)."""
+
+    dl: np.ndarray
+    top: np.ndarray
+    first: np.ndarray
+
+    @classmethod
+    def build(cls, prices, feed_ins) -> "Layers":
+        p = np.asarray(prices, dtype=float)
+        f = np.asarray(feed_ins, dtype=float)
+        levels = np.unique(np.concatenate([p, f]))
+        cidx = np.searchsorted(levels, p)          # p_j = levels[cidx]
+        fidx = np.searchsorted(levels, f)
+        lo = int(fidx.min()) if len(f) else 0
+        hi = int(cidx.max()) if len(p) else 0
+        L = max(hi - lo, 0)
+        return cls(dl=np.diff(levels)[lo:lo + L], top=np.clip(cidx - lo, 0, L),
+                   first=np.clip(fidx - lo, 0, L))
+
+    @cached_property
+    def consumer_in(self) -> np.ndarray:
+        """Membership (n, L) of the consumers in the layers."""
+        return np.arange(len(self.dl))[None, :] < self.top[:, None]
+
+    @cached_property
+    def producer_in(self) -> np.ndarray:
+        """Membership (np, L) of the producers in the layers."""
+        return np.arange(len(self.dl))[None, :] >= self.first[:, None]
 
 
 _NODES: dict[int, tuple[np.ndarray, np.ndarray]] = {}
@@ -76,8 +121,8 @@ _NEEDED: dict[int, int] = {}
 
 
 def nodes_needed(m: int, rel: float = REL_TOL) -> int:
-    """Even number of Gauss–Legendre nodes that integrates u · B(u) on [0, 1] to ``rel``,
-    B a Bernstein polynomial of degree m − 1 with coefficients in [0, 1].
+    """Even number of Gauss–Legendre nodes that integrates a Bernstein polynomial of
+    degree < m with coefficients in [0, 1] on [0, 1] to ``rel``.
 
     Error <= (32/15) · M · ρ^(-2K) / (ρ² − 1) for f analytic in the Bernstein ellipse
     E_ρ of [0, 1]; there |z| + |1 − z| = cosh s (ρ = e^s), so M <= cosh(s)^m. ``m // 2 + 1``
@@ -109,112 +154,157 @@ def _gauss(K: int) -> tuple[np.ndarray, np.ndarray]:
 # ---------------------------------------------------------------------------
 
 
-def _scarce(P: int, d: np.ndarray, lvl: np.ndarray, sizes: list[int],
-            dl: np.ndarray) -> np.ndarray:
-    """Weighted Shapley values Σ_k Δλ_k φ_j^k over the *scarce* layers (Σ d > P).
+def _leave_one_out(W: np.ndarray, slope: np.ndarray, rows: np.ndarray, a1: np.ndarray,
+                   z: np.ndarray, u: float, off: int, top: int) -> np.ndarray:
+    """H_{-i}(a1) − H_{-i}(a1 − |z_i|) for every player i (z > 0 consumers, z < 0
+    producers), weighted by the layers of ``W[rows[i]]`` (running sums of Δλ · H over
+    the grid, index a + off + 1; slope ``slope[rows[i]]`` above the grid's top ``top``).
 
-    ``d`` (> 0) are the demands in DP order (price descending), ``lvl[j]`` the number
-    of scarce layers containing consumer j (>= 1), ``sizes[k]`` the prefix length of
-    scarce layer k (k = 0 is the largest set) and ``dl[k]`` its Δλ.
+    Z = Z_{-i} + B z with B ~ Bernoulli(u) gives H_{-i}(a) = 1/(1−u) Σ (−u/(1−u))^k
+    H(a − k z) for u < 1/2 and 1/u Σ (−(1−u)/u)^k H(a + (k+1) z) for u > 1/2. Shifts
+    below the grid give 0; above it every term is |z| · slope (closed-form tail).
     """
-    m = len(d)
-    L = len(sizes)
-    Dk = [int(d[:n].sum()) for n in sizes]          # descending
-    Dt = Dk[0]
-    Bn = Dt + 1
-    K = nodes_needed(m)
+    w = np.abs(z)
+    if u < 0.5:
+        ratio, scale, k0, step = u / (1 - u), 1 / (1 - u), 0, -z
+    else:
+        ratio, scale, k0, step = (1 - u) / u, 1 / u, 1, z
+    up = step > 0
+    # up: terms from (k + k0) w >= top − a2 on are all w · slope; down: from
+    # (k + k0) w > a1 + off on they are 0
+    caps = np.where(up, -(-(top - (a1 - w)) // w) - k0, (a1 + off) // w - k0 + 1)
+    K = max(0, min(int(caps.max()), int(math.log(1e-17) / math.log(ratio)) + 1))
+    k = np.arange(K)
+    A1 = a1[:, None] + (k + k0)[None, :] * step[:, None]
+    A2 = A1 - w[:, None]
+    width = W.shape[1]
+    flat = W.ravel()
+    base = (rows * width)[:, None]
+    sl = slope[rows][:, None]
+
+    def H(A):
+        idx = A + (off + 1)
+        np.clip(idx, 0, width - 1, out=idx)
+        idx += base
+        return flat.take(idx) + np.maximum(A - top, 0) * sl
+
+    val = (H(A1) - H(A2)) @ (scale * (-ratio) ** k)
+    return val + up * w * slope[rows] * (scale * (-ratio) ** K / (1 + ratio))
+
+
+def _general(g: np.ndarray, d: np.ndarray, starts: np.ndarray, counts: np.ndarray,
+             dl: np.ndarray, G: np.ndarray, D: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Weighted Shapley values over the layers without a closed form.
+
+    ``d`` (> 0) consumer demands sorted so that ``counts`` (number of these layers each
+    consumer is in: the first ``counts[j]``) descends; ``g`` (> 0) producer surpluses
+    sorted so that ``starts`` (first layer of each producer) ascends; ``dl``, ``G``, ``D``
+    per layer. Returns (φ consumers, φ producers) in Kč · hundredths of kWh.
+    """
+    L = len(dl)
+    mc, mp = len(d), len(g)
+    off, top = int(G.max()), int(D.max())
+    Bn = off + top + 1
+    K = nodes_needed(mc + mp)
     u_all, w_all = _gauss(K)
     h = K // 2
-    slope = np.cumsum(dl)                           # Σ Δλ of the layers up to k
-    row = lvl - 1                                   # cumulative table each member uses
-    dcol = d[:, None]
-    dmin = int(d.min())
-    phi = np.zeros(m)
-    # boundaries of the scarce layers in DP order: smallest set first
+    slope_pre = np.cumsum(dl)
+    slope_suf = np.cumsum(dl[::-1])[::-1]
+    n_cons = [int((counts > k).sum()) for k in range(L)]       # consumer prefix per layer
+    n_prod = [int((starts <= k).sum()) for k in range(L)]      # producer prefix per layer
     stops: dict[int, list[int]] = {}
-    for k, n_k in enumerate(sizes):             # layers can share a prefix (zero demands)
+    for k, n_k in enumerate(n_cons):
         stops.setdefault(n_k, []).append(k)
+    phi_c, phi_p = np.zeros(mc), np.zeros(mp)
+    # one lookup table per node: the consumers' rows W_k, then a row per distinct first
+    # layer of the producers
+    starts_u, rows_p = np.unique(starts, return_inverse=True)
+    slopes = np.concatenate([slope_pre, slope_suf[starts_u]])
+    rows = np.concatenate([counts - 1, L + rows_p])
+    a1 = np.concatenate([-np.ones(mc, dtype=np.int64), g - 1])
+    z = np.concatenate([d, -g]).astype(np.int64)
     nb = max(1, min(h, _BLOCK // max(1, L * Bn)))
     for b0 in range(0, h, nb):
         q = u_all[b0:b0 + nb, None]                 # nodes < 0.5
         bsz = len(q)
         snap = np.zeros((L, bsz, Bn))
-        X = np.zeros((bsz, Bn)); X[:, 0] = 1.0
-        for j in range(m):
+        X = np.zeros((bsz, Bn))
+        X[:, off] = 1.0
+        for j in range(mc):                         # consumers: Z += B d
             dj = int(d[j])
             tmp = q * X[:, :Bn - dj]
             X *= 1 - q
             X[:, dj:] += tmp
             for k in stops.get(j + 1, ()):
                 snap[k] = X
-        # mirror: the node 1 - q of layer k is X_k reflected within 0..D_k
+        for k in range(L):                          # each layer's producers: Z −= B g
+            Xk = snap[k]
+            for i in range(n_prod[k]):
+                gi = int(g[i])
+                tmp = q * Xk[:, gi:]
+                Xk *= 1 - q
+                Xk[:, :Bn - gi] += tmp
+        # mirror: the node 1 − u of layer k is Z_k reflected within −G_k..D_k
         mirror = np.zeros_like(snap)
         for k in range(L):
-            mirror[k, :, :Dk[k] + 1] = snap[k, :, Dk[k]::-1]
-        Wp = np.zeros((L, bsz, Bn + 1))                             # index t+1, G(-1) = 0
+            lo, hi = off - int(G[k]), off + int(D[k])
+            mirror[k, :, lo:hi + 1] = snap[k, :, lo:hi + 1][:, ::-1]
+        W = np.zeros((L, bsz, Bn + 1))                  # index a + off + 1, H(−off−1) = 0
         for part, nodes in ((snap, range(b0, b0 + bsz)),
                             (mirror, range(K - 1 - b0, K - 1 - b0 - bsz, -1))):
-            # W_k = Σ_{k'<=k} Δλ_k' G_k', G = running sum of the CDF; G is linear in the
-            # distribution, so weight and sum the layers first, then two running sums
+            # W_k = Σ_{k'<=k} Δλ_k' H_k' (a consumer's layers are the first ones); H is
+            # linear in the distribution, so weight and sum the layers first, then two
+            # running sums over the grid
             part *= dl[:, None, None]
             np.cumsum(part, axis=0, out=part)
-            np.cumsum(part, axis=2, out=Wp[:, :, 1:])
-            np.cumsum(Wp[:, :, 1:], axis=2, out=Wp[:, :, 1:])      # linear past D_k
+            np.cumsum(part, axis=2, out=W[:, :, 1:])
+            np.cumsum(W[:, :, 1:], axis=2, out=W[:, :, 1:])
+            # a producer's layers are the last ones: W_{L-1} − W_{s-1}, as extra rows
+            Wall = np.concatenate([W, W[-1:] - W[starts_u - 1] * (starts_u > 0)[:, None, None]])
             for i, t in enumerate(nodes):
-                ut = u_all[t]
-                Wt = Wp[:, i, :]
-                if ut < 0.5:     # R = 1/(1-u) Σ (-r)^k X(· - k d): lower indices only
-                    ratio, scale = ut / (1 - ut), 1 / (1 - ut)
-                    cap = -(-P // dmin)                             # k d >= P: term is 0
-                    k = np.arange(min(cap, int(math.log(1e-17) / math.log(ratio)) + 1))
-                    c = k[None, :] * dcol
-                else:            # R = 1/u Σ (-s)^k X(· + (k+1) d)
-                    ratio, scale = (1 - ut) / ut, 1 / ut
-                    cap = max(1, -(-(Dt - P) // dmin) + 1)          # beyond: term is d·slope
-                    k = np.arange(min(cap, int(math.log(1e-17) / math.log(ratio)) + 1))
-                    c = -(k + 1)[None, :] * dcol
-                coef = scale * (-ratio) ** k
-                a1 = P - 1 - c
-                a2 = a1 - dcol
-                rr = row[:, None]
-                g1 = Wt[rr, np.clip(a1, -1, Dt) + 1] + np.maximum(a1 - Dt, 0) * slope[rr]
-                g2 = Wt[rr, np.clip(a2, -1, Dt) + 1] + np.maximum(a2 - Dt, 0) * slope[rr]
-                val = (g1 - g2) @ coef
-                if ut >= 0.5:    # closed-form tail of the series (every term = d · slope)
-                    val += d * slope[row] * scale * (-ratio) ** len(k) / (1 + ratio)
-                phi += w_all[t] * ut * val
-    return phi
+                val = _leave_one_out(Wall[:, i, :], slopes, rows, a1, z, u_all[t], off, top)
+                phi_c += w_all[t] * val[:mc]
+                phi_p -= w_all[t] * val[mc:]
+    phi_p += g * slope_suf[starts]
+    return phi_c, phi_p
 
 
-def shapley_interval(P: int, d: np.ndarray, level: np.ndarray, dl: np.ndarray):
+def shapley_interval(g, d, layers: Layers):
     """Weighted Shapley values of one interval.
 
-    ``d[n]`` demands (hundredths of kWh), ``level[n]`` the number of price layers that
-    contain each consumer (0 = price not above the feed-in price), ``dl[L]`` the Δλ of
-    the layers (Kč/kWh). Returns (φ consumers, φ producer, v(N)) in Kč · hundredths of
-    kWh, and whether the exact quadrature was needed.
+    ``g[np]`` surpluses of the producers and ``d[n]`` demands of the consumers
+    (hundredths of kWh). Returns (φ consumers, φ producers, v(N)) in Kč · hundredths of
+    kWh, and whether a layer needed the quadrature.
     """
-    n = len(d)
-    phi = np.zeros(n)
-    if P <= 0 or len(dl) == 0:
-        return phi, 0.0, 0.0, False
+    g = np.asarray(g, dtype=np.int64)
     d = np.asarray(d, dtype=np.int64)
-    L = len(dl)
-    # demand of every layer: consumers with level >= k + 1
-    dem = np.array([int(d[level >= k + 1].sum()) for k in range(L)])
-    vmax = float((dl * np.minimum(P, dem)).sum())
-    scarce = dem > P                      # a prefix of the layers (dem decreases with k)
-    # covered layers: everybody in them gets d / 2
-    cov_w = np.concatenate([[0.0], np.cumsum(np.where(scarce, 0.0, dl))])
-    phi += d * cov_w[level] / 2
-    ks = int(scarce.sum())
-    if ks:
-        act = np.flatnonzero((d > 0) & (level >= 1))
-        order = act[np.argsort(-level[act], kind="stable")]       # price descending
-        lv = np.minimum(level[order], ks)
-        sizes = [int((lv >= k + 1).sum()) for k in range(ks)]     # layer k (0 = largest)
-        phi[order] += _scarce(int(P), d[order], lv, sizes, dl[:ks])
-    return phi, vmax - float(phi.sum()), vmax, bool(ks)
+    phi_c, phi_p = np.zeros(len(d)), np.zeros(len(g))
+    dl = layers.dl
+    if len(dl) == 0 or not (g > 0).any() or not (d > 0).any():
+        return phi_c, phi_p, 0.0, False
+    Cm = layers.consumer_in & (d > 0)[:, None]
+    Fm = layers.producer_in & (g > 0)[:, None]
+    D, G = d @ Cm, g @ Fm
+    vmax = float((dl * np.minimum(G, D)).sum())
+    live = (G > 0) & (D > 0)
+    one_p = live & (Fm.sum(axis=0) == 1) & (G >= D)            # one producer covers it
+    one_c = live & ~one_p & (Cm.sum(axis=0) == 1) & (D >= G)   # one consumer takes all
+    hard = live & ~one_p & ~one_c
+    phi_c += d * (Cm @ (dl * one_p)) / 2 + Cm @ (dl * one_c * G) / 2
+    phi_p += Fm @ (dl * one_p * D) / 2 + g * (Fm @ (dl * one_c)) / 2
+    if not hard.any():
+        return phi_c, phi_p, vmax, False
+    H = np.flatnonzero(hard)
+    counts = Cm[:, H].sum(axis=1)                               # first layers of H
+    firsts = np.where(Fm[:, H].any(axis=1), np.argmax(Fm[:, H], axis=1), len(H))
+    cons = np.flatnonzero(counts > 0)
+    cons = cons[np.argsort(-counts[cons], kind="stable")]
+    prods = np.flatnonzero(firsts < len(H))
+    prods = prods[np.argsort(firsts[prods], kind="stable")]
+    pc, pp = _general(g[prods], d[cons], firsts[prods], counts[cons], dl[H], G[H], D[H])
+    phi_c[cons] += pc
+    phi_p[prods] += pp
+    return phi_c, phi_p, vmax, True
 
 
 # ---------------------------------------------------------------------------
@@ -227,78 +317,88 @@ class ShapleyTotals:
     """Shapley values of the benchmark game in Kč, summed over the report."""
 
     prices: list[float]
-    feed_in: float
+    feed_ins: list[float]
     consumers: np.ndarray          # Kč per consumer
-    producer: float                # Kč
+    producers: np.ndarray          # Kč per producer
     maximum: float                 # Kč: v(N) summed (best possible sharing)
     n_intervals: int = 0
-    n_night: int = 0               # P = 0
-    n_covered: int = 0             # production covers every layer: closed form
+    n_night: int = 0               # nothing to share
+    n_covered: int = 0             # closed form only
     n_scarce: int = 0              # exact quadrature
     seconds: float = 0.0           # CPU time
-    #: per 15-min interval with production: row indices into the report, and the
-    #: Shapley values in Kč (float32, columns = consumers…, producer) for the plots
+    #: per 15-min interval with something to share: row indices into the report, and
+    #: the Shapley values in Kč (float32, columns = consumers…, producers…) for the plots
     t_index: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
     t_values: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), dtype=np.float32))
 
+    @property
+    def producer(self) -> float:
+        """Kč: all producers together."""
+        return float(self.producers.sum())
 
-def compute_shapley(P: np.ndarray, D: np.ndarray, prices, feed_in: float,
+
+def compute_shapley(P: np.ndarray, D: np.ndarray, prices, feed_ins,
                     progress: ProgressFn = _noop) -> ShapleyTotals:
-    """Shapley values of the benchmark for every interval (``P[T]``, ``D[T, n]`` in
-    hundredths of kWh; ``prices[n]`` and ``feed_in`` in Kč/kWh)."""
+    """Shapley values of the benchmark for every interval (``P[T, np]`` surpluses of the
+    producers, ``D[T, n]`` demands, in hundredths of kWh; ``prices[n]`` and
+    ``feed_ins[np]`` in Kč/kWh). A 1-D ``P`` and a number ``feed_ins`` mean one producer."""
     c0 = time.process_time()
     P = np.asarray(P, dtype=np.int64)
-    D = np.asarray(D, dtype=np.int64)
+    P = np.clip(P[:, None] if P.ndim == 1 else P, 0, None)
+    D = np.clip(np.asarray(D, dtype=np.int64), 0, None)
     T, n = D.shape
-    p = np.asarray(prices, dtype=float)
-    levels = price_levels(p, feed_in)
-    dl = np.diff(levels)
-    level = np.searchsorted(levels[1:], p, side="right")   # layers containing each consumer
-    res = ShapleyTotals(prices=list(map(float, p)), feed_in=float(feed_in),
-                        consumers=np.zeros(n), producer=0.0, maximum=0.0, n_intervals=T)
-    if len(dl) == 0:
-        res.n_night = int((P <= 0).sum())
-        res.t_values = np.zeros((0, n + 1), dtype=np.float32)
-        progress("bill", 1.0)
-        return res
-    gain = p - feed_in                                      # Kč/kWh per consumer
-    in_any = level >= 1
-    dem1 = D[:, in_any].sum(axis=1)                         # demand of the largest layer
-    night = P <= 0
-    covered = ~night & (dem1 <= P)
-    res.n_night, res.n_covered = int(night.sum()), int(covered.sum())
-    day = np.flatnonzero(~night)
+    f = np.atleast_1d(np.asarray(feed_ins, dtype=float))
+    npr = P.shape[1]
+    lay = Layers.build(prices, f)
+    res = ShapleyTotals(prices=list(map(float, prices)), feed_ins=list(map(float, f)),
+                        consumers=np.zeros(n), producers=np.zeros(npr), maximum=0.0,
+                        n_intervals=T)
+    Cin, Fin = lay.consumer_in.astype(float), lay.producer_in.astype(float)
+    dl = lay.dl
+    # per interval and layer: demand, surplus, number of active consumers / producers
+    Dl, Gl = D @ Cin, P @ Fin
+    nc, nq = (D > 0) @ Cin, (P > 0) @ Fin
+    live = (Gl > 0) & (Dl > 0)
+    one_p = live & (nq == 1) & (Gl >= Dl)
+    one_c = live & ~one_p & (nc == 1) & (Dl >= Gl)
+    hard_any = (live & ~one_p & ~one_c).any(axis=1)
+    day = np.flatnonzero(live.any(axis=1))
+    res.n_night = T - len(day)
     pos = np.full(T, -1, dtype=np.int64)
     pos[day] = np.arange(len(day))
-    vals = np.zeros((len(day), n + 1), dtype=np.float32)    # Kč · hundredths of kWh
-    # closed form for all covered intervals at once: φ_j = (p_j − f) d_j / 2
-    Dc = D[covered].astype(float) * np.where(in_any, gain, 0.0)
-    res.consumers += Dc.sum(axis=0) / 2
-    res.maximum += float(Dc.sum())
-    vals[pos[covered], :n] = Dc / 2
-    vals[pos[covered], n] = Dc.sum(axis=1) / 2
-    scarce = np.flatnonzero(~night & ~covered)
+    vals = np.zeros((len(day), n + npr))                 # Kč · hundredths of kWh
+    # closed forms for every interval without a hard layer, all at once
+    easy = np.flatnonzero(live.any(axis=1) & ~hard_any)
+    res.n_covered = len(easy)
+    if len(easy):
+        Pe, De = P[easy], D[easy]
+        wp, wc = dl * one_p[easy], dl * one_c[easy]
+        vc = De * (wp @ Cin.T) / 2 + ((wc * Gl[easy]) @ Cin.T) * (De > 0) / 2
+        vp = ((wp * Dl[easy]) @ Fin.T) * (Pe > 0) / 2 + Pe * (wc @ Fin.T) / 2
+        vals[pos[easy]] = np.hstack([vc, vp])
+        res.maximum += float((dl * np.minimum(Gl[easy], Dl[easy])).sum())
+    scarce = np.flatnonzero(hard_any)
     res.n_scarce = len(scarce)
-    # progress by the work that costs: grid length × active members
-    work = (np.minimum(D[scarce][:, in_any].sum(axis=1), 10**9) + 1) * \
-        np.maximum((D[scarce][:, in_any] > 0).sum(axis=1), 1)
+    # progress by the work that costs: grid length × active players
+    work = (np.minimum(Gl[scarce].max(axis=1, initial=0) + Dl[scarce].max(axis=1, initial=0),
+                       10**9) + 1) * np.maximum((D[scarce] > 0).sum(axis=1)
+                                                + (P[scarce] > 0).sum(axis=1), 1)
     total = float(work.sum()) or 1.0
     done = last = 0.0
     for i, t in enumerate(scarce):
-        phi, phi0, vmax, _ = shapley_interval(int(P[t]), D[t], level, dl)
-        res.consumers += phi
+        pc, pp, vmax, _ = shapley_interval(P[t], D[t], lay)
+        vals[pos[t]] = np.concatenate([pc, pp])
         res.maximum += vmax
-        vals[pos[t], :n] = phi
-        vals[pos[t], n] = phi0
         done += work[i]
         if done - last >= 0.01 * total:
             last = done
             progress("bill", done / total)
-    res.consumers /= 100
+    vals /= 100
+    res.consumers = vals[:, :n].sum(axis=0)
+    res.producers = vals[:, n:].sum(axis=0)
     res.maximum /= 100
-    res.producer = res.maximum - float(res.consumers.sum())
     res.t_index = day
-    res.t_values = vals / 100
+    res.t_values = vals.astype(np.float32)
     res.seconds = time.process_time() - c0
     progress("bill", 1.0)
     return res
@@ -309,17 +409,30 @@ def compute_shapley(P: np.ndarray, D: np.ndarray, prices, feed_in: float,
 # ---------------------------------------------------------------------------
 
 
+def _haler(values: np.ndarray, total: float) -> np.ndarray:
+    """``values`` rounded to whole haléř so that they add up to ``total`` (also in
+    haléř): the largest remainders get the leftover haléř."""
+    cents = np.asarray(values, dtype=float) * 100
+    out = np.floor(cents)
+    if len(out):
+        q, r = divmod(int(round(total * 100 - out.sum())), len(out))      # r >= 0
+        out[np.argsort(-(cents - out), kind="stable")[:r]] += 1
+        out += q
+    return out / 100
+
+
 @dataclass
 class Billing:
     prices: np.ndarray             # Kč/kWh per consumer (supplier price)
-    feed_in: float                 # Kč/kWh (producer's feed-in price)
+    feed_ins: np.ndarray           # Kč/kWh per producer (feed-in price)
     shared: np.ndarray             # kWh per consumer (report)
+    supplied: np.ndarray           # kWh per producer: its surplus shared (report)
     saving: np.ndarray             # Kč: price · shared (what the consumer did not buy)
-    share: np.ndarray              # Kč: fair share of the benefit (scaled Shapley value)
-    payment: np.ndarray            # Kč the consumer pays the producer (whole haléř)
-    producer_share: float          # Kč: producer's benefit = income − feed-in value
-    producer_income: float         # Kč: Σ payments
-    feed_in_value: float           # Kč: what the shared energy would have earned as feed-in
+    share: np.ndarray              # Kč: consumer's fair share of the benefit (scaled Shapley)
+    payment: np.ndarray            # Kč the consumer pays into the pool (whole haléř)
+    producer_share: np.ndarray     # Kč per producer: its benefit = income − feed-in value
+    producer_income: np.ndarray    # Kč per producer from the pool (whole haléř)
+    feed_in_value: np.ndarray      # Kč per producer: its shared energy at the feed-in price
     realized: float                # Kč: benefit of the report's sharing
     maximum: float                 # Kč: benefit of the best possible sharing
 
@@ -333,22 +446,38 @@ class Billing:
         with np.errstate(divide="ignore", invalid="ignore"):
             return np.where(self.shared > 0, self.payment / self.shared, np.nan)
 
+    @property
+    def producer_unit_price(self) -> np.ndarray:
+        """Kč/kWh each producer effectively gets for its shared electricity."""
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return np.where(self.supplied > 0, self.producer_income / self.supplied, np.nan)
 
-def settle(res: ShapleyTotals, shared_kwh) -> Billing:
-    """Crowns: Shapley values scaled to the realized benefit, payments in haléř."""
+
+def settle(res: ShapleyTotals, shared_kwh, supplied_kwh=None) -> Billing:
+    """Crowns: Shapley values scaled to the realized benefit, payments in haléř.
+
+    ``supplied_kwh[np]`` is what each producer shared; it is scaled to add up to the
+    consumers' ``shared_kwh`` (they differ by the report's rounding). With one producer
+    it may be left out."""
     p = np.asarray(res.prices, dtype=float)
-    f = res.feed_in
+    f = np.asarray(res.feed_ins, dtype=float)
     shared = np.asarray(shared_kwh, dtype=float)
-    realized = float(((p - f) * shared).sum())
+    total = float(shared.sum())
+    supplied = (np.full(len(f), total / max(len(f), 1)) if supplied_kwh is None
+                else np.clip(np.asarray(supplied_kwh, dtype=float), 0, None))
+    if supplied.sum() > 0:
+        supplied = supplied * (total / supplied.sum())
+    realized = float((p * shared).sum() - (f * supplied).sum())
     scale = realized / res.maximum if res.maximum > 0 else 0.0
     share = res.consumers * scale
     saving = p * shared
     payment = np.round(saving - share, 2)
-    income = float(payment.sum())
-    fiv = f * float(shared.sum())
-    return Billing(prices=p, feed_in=f, shared=shared, saving=saving, share=share,
-                   payment=payment, producer_share=income - fiv, producer_income=income,
-                   feed_in_value=fiv, realized=realized, maximum=res.maximum)
+    fiv = f * supplied
+    income = _haler(fiv + res.producers * scale, float(payment.sum()))
+    return Billing(prices=p, feed_ins=f, shared=shared, supplied=supplied, saving=saving,
+                   share=share, payment=payment, producer_share=income - fiv,
+                   producer_income=income, feed_in_value=fiv, realized=realized,
+                   maximum=res.maximum)
 
 
 @dataclass
@@ -360,19 +489,27 @@ class BillResult:
     settlement: Billing
     index: pd.DatetimeIndex        # the report's 15-min intervals
     members: list[str]             # consumer EANs in report order
+    producers: list[str]           # producer EANs in report order
 
     @classmethod
-    def build(cls, totals: ShapleyTotals, shared_kwh, index: pd.DatetimeIndex,
-              members: list[str]) -> "BillResult":
-        return cls(totals, settle(totals, shared_kwh), index, list(members))
+    def build(cls, totals: ShapleyTotals, shared_kwh, supplied_kwh, index: pd.DatetimeIndex,
+              members: list[str], producers: list[str]) -> "BillResult":
+        return cls(totals, settle(totals, shared_kwh, supplied_kwh), index, list(members),
+                   list(producers))
+
+    @property
+    def producer_cols(self) -> list[str]:
+        return [producer_col(e) for e in self.producers]
 
     @cached_property
     def per_interval(self) -> pd.DataFrame:
         """Kč per 15 min, scaled like the settlement (to the realized benefit): one
-        column per member and :data:`PRODUCER`; 0 in intervals without production."""
+        column per member and per producer (:func:`producer_col`); 0 in intervals
+        without anything to share."""
         bill, res = self.settlement, self.totals
         scale = bill.realized / bill.maximum if bill.maximum > 0 else 0.0
-        vals = np.zeros((len(self.index), len(self.members) + 1))
+        cols = self.members + self.producer_cols
+        vals = np.zeros((len(self.index), len(cols)))
         if len(res.t_index):
             vals[res.t_index] = res.t_values.astype(float) * scale
-        return pd.DataFrame(vals, index=self.index, columns=self.members + [PRODUCER])
+        return pd.DataFrame(vals, index=self.index, columns=cols)

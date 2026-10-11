@@ -11,15 +11,17 @@ from string import ascii_uppercase
 
 from dash import ctx
 
-from edc_data import SharingData
+from edc_data import POOL, SharingData
 from figures import colour_map, top_dests
 from i18n import t
 
 
 def default_names(data: SharingData, lang: str) -> dict[str, str]:
-    """Generic labels: ``Výroba A`` / ``Spotřeba 1`` … in file order."""
+    """Generic labels: ``Výroba A`` / ``Spotřeba 1`` … in file order (and the pool of
+    several producers)."""
     names = {e: f"{t('source_a', lang)} {ascii_uppercase[i % 26]}"
              for i, e in enumerate(data.source_eans)}
+    names[POOL] = t("pool_name", lang)
     names.update({e: f"{t('destination', lang)} {i}"
                   for i, e in enumerate(data.dest_eans, 1)})
     return names
@@ -66,6 +68,20 @@ def prices(data: SharingData, rows: list[dict] | None, default) -> list[float | 
     out = []
     for e in data.dest_eans:
         v = by_ean.get(e)
+        v = fallback if v is None else v
+        out.append(None if v is None else max(0.0, v))
+    return out
+
+
+def feed_ins(data: SharingData, ids: list[dict], values: list,
+             default) -> list[float | None]:
+    """Feed-in price (Kč/kWh) per producer in report order; empty inputs take
+    ``default``."""
+    typed = {i["ean"]: number(v) for i, v in zip(ids or [], values or [])}
+    fallback = number(default)
+    out = []
+    for e in data.source_eans:
+        v = typed.get(e)
         v = fallback if v is None else v
         out.append(None if v is None else max(0.0, v))
     return out

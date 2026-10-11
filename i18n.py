@@ -49,6 +49,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "panel_dest": "Destinations",
         "panel_dest_hint": "Tick to include; type a name to relabel.",
         "panel_source": "Source",
+        "panel_source_n": "Sources",
         "panel_display": "Display",
         "panel_group": "Sharing group ID",
         "panel_group_ph": "e.g. 0000018947",
@@ -180,30 +181,40 @@ STRINGS: dict[str, dict[str, str]] = {
         "price_col": "Price",
         "price_col_tip": "Supplier price of electricity [CZK/kWh], for the billing",
         "bill_title": "Billing of shared electricity by the Shapley value (proposal)",
-        "bill_desc": "Splits the benefit of sharing fairly between the producer and the members. "
+        "bill_desc": "Splits the benefit of sharing fairly between the producers and the members. "
                      "Enter each member's supplier price of electricity (commodity, without "
-                     "distribution) in the Price column, or a default price below, and the "
-                     "producer's feed-in price. The billing uses the shared energy of the EDC report.",
+                     "distribution) in the Price column and each producer's feed-in price next to its "
+                     "name, or default prices below. The billing uses the shared energy of the EDC report.",
         "bill_btn": "Compute the billing by the Shapley value",
-        "feed_in": "Producer's feed-in price [CZK/kWh]",
+        "feed_in": "Default feed-in price [CZK/kWh]",
+        "feed_ph": "feed-in",
+        "feed_tip": "Feed-in price of this producer [CZK/kWh], for the billing; empty = the default",
+        "panel_source_hint": "Next to the name: feed-in price [CZK/kWh] for the billing.",
+        "pool_name": "Producers (pool)",
+        "multi_no_recompute": "The exact static method supports a report with one producer only.",
         "price_default": "Default supplier price [CZK/kWh]",
         "phase_bill": "Computing Shapley values",
-        "bill_need_feed_in": "Enter the producer's feed-in price.",
+        "bill_need_feed_in": "Enter the feed-in price of every producer, or a default feed-in price.",
         "bill_need_prices": "Enter the supplier price for every member (Price column), or a default price.",
         "part_no_bill": "Billing needs an all report (members' consumption is required).",
         "bill_summary": "Benefit of the sharing in the EDC report: {real} out of at most {max} with the best "
                         "possible sharing ({eff}). The Shapley values of the best sharing are scaled to the real benefit.",
         "bill_timing": "Computed in {secs}: {scarce} intervals by exact quadrature, {covered} with "
-                       "enough production for everyone (closed form), {night} without production.",
+                       "a closed form (production for everyone), {night} without sharing.",
         "bill_stale": "Prices changed since the last billing; press the button again.",
         "bill_hint": "Payment = price × shared − share of the benefit. The producer receives the sum of the "
                      "payments; its share is that sum minus what the shared energy would have earned at "
                      "the feed-in price. Members whose price is not above the feed-in price get no share.",
+        "bill_hint_n": "Payment = price × shared − share of the benefit. The payments make a pool; each producer "
+                       "receives the feed-in value of the energy it shared plus its share of the benefit (the "
+                       "report does not say who supplied whom). The cheapest production goes to the dearest "
+                       "consumption; members whose price is not above any feed-in price get no share.",
         "bill_col_price": "Price [CZK/kWh]",
         "bill_col_shared": "Shared [kWh]",
         "bill_col_saving": "At supplier price [CZK]",
         "bill_col_share": "Share of benefit [CZK]",
         "bill_col_payment": "Pays producer [CZK]",
+        "bill_col_payment_n": "Pays producers [CZK]",
         "bill_col_unit": "Per kWh [CZK]",
         "bill_producer": "{name} (producer)",
         "bill_feed_in_value": "feed-in value",
@@ -217,6 +228,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "bill_total_members": "MEMBERS TOTAL",
         "bill_pie_title": "Where the benefit went",
         "bill_pie_producer": "producer's share",
+        "bill_pie_producer_n": "producers' share",
         "bill_pie_members": "selected members' share",
         "bill_pie_unselected": "unselected members' share",
         "bill_pie_lost": "missed by the EDC sharing",
@@ -238,12 +250,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "bt_lost": "Missed by the EDC sharing",
         "bt_of_max": "of the best possible benefit",
         "bt_producer": "Producer's share",
+        "bt_producer_n": "Producers' share",
         "bt_members": "Members' share",
         "bt_of_benefit": "of the benefit",
         "bt_income": "Producer receives",
+        "bt_income_n": "Producers receive",
         "bt_income_sub": "on average {unit} per kWh",
         "bt_feed_in": "Feed-in value",
         "bt_feed_in_sub": "{price} × {kwh} kWh",
+        "bt_avg": "avg.",
         "bt_selected": "selected {n} of {m}",
         "bt_note": "Shares of the benefit of the best sharing, scaled to what the EDC report achieved; members' figures follow the destination selection.",
     },
@@ -287,6 +302,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "panel_dest": "Odběrná místa",
         "panel_dest_hint": "Zaškrtněte pro zahrnutí; napište název pro přejmenování.",
         "panel_source": "Výrobna",
+        "panel_source_n": "Výrobny",
         "panel_display": "Zobrazení",
         "panel_group": "Číslo skupiny sdílení",
         "panel_group_ph": "např. 0000018947",
@@ -414,29 +430,39 @@ STRINGS: dict[str, dict[str, str]] = {
         "price_col_tip": "Cena elektřiny od prodejce [Kč/kWh], pro vyúčtování",
         "bill_title": "Vyúčtování sdílené elektřiny podle Shapleyho hodnoty (návrh)",
         "bill_desc": "Spravedlivě rozdělí přínos sdílení mezi výrobce a členy. Do sloupce Cena v tabulce "
-                     "odběrných míst zadejte cenu elektřiny od prodejce (silová elektřina, bez distribuce), "
-                     "nebo níže výchozí cenu, a výkupní cenu výrobny. Vyúčtování vychází z nasdílené "
-                     "energie v reportu EDC.",
+                     "odběrných míst zadejte cenu elektřiny od prodejce (silová elektřina, bez distribuce) "
+                     "a vedle názvu každé výrobny její výkupní cenu, nebo níže výchozí ceny. Vyúčtování "
+                     "vychází z nasdílené energie v reportu EDC.",
         "bill_btn": "Spočítat vyúčtování podle Shapleyho hodnoty",
-        "feed_in": "Výkupní cena výrobny [Kč/kWh]",
+        "feed_in": "Výchozí výkupní cena [Kč/kWh]",
+        "feed_ph": "výkup",
+        "feed_tip": "Výkupní cena této výrobny [Kč/kWh], pro vyúčtování; prázdné = výchozí",
+        "panel_source_hint": "Vedle názvu: výkupní cena [Kč/kWh] pro vyúčtování.",
+        "pool_name": "Výrobny (bazén)",
+        "multi_no_recompute": "Přesná statická metoda zatím umí jen report s jednou výrobnou.",
         "price_default": "Výchozí cena od prodejce [Kč/kWh]",
         "phase_bill": "Výpočet Shapleyho hodnot",
-        "bill_need_feed_in": "Zadejte výkupní cenu výrobny.",
+        "bill_need_feed_in": "Zadejte výkupní cenu každé výrobny, nebo výchozí výkupní cenu.",
         "bill_need_prices": "Zadejte cenu od prodejce pro každého člena (sloupec Cena), nebo výchozí cenu.",
         "part_no_bill": "Vyúčtování potřebuje úplný report (odběry členů).",
         "bill_summary": "Přínos sdílení podle reportu EDC: {real} z nejvýše {max} při nejlepším možném "
                         "sdílení ({eff}). Shapleyho hodnoty nejlepšího sdílení jsou přepočteny na skutečný přínos.",
-        "bill_timing": "Spočteno za {secs}: {scarce} čtvrthodin přesnou kvadraturou, {covered} s výrobou "
-                       "pro všechny (uzavřený vzorec), {night} bez výroby.",
+        "bill_timing": "Spočteno za {secs}: {scarce} čtvrthodin přesnou kvadraturou, {covered} uzavřeným "
+                       "vzorcem (výroba pro všechny), {night} bez sdílení.",
         "bill_stale": "Ceny se od posledního vyúčtování změnily; stiskněte tlačítko znovu.",
         "bill_hint": "Platba = cena × nasdíleno − podíl na přínosu. Výrobce dostane součet plateb; jeho podíl "
                      "je tento součet minus to, co by nasdílená energie vynesla za výkupní cenu. Člen, jehož "
                      "cena není vyšší než výkupní, podíl nedostane.",
+        "bill_hint_n": "Platba = cena × nasdíleno − podíl na přínosu. Platby tvoří bazén; každá výrobna dostane "
+                       "výkupní hodnotu své nasdílené energie plus svůj podíl na přínosu (report neříká, kdo "
+                       "komu dodal). Nejlevnější výroba jde k nejdražší spotřebě; člen, jehož cena není vyšší "
+                       "než žádná výkupní, podíl nedostane.",
         "bill_col_price": "Cena [Kč/kWh]",
         "bill_col_shared": "Nasdíleno [kWh]",
         "bill_col_saving": "Za cenu prodejce [Kč]",
         "bill_col_share": "Podíl na přínosu [Kč]",
         "bill_col_payment": "Platí výrobci [Kč]",
+        "bill_col_payment_n": "Platí výrobcům [Kč]",
         "bill_col_unit": "Za kWh [Kč]",
         "bill_producer": "{name} (výrobce)",
         "bill_feed_in_value": "výkupní hodnota",
@@ -450,6 +476,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "bill_total_members": "ČLENOVÉ CELKEM",
         "bill_pie_title": "Kam šel přínos sdílení",
         "bill_pie_producer": "podíl výrobce",
+        "bill_pie_producer_n": "podíl výrobců",
         "bill_pie_members": "podíl vybraných členů",
         "bill_pie_unselected": "podíl nevybraných členů",
         "bill_pie_lost": "ušlo při sdílení EDC",
@@ -471,12 +498,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "bt_lost": "Ušlo při sdílení EDC",
         "bt_of_max": "nejvyššího možného přínosu",
         "bt_producer": "Podíl výrobce",
+        "bt_producer_n": "Podíl výrobců",
         "bt_members": "Podíl členů",
         "bt_of_benefit": "přínosu",
         "bt_income": "Výrobce dostane",
+        "bt_income_n": "Výrobci dostanou",
         "bt_income_sub": "průměrně {unit} za kWh",
         "bt_feed_in": "Výkupní hodnota",
         "bt_feed_in_sub": "{price} × {kwh} kWh",
+        "bt_avg": "prům.",
         "bt_selected": "vybráno {n} z {m}",
         "bt_note": "Podíly na přínosu nejlepšího sdílení, přepočtené na to, čeho dosáhl report EDC; údaje členů odpovídají výběru odběrných míst.",
     },
@@ -489,6 +519,13 @@ CS_MONTH_ABBR = ("led", "úno", "bře", "dub", "kvě", "čvn",
 def t(key: str, lang: str) -> str:
     table = STRINGS.get(lang, STRINGS["en"])
     return table.get(key, STRINGS["en"].get(key, key))
+
+
+def tn(key: str, lang: str, n: int) -> str:
+    """``key`` for one item, ``key_n`` (when there is one) for several."""
+    if n > 1 and f"{key}_n" in STRINGS["en"]:
+        return t(f"{key}_n", lang)
+    return t(key, lang)
 
 
 def month_label(ts: pd.Timestamp, lang: str) -> str:

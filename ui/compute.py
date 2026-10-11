@@ -43,24 +43,27 @@ def _started(job_id: str) -> dict:
                 text=no_update)                       # the poll draws the bar
 
 
-def _usable(entry, lang: str, part_reason: str) -> dict | None:
+def _usable(entry, lang: str, part_reason: str, one_producer: bool = False) -> dict | None:
     """Why a computation cannot start, as the card's outputs; None if it can."""
     if entry is None:                    # server restarted / went to sleep since the upload
         return _refused("session_lost", lang)
     if entry.data.fmt != "all":
         return _refused(part_reason, lang)
+    if one_producer and len(entry.data.source_eans) != 1:
+        return _refused("multi_no_recompute", lang)
     return None
 
 
-def bill_inputs(data: SharingData, rows, feed_in, default):
-    """(prices, feed-in price) for the billing, or (None, i18n key of what is missing)."""
-    f = members.number(feed_in)
-    if f is None or f < 0:
+def bill_inputs(data: SharingData, rows, feed_ids, feed_values, feed_default, default):
+    """(supplier prices, feed-in prices) for the billing, or (None, i18n key of what is
+    missing)."""
+    feed_ins = members.feed_ins(data, feed_ids, feed_values, feed_default)
+    if any(f is None for f in feed_ins):
         return None, "bill_need_feed_in"
     prices = members.prices(data, rows, default)
     if any(p is None for p in prices):
         return None, "bill_need_prices"
-    return (prices, f), None
+    return (prices, feed_ins), None
 
 
 @callback(
@@ -74,7 +77,7 @@ def start_exact(n, key, rows, reserve, lang):
     if not n:
         raise dash.exceptions.PreventUpdate
     entry = store.get(key)
-    refused = _usable(entry, lang, "part_no_recompute")
+    refused = _usable(entry, lang, "part_no_recompute", one_producer=True)
     if refused:
         return refused
     return _started(jobs.start_exact(key, members.keys(entry.data, rows),
@@ -85,18 +88,20 @@ def start_exact(n, key, rows, reserve, lang):
     output=_start_outputs("bill"),
     inputs=dict(n=Input(_BILL["btn"], "n_clicks")),
     state=dict(key=State("data-key", "data"), rows=State("members", "rowData"),
+               feed_ids=State({"type": "feed", "ean": ALL}, "id"),
+               feed_values=State({"type": "feed", "ean": ALL}, "value"),
                feed_in=State("feed-in", "value"), default=State("price-default", "value"),
                lang=State("lang", "value")),
     prevent_initial_call=True,
 )
-def start_bill(n, key, rows, feed_in, default, lang):
+def start_bill(n, key, rows, feed_ids, feed_values, feed_in, default, lang):
     if not n:
         raise dash.exceptions.PreventUpdate
     entry = store.get(key)
     refused = _usable(entry, lang, "part_no_bill")
     if refused:
         return refused
-    inputs, missing = bill_inputs(entry.data, rows, feed_in, default)
+    inputs, missing = bill_inputs(entry.data, rows, feed_ids, feed_values, feed_in, default)
     if missing:
         return _refused(missing, lang)
     return _started(jobs.start_bill(key, *inputs))
@@ -238,11 +243,12 @@ def exact_result(rev, key, lang, selected, changed, name_values, name_ids, rows)
     inputs=dict(rev=Input(_BILL["rev"], "data"), key=Input("data-key", "data"),
                 lang=Input("lang", "value"), changed=Input("members", "cellValueChanged"),
                 selected=Input("members", "selectedRows"), feed_in=Input("feed-in", "value"),
-                default=Input("price-default", "value"), **_NAMES),
-    state=_NAME_STATE,
+                default=Input("price-default", "value"),
+                feed_values=Input({"type": "feed", "ean": ALL}, "value"), **_NAMES),
+    state=dict(feed_ids=State({"type": "feed", "ean": ALL}, "id"), **_NAME_STATE),
 )
-def bill_result(rev, key, lang, changed, selected, feed_in, default, name_values, name_ids,
-                rows):
+def bill_result(rev, key, lang, changed, selected, feed_in, default, feed_values, name_values,
+                feed_ids, name_ids, rows):
     """Summary of the last billing in its card, the settlement table below the columns,
     and a note when the prices have changed since."""
     entry = store.get(key)
@@ -252,9 +258,10 @@ def bill_result(rev, key, lang, changed, selected, feed_in, default, name_values
     names = members.names(data, lang, name_ids, name_values, rows)
     table = views.bill_table(result.settlement, data, names, lang, top_dests(data.frame, data),
                              members.enabled(data, selected))
-    inputs, _missing = bill_inputs(data, rows, feed_in, default)
+    inputs, _missing = bill_inputs(data, rows, feed_ids, feed_values, feed_in, default)
     totals = result.totals
-    changed = (inputs is None or abs(inputs[1] - totals.feed_in) > 1e-9
-               or any(abs(a - b) > 1e-9 for a, b in zip(inputs[0], totals.prices)))
-    return dict(result=views.bill_result(result, lang), table=[table],
+    changed = inputs is None or any(
+        abs(a - b) > 1e-9 for a, b in zip([*inputs[0], *inputs[1]],
+                                          [*totals.prices, *totals.feed_ins]))
+    return dict(result=views.bill_result(result, len(data.source_eans), lang), table=[table],
                 stale=views.hint(t("bill_stale", lang), "stale") if changed else [])

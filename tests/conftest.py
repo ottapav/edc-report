@@ -30,15 +30,25 @@ def synthetic_group(n: int, T: int, rounds: int, keys=None, seed: int = 0):
 
 
 def all_report_csv(P, D, S, eans=None, prod="859182400699900000",
-                   start="2026-06-01") -> bytes:
-    """Build an EDC 'all report' CSV (decimal comma, ';') from hundredths of kWh."""
+                   start="2026-06-01", supplied=None) -> bytes:
+    """Build an EDC 'all report' CSV (decimal comma, ';') from hundredths of kWh.
+
+    A 2-D ``P[T, np]`` makes several producers (EANs ``prod`` + 0, 1, …); ``supplied[T,
+    np]`` is what each of them shared (default: in proportion to its production)."""
     T, n = D.shape
     eans = eans or [f"8591824006{i:08d}" for i in range(n)]
     idx = pd.date_range(start, periods=T, freq="15min")
     fmt = lambda a: [f"{x / 100:.2f}".replace(".", ",") for x in a]  # noqa: E731
     cols = {"Datum": idx.strftime("%d.%m.%Y"), "Cas od": idx.strftime("%H:%M"),
-            "Cas do": (idx + pd.Timedelta(minutes=15)).strftime("%H:%M"),
-            f"IN-{prod}-D": fmt(P), f"OUT-{prod}-D": fmt(P - S.sum(axis=1))}
+            "Cas do": (idx + pd.Timedelta(minutes=15)).strftime("%H:%M")}
+    P2 = np.asarray(P)[:, None] if np.ndim(P) == 1 else np.asarray(P)
+    if supplied is None:        # producers supply in turn, each up to its production
+        before = np.cumsum(P2, axis=1) - P2
+        supplied = np.clip(S.sum(axis=1, keepdims=True) - before, 0, P2)
+    for i in range(P2.shape[1]):
+        e = prod if P2.shape[1] == 1 else f"{int(prod) + i}"
+        cols[f"IN-{e}-D"] = fmt(P2[:, i])
+        cols[f"OUT-{e}-D"] = fmt(P2[:, i] - supplied[:, i])
     for j, e in enumerate(eans):
         cols[f"IN-{e}-O"] = fmt(-D[:, j])
         cols[f"OUT-{e}-O"] = fmt(S[:, j] - D[:, j])

@@ -149,11 +149,22 @@ def hatch(th: dict) -> dict:
                 bgcolor=rgba(th["others"], 0.25))
 
 
-def producer_hatch(th: dict) -> dict:
+def producer_greens(th: dict, n: int) -> list[str]:
+    """The producers' colours: the theme's green, then darker and lighter shades of it."""
+    def mix(a: str, b: str, x: float) -> str:
+        ca = [int(a.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+        cb = [int(b.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+        return "#" + "".join(f"{round(p + (q - p) * x):02x}" for p, q in zip(ca, cb))
+    steps = [0.0, -0.45, 0.45, -0.7, 0.65, -0.25, 0.25]
+    return [mix(th["source"], "#000000" if x < 0 else "#ffffff", abs(x))
+            for x in (steps[i % len(steps)] for i in range(n))]
+
+
+def producer_hatch(th: dict, colour: str | None = None) -> dict:
     """The producer's green with a cross-hatch, so it never reads as the member that
     got tab10 green (the third one)."""
     return dict(shape="x", size=6, solidity=0.3, fgcolor=th["source_ink"],
-                bgcolor=rgba(th["source"], th["area_alpha"]))
+                bgcolor=rgba(colour or th["source"], th["area_alpha"]))
 
 
 def figure(title: str, lang: str, height: int, th: dict) -> go.Figure:
