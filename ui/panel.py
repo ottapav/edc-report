@@ -13,7 +13,7 @@ import jobs
 import store
 from edc_data import load_report
 from figures import heat_metrics
-from i18n import t
+from i18n import t, tn
 
 from . import members
 from .layout import job_ids, source_rows, upload_content
@@ -28,7 +28,7 @@ LABELS = [
     ("lbl-right-view", "children", "right_view"),
     ("theme-btn", "title", "theme_toggle"),
     # panel
-    ("lbl-source", "children", "panel_source"),
+    ("lbl-source-hint", "children", "panel_source_hint"),
     ("lbl-dest", "children", "panel_dest"),
     ("lbl-dest-hint", "children", "panel_dest_hint"),
     ("btn-all", "children", "all"),
@@ -70,20 +70,25 @@ def _labels(lang):
         heat_box=Output("heat-box", "style"),
         columns=Output("members", "columnDefs"),
         placeholders=Output({"type": "name", "ean": ALL}, "placeholder"),
+        source_title=Output("lbl-source", "children"),
+        feed_ph=Output({"type": "feed", "ean": ALL}, "placeholder"),
+        feed_tip=Output({"type": "feed-tip", "ean": ALL}, "title"),
         exact_title=Output("exact-btn", "title"),
         bill_title=Output("bill-btn", "title"),
     ),
     inputs=dict(lang=Input("lang", "value"), key=Input("data-key", "data")),
     state=dict(heat=State("heat-metric", "value"),
-               src_ids=State({"type": "name", "ean": ALL}, "id")),
+               src_ids=State({"type": "name", "ean": ALL}, "id"),
+               feed_ids=State({"type": "feed", "ean": ALL}, "id")),
 )
-def _report_labels(lang, key, heat, src_ids):
+def _report_labels(lang, key, heat, src_ids, feed_ids):
     """Labels that also depend on the uploaded report."""
     entry = store.get(key)
     data = entry.data if entry else None
     metrics = heat_metrics(data) if data else ("production", "consumption")
     names = members.default_names(data, lang) if data else {}
     part = data is not None and data.fmt != "all"
+    multi = data is not None and len(data.source_eans) > 1
     return dict(
         upload=upload_content(lang, entry is not None),
         day_format="DD.MM.YYYY" if lang == "cs" else "YYYY-MM-DD",
@@ -92,7 +97,11 @@ def _report_labels(lang, key, heat, src_ids):
         heat_box={"display": "none"} if len(metrics) < 2 else {},   # part report: no choice
         columns=members.columns(lang, editable=not part),
         placeholders=[names.get(i["ean"], "") for i in src_ids],
-        exact_title=t("part_no_recompute", lang) if part else "",
+        source_title=tn("panel_source", lang, len(data.source_eans) if data else 1),
+        feed_ph=[t("feed_ph", lang)] * len(feed_ids),
+        feed_tip=[t("feed_tip", lang)] * len(feed_ids),
+        exact_title=(t("part_no_recompute", lang) if part
+                     else t("multi_no_recompute", lang) if multi else ""),
         bill_title=t("part_no_bill", lang) if part else "",
     )
 
@@ -179,13 +188,14 @@ def _on_upload(contents, filename, lang, old_key):
     first, last = days.min().date().isoformat(), days.max().date().isoformat()
     many = len(data.dest_eans) > 12
     out.update(
-        key=key, sources=source_rows(data.source_eans, members.default_names(data, lang)),
+        key=key, sources=source_rows(data.source_eans, members.default_names(data, lang), lang),
         report="report", box="upload upload-small",
         first=first, last=last, day=last, month=last,
         rows=members.rows(data), selected={"ids": list(data.dest_eans)},
         grid=members.options(many), grid_style={"height": "440px" if many else None},
     )
-    if data.fmt == "all":    # estimate the keys right away, to check them before a recompute
+    if data.fmt == "all" and len(data.source_eans) == 1:
+        # estimate the keys right away, to check them before a recompute
         out.update(fit_job=jobs.start_fit(key), fit_poll_off=False)
     return out
 

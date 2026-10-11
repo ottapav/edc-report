@@ -56,8 +56,8 @@ def upload_content(lang: str, loaded: bool) -> html.Div:
     ])
 
 
-def source_rows(eans: list[str], placeholders: dict[str, str]) -> list:
-    """Name inputs of the producers (destinations are named in the grid)."""
+def source_rows(eans: list[str], placeholders: dict[str, str], lang: str) -> list:
+    """Name and feed-in price inputs of the producers (destinations are in the grid)."""
     return [
         html.Div(className="dest-row", children=[
             html.Span(className="swatch", style={"background": "#339933"}),
@@ -66,6 +66,10 @@ def source_rows(eans: list[str], placeholders: dict[str, str]) -> list:
                           placeholder=placeholders[e], className="name-in"),
                 html.Div(e, className="ean"),
             ]),
+            html.Span(id={"type": "feed-tip", "ean": e}, title=t("feed_tip", lang),
+                      children=dcc.Input(id={"type": "feed", "ean": e}, type="number", min=0,
+                                         step=0.01, debounce=True, className="num-in feed-src",
+                                         placeholder=t("feed_ph", lang))),
         ]) for e in eans
     ]
 
@@ -103,6 +107,7 @@ def _panel() -> html.Aside:
         html.Section(className="panel-section", children=[
             html.H3(id="lbl-source"),
             html.Div(id="src-panel"),
+            html.P(id="lbl-source-hint", className="hint"),
         ]),
         html.Section(className="panel-section", children=[
             html.Div(className="panel-head", children=[

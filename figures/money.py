@@ -17,14 +17,14 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from billing import PRODUCER, Billing
-from edc_data import SharingData
-from i18n import fmt_num, t
+from billing import PRODUCER, Billing, is_producer_col, producer_col
+from edc_data import POOL, SharingData
+from i18n import fmt_num, t, tn
 
 from .base import (
     OTHER, OTHER_COLOUR, THEMES, area, colour_map, daily_layout, date_text, day_slice,
     figure, hatch, hbars, heatmap, hour_month_pivot, intraday_layout, intraday_legend,
-    member_groups, no_data, order_rows, pie, producer_hatch,
+    member_groups, no_data, order_rows, pie, producer_greens, producer_hatch,
 )
 
 UNSELECTED = "__unselected__"  # shares of the unticked members, summed
@@ -33,7 +33,7 @@ UNSELECTED = "__unselected__"  # shares of the unticked members, summed
 def bill_columns(frame: pd.DataFrame, data: SharingData, enabled: set[str],
                  top: tuple[str, ...] | None) -> tuple[pd.DataFrame, int]:
     """Per-interval Kč for plotting: ticked members (the rest of a large group folded
-    into OTHER), the unticked members summed (UNSELECTED), the producer; and the number
+    into OTHER), the unticked members summed (UNSELECTED), the producers; and the number
     of folded members."""
     out, n_rest = {}, 0
     for key, members in member_groups(data, enabled, top):
@@ -42,14 +42,17 @@ def bill_columns(frame: pd.DataFrame, data: SharingData, enabled: set[str],
     unsel = [e for e in data.dest_eans if e not in enabled]
     if unsel:
         out[UNSELECTED] = frame[unsel].sum(axis=1)
-    out[PRODUCER] = frame[PRODUCER]
+    for col in frame.columns:
+        if is_producer_col(col):
+            out[col] = frame[col]
     return pd.DataFrame(out, index=frame.index), n_rest
 
 
 def _label(col: str, names: dict[str, str], data: SharingData, lang: str,
            n_rest: int = 0) -> str:
-    if col == PRODUCER:
-        return t("bill_producer", lang).format(name=names[data.source_eans[0]])
+    if is_producer_col(col):
+        src = col[len(PRODUCER):]
+        return names[src] if src == POOL else t("bill_producer", lang).format(name=names[src])
     if col == UNSELECTED:
         return t("bill_unselected", lang)
     if col == OTHER:
@@ -61,9 +64,11 @@ def _areas(fig: go.Figure, frame: pd.DataFrame, data: SharingData, names: dict, 
            th: dict, top, n_rest: int) -> None:
     cmap = colour_map(data, top)
     unit = t("currency", lang)
+    greens = dict(zip([c for c in frame.columns if is_producer_col(c)],
+                      producer_greens(th, len(data.source_eans))))
     for col in frame.columns:
-        if col == PRODUCER:
-            colour, pattern = th["source"], producer_hatch(th)
+        if col in greens:
+            colour, pattern = greens[col], producer_hatch(th, greens[col])
         elif col == UNSELECTED:
             colour, pattern = th["others"], hatch(th)
         else:
@@ -77,15 +82,15 @@ def fig_bill_split(bill: Billing, data: SharingData, names: dict[str, str], enab
                    top: tuple[str, ...] | None = None,
                    order: list[str] | None = None) -> go.Figure:
     """Value of the shared electricity per member: share of the benefit (member's
-    colour) + payment to the producer (grey) = value at the supplier price; the
-    producer: its share (hatched green) + feed-in value (grey) = what the members pay.
+    colour) + payment to the producers (grey) = value at the supplier price; each
+    producer: its share (hatched green) + feed-in value (grey) = what it receives.
     Members sit on the rows of the paired flow chart (``order``)."""
     th = th or THEMES["light"]
     cur = t("currency", lang)
     fig = figure(t("bill_split_title", lang), lang, 420, th)
     idx = {e: j for j, e in enumerate(data.dest_eans)}
     sel = [e for e in data.dest_eans if e in enabled]
-    if not sel and bill.producer_income <= 0:
+    if not sel and bill.producer_income.sum() <= 0:
         return no_data(fig, lang, th)
     cmap = colour_map(data, top)
     share_lab, pays_lab = t("bill_col_share_short", lang), t("bill_pays", lang)
@@ -105,15 +110,18 @@ def fig_bill_split(bill: Billing, data: SharingData, names: dict[str, str], enab
         for key, members in groups]
     rows = order_rows(rows, order, key=lambda r: r["segs"][0][0] + r["segs"][1][0])
     many = len(rows) > 1
-    rows.append(row(PRODUCER, _label(PRODUCER, names, data, lang), bill.producer_share,
-                    bill.feed_in_value, th["source"], th["unshared"],
-                    t("bill_feed_in_value", lang)))
+    # the producers in one row, like the pool's row of the paired flow chart (several
+    # producers: the settlement table has each of them)
+    src = data.source_eans[0] if len(data.source_eans) == 1 else POOL
+    rows.append(row(producer_col(src), _label(producer_col(src), names, data, lang),
+                    float(bill.producer_share.sum()), float(bill.feed_in_value.sum()),
+                    th["source"], th["unshared"], t("bill_feed_in_value", lang)))
     if many:
         rows += [None, row(None, t("bill_total_members", lang),
                            float(sum(bill.share[idx[e]] for e in sel)),
                            float(sum(bill.payment[idx[e]] for e in sel)),
                            th["total"], th["unmet"], pays_lab, summary=True)]
-    shapes = ["x" if r["key"] == PRODUCER else "" for r in rows if r is not None]
+    shapes = ["x" if is_producer_col(r["key"]) else "" for r in rows if r is not None]
     slots = [dict(name=share_lab, pattern=dict(shape=shapes, size=6, solidity=0.3,
                                                fgcolor=th["source_ink"])),
              dict(name=pays_lab)]
@@ -133,7 +141,8 @@ def fig_bill_pie(bill: Billing, data: SharingData, enabled: set[str], lang: str 
         return no_data(fig, lang, th)
     sel = np.array([e in enabled for e in data.dest_eans])
     slices = [   # label, value, colour, hatched, pulled out
-        (t("bill_pie_producer", lang), bill.producer_share, th["source"], False, False),
+        (tn("bill_pie_producer", lang, len(data.source_eans)), float(bill.producer_share.sum()),
+         th["source"], False, False),
         (t("bill_pie_members", lang), float(bill.share[sel].sum()), th["members"], False, False),
         (t("bill_pie_unselected", lang), float(bill.share[~sel].sum()), th["others"], True, False),
         (t("bill_pie_lost", lang), bill.maximum - bill.realized, th["wasted"], False, True),

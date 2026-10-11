@@ -19,7 +19,7 @@ from typing import Any, Callable
 import config
 import store
 from billing import BillResult, compute_shapley
-from edc_data import per_destination
+from edc_data import per_destination, producer_arrays, supplied_per_source
 from keyfit import estimate_keys
 from procjob import JobCancelled, JobTimeout, run_in_child
 from recompute import recompute, to_hundredths
@@ -145,14 +145,16 @@ def start_exact(data_key: str, keys: list[float | None], reserve: float) -> str:
     return start("exact", data_key, work)
 
 
-def start_bill(data_key: str, prices: list[float], feed_in: float) -> str:
-    """Billing by the Shapley value of the report's shared energy."""
+def start_bill(data_key: str, prices: list[float], feed_ins: list[float]) -> str:
+    """Billing by the Shapley value of the report's shared energy (supplier price per
+    destination, feed-in price per producer)."""
     def work(entry: store.Entry, job: Job) -> None:
         job.progress("bill", 0.0)
-        P, D, _S = to_hundredths(entry.data)
-        totals = run_in_child(compute_shapley, (P, D, prices, feed_in),
-                              progress=job.progress, cancelled=job.cancelled)
         data = entry.data
+        P, D = producer_arrays(data)
+        totals = run_in_child(compute_shapley, (P, D, prices, feed_ins),
+                              progress=job.progress, cancelled=job.cancelled)
         entry.bill = BillResult.build(totals, per_destination(data)["shared"].to_numpy(),
-                                      data.frame.index, data.dest_eans)
+                                      supplied_per_source(data), data.frame.index,
+                                      data.dest_eans, data.source_eans)
     return start("bill", data_key, work)

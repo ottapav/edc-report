@@ -86,8 +86,10 @@ with the computation timed per 15-min interval.
 
 **Billing by the Shapley value (proposal):**
 
-* **Prices:** each member's supplier price (the *Price* column of the grid, next to the keys,
-  or a default price for the empty cells) and the producer's feed-in price.
+* **Prices:** each member's supplier price (the *Price* column of the grid, next to the keys)
+  and each producer's feed-in price (next to its name), or default prices for the empty ones.
+* **Several producers:** the producers share as a pool (any producer can supply any member);
+  each has its own feed-in price.
 * **Compute:** one button computes the exact Shapley values over the whole report in the
   background, with a progress bar.
 * **Right column:** like the exact method, the billing is drawn next to the EDC report, with
@@ -98,7 +100,8 @@ with the computation timed per 15-min interval.
   exist, a switch chooses the right column; a computation that has just finished is shown.
 * **Settlement table** (full width below): per member the shared energy, its value at the
   supplier price, the fair share of the benefit, the payment to the producer and the
-  effective price per kWh; the producer's income, its share and the feed-in value it gave up.
+  effective price per kWh; per producer the energy it shared, its income, its share and the
+  feed-in value it gave up.
 
 **Interface:**
 
@@ -128,8 +131,10 @@ gunicorn app:server -c gunicorn.conf.py        # listens on $PORT (default 8050)
 
 1. **Upload** the CSV report generated on edc-cr.cz (file name like
    `Export-dat-…-report-….csv`). Both report layouts are detected from the header:
-   * **all report** (`IN/OUT-<ean>-D` for the producer, `IN/OUT-<ean>-O` for members) carries
-     production and consumption and enables everything;
+   * **all report** (`IN/OUT-<ean>-D` for each producer, `IN/OUT-<ean>-O` for members) carries
+     production and consumption and enables everything (with several producers: the billing,
+     not the exact static method; the report does not say which producer supplied whom, so
+     the shared energy is shown as one pool);
    * **part report** (`<ean>-<ean>` columns) has shared energy only: no pie, no recompute.
 2. The report appears immediately, and the **allocation keys are estimated in the
    background**. A summary shows which EDC method explains the report (1 or 5 rounds) and
@@ -239,39 +244,44 @@ interval. Numbers vary with the machine; Render instances have less than one CPU
 
 ## Billing by the Shapley value
 
-`billing.py` splits the benefit of sharing between the producer and the members by the
-Shapley value. The benefit of a kWh shared to member *j* is `p_j − f` (supplier price minus
-feed-in price). The keys do not enter the Shapley value: they decide who got the energy, the
-Shapley value decides who deserves the money.
+`billing.py` splits the benefit of sharing between the producers and the members by the
+Shapley value. The benefit of a kWh that producer *i* shares to member *j* is `p_j − f_i`
+(supplier price minus feed-in price). The keys do not enter the Shapley value: they decide
+who got the energy, the Shapley value decides who deserves the money.
 
 **The game.** In every 15-min interval a coalition is worth what it could save with the best
-sharing: the producer's surplus goes first to the members with the highest price,
-`v(S) = 1[producer ∈ S] · Σ_k Δλ_k · min(P, D_k(S))`, where the price layer *k* holds the
-members whose price is at least λ_k (λ_0 = f). Shapley values add up, so the year is the sum
-of the intervals and the layers.
+sharing, the producers' surplus shared as a pool: the cheapest production goes first to the
+members with the highest price. With all distinct prices sorted, λ_0 < λ_1 < …,
+`v(S) = Σ_k Δλ_k · min(G_k(S), D_k(S))`, where layer *k* holds the producers with
+`f ≤ λ_k` (surplus `G_k`) and the members with `p ≥ λ_{k+1}` (demand `D_k`). Shapley values
+add up, so the year is the sum of the intervals and the layers.
 
 **Exact algorithm** (energies in hundredths of kWh, like EDC data, so nothing is rounded):
 
-* night: nothing; enough production for a layer: every member gets `d_j / 2` of it
-  (closed form, all such intervals at once);
-* otherwise `φ_j = ∫₀¹ u · E[min(d_j, P − X₋ⱼ(u))⁺] du` (Owen's multilinear extension). The
-  integrand is a Bernstein polynomial with coefficients in [0, d_j], so Gauss–Legendre needs
-  far fewer than m/2 nodes: a rigorous error bound (Bernstein ellipse) picks the smallest
-  even count for 10⁻¹³ relative error (12 nodes for 20 members, 46 for 150);
-* one DP per node gives the distribution of the members' demand, sorted by price, so every
-  price layer is a prefix of the same DP; node 1 − u is the mirror image of u, so half the
-  nodes need a DP;
-* leaving member *j* out needs no deconvolution: a finite geometric series turns
-  `E[h(X₋ⱼ)]` into lookups in the running sum of the CDF of *X*, summed over the layers that
-  contain *j* with weights Δλ. The producer gets `v(N) − Σ φ_j`.
+* nothing to share: nothing; a layer with one producer that covers its demand: every member
+  gets `d_j / 2` of it, the producer the rest; a layer with one member that takes all its
+  surplus: every producer gets `g_i / 2` (closed forms, all such intervals at once);
+* otherwise, with the balance `Z = D(S) − G(S)` and `H(a) = Σ_{s≤a} P(Z ≤ s)`:
+  `φ_j = ∫₀¹ H₋ⱼ(−1) − H₋ⱼ(−1 − d_j) du` for a member and
+  `φ_i = g_i − ∫₀¹ H₋ᵢ(g_i − 1) − H₋ᵢ(−1) du` for a producer (Owen's multilinear extension).
+  The integrand is a Bernstein polynomial with coefficients in [0, d_j], so Gauss–Legendre
+  needs far fewer than m/2 nodes: a rigorous error bound (Bernstein ellipse) picks the smallest
+  even count for 10⁻¹³ relative error (12 nodes for 20 players, 46 for 150);
+* one DP per node gives the distribution of *Z*: the members sorted by price (every layer is
+  a prefix of them), then each layer's producers; node 1 − u is the mirror image of u, so
+  half the nodes need a DP;
+* leaving a player out needs no deconvolution: a finite geometric series turns `H₋ᵢ` into
+  lookups in *H*, summed over the player's layers with weights Δλ (a member is in the first
+  layers, a producer in the last ones).
 
-The suite checks the result against brute force over all coalitions (mixed prices, members
-without demand, prices below the feed-in price) to 10⁻⁹ Kč.
+The suite checks the result against brute force over all coalitions (one and several
+producers, mixed prices, members without demand, prices below the feed-in price) to 10⁻⁹ Kč.
 
 **Settlement.** The Shapley values of the best sharing are scaled to the benefit the EDC
-report really achieved, `Σ (p_j − f) · s_j`. Member *j* pays the producer
-`p_j · s_j − share_j` (in whole haléř); the producer's share is the sum of the payments minus
-the feed-in value of the shared energy. The page shows how much of the best possible
+report really achieved, `Σ p_j · s_j − Σ f_i · q_i` (`s_j` shared to member *j*, `q_i`
+shared by producer *i*). Member *j* pays `p_j · s_j − share_j` (in whole haléř); the payments
+make a pool from which each producer gets the feed-in value of its shared energy plus its
+share (whole haléř, adding up to the payments). The page shows how much of the best possible
 benefit the report achieved.
 
 **Plots.** The computation also keeps the Shapley values of every 15-min interval with
@@ -280,16 +290,19 @@ daily, hourly and heatmap figures add up to the settlement.
 
 **Time** (one core, synthetic groups, `compute_shapley`):
 
-| Members | Period | Distinct prices | Time |
-|---|---|---|---|
-| 5 | 1 year | 1–5 | 1.6–2 s |
-| 20 | 3 months | 20 | 4 s |
-| 50 | 1 month | 44 | 12 s |
-| 150 | 1 month | 1 | 31 s |
-| 150 | 1 month | 100 | 2 min |
+| Members | Producers | Period | Distinct prices | Time |
+|---|---|---|---|---|
+| 5 | 1 | 1 year | 4 | 3 s |
+| 5 | 3 | 1 year | 5 + 3 feed-in | 19 s |
+| 20 | 1 | 3 months | 19 | 6 s |
+| 50 | 1 | 1 month | 45 | 17 s |
+| 150 | 1 | 1 month | 1 | 38 s |
+| 150 | 3 | 1 month | 1 + 3 feed-in | 1.6 min |
+| 150 | 1 | 1 month | 113 | 3 min |
 
-The cost grows with the number of members, the size of the production in hundredths of kWh,
-and the number of distinct prices. Expect several times longer on the free Render instance.
+The cost grows with the number of members, the size of the production and demand in
+hundredths of kWh, and the number of distinct prices. With several producers the closed
+forms rarely apply, so more intervals need the quadrature. Expect several times longer on the free Render instance.
 
 ## Architecture
 
@@ -451,8 +464,9 @@ needed. It checks that:
 
 ## Limitations
 
-* **Several producers:** all reports with more than one producer are not supported yet (the
-  part report is). The exact method for several producers would use the pool mode (`bazen()`).
+* **Several producers:** the billing supports them (pool); the exact static method and the
+  key estimate need one producer. The EDC report does not say which producer supplied which
+  member, so the energy figures show the producers as one pool.
 * **Keys:** the estimate cannot be better than the report allows. Members that are almost
   always fully covered only get a lower bound. Irregular keys in large 5-round groups may stop
   at a local optimum. The match and the ranges are always shown.

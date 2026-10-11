@@ -100,6 +100,8 @@ def key_unshared(src: str) -> str:
 
 
 KEY_OTHERS = "others|shared"
+#: source of the shared columns of an all report with several producers
+POOL = "pool"
 
 
 def key_kind(key: str) -> str:
@@ -142,7 +144,9 @@ class SharingData:
     source_eans, dest_eans
         EANs in file order.
     production
-        Producer ``IN-D`` series (all report only).
+        Production ``IN-D`` of all producers together (all report only).
+    productions
+        Producer EAN -> its ``IN-D`` series (all report only).
     demand
         Consumer demand per destination EAN (all report only), positive kWh.
     coverage
@@ -159,6 +163,7 @@ class SharingData:
     source_eans: list[str]
     dest_eans: list[str]
     production: pd.Series | None = None
+    productions: dict[str, pd.Series] = field(default_factory=dict)
     demand: dict[str, pd.Series] = field(default_factory=dict)
     coverage: dict[str, float] = field(default_factory=dict)
     first_data: dict[str, pd.Timestamp | None] = field(default_factory=dict)
@@ -229,23 +234,23 @@ def _load_part(df: pd.DataFrame) -> SharingData:
 def _load_all(df: pd.DataFrame) -> SharingData:
     df = _attach_datetime_index(df)
     cols = [str(c) for c in df.columns]
-    prod_eans = {m.group(1) for c in cols if (m := _RE_PROD_IN.match(c))}
-    prod_eans |= {m.group(1) for c in cols if (m := _RE_PROD_OUT.match(c))}
-    if len(prod_eans) != 1:
-        raise ValueError(
-            f"Expected exactly one producer EAN (…-D columns), found {len(prod_eans)}: "
-            f"{sorted(prod_eans)}. Multi-producer all-reports are not supported yet."
-        )
-    prod = next(iter(prod_eans))
-    prod_in, prod_out = f"IN-{prod}-D", f"OUT-{prod}-D"
+    prods: list[str] = []                          # file order
+    for c in cols:
+        m = _RE_PROD_IN.match(c) or _RE_PROD_OUT.match(c)
+        if m and m.group(1) not in prods:
+            prods.append(m.group(1))
+    # several producers: the report does not say who supplied whom, so the shared energy
+    # is one pool (the "source" of every shared column)
+    src = prods[0] if len(prods) == 1 else POOL
 
     cons_in = {m.group(1): c for c in cols if (m := _RE_CONS_IN.match(c))}
     cons_out = {m.group(1): c for c in cols if (m := _RE_CONS_OUT.match(c))}
     # keep file order
     dests = [e for e in cons_in if e in cons_out]  # dicts keep file order
 
-    for c in (prod_in, prod_out, *cons_in.values(), *cons_out.values()):
-        if c in df.columns:
+    for c in cols:
+        if _RE_PROD_IN.match(c) or _RE_PROD_OUT.match(c) or c in cons_in.values() \
+                or c in cons_out.values():
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
     out: dict[str, pd.Series] = {}
@@ -257,7 +262,7 @@ def _load_all(df: pd.DataFrame) -> SharingData:
         c_in, c_out = df[cons_in[ean]], df[cons_out[ean]]
         shared = (c_out - c_in).fillna(0).clip(lower=0)
         dem = (-c_in.fillna(0)).clip(lower=0)
-        out[key_shared(prod, ean)] = shared
+        out[key_shared(src, ean)] = shared
         out[key_unmet(ean)] = (dem - shared).clip(lower=0)
         demand[ean] = dem
         coverage[ean] = float(c_out.notna().mean())
@@ -270,26 +275,34 @@ def _load_all(df: pd.DataFrame) -> SharingData:
                 f"OUT-O value; unmet energy is under-reported for those intervals."
             )
 
-    out[key_unshared(prod)] = (
-        df[prod_out].fillna(0).clip(lower=0) if prod_out in df.columns
-        else pd.Series(0.0, index=df.index)
-    )
+    productions: dict[str, pd.Series] = {}
+    for p in prods:
+        p_in, p_out = f"IN-{p}-D", f"OUT-{p}-D"
+        out[key_unshared(p)] = (df[p_out].fillna(0).clip(lower=0) if p_out in df.columns
+                                else pd.Series(0.0, index=df.index))
+        if p_in in df.columns:
+            productions[p] = df[p_in].fillna(0)
     frame = pd.DataFrame(out, index=df.index)
 
-    production = df[prod_in].fillna(0) if prod_in in df.columns else None
-    if production is not None:
-        shared_sum = frame[[key_shared(prod, e) for e in dests]].sum(axis=1)
-        residual = production - shared_sum - frame[key_unshared(prod)]
+    production = None
+    if len(productions) == len(prods):
+        production = sum(productions.values())
+        shared_sum = frame[[key_shared(src, e) for e in dests]].sum(axis=1)
+        unshared_sum = frame[[key_unshared(p) for p in prods]].sum(axis=1)
+        residual = production - shared_sum - unshared_sum
         max_abs = float(residual.abs().max())
         if max_abs > 0.01:
             notes.append(
                 f"Balance check: max |IN-D − shared − unshared| = {max_abs:.3f} kWh "
                 f"in one interval (total {float(residual.sum()):.2f} kWh)."
             )
+    if len(prods) > 1:
+        notes.append(f"{len(prods)} producers: the report does not say which producer "
+                     "supplied which member, so the shared energy is shown as one pool.")
 
     return SharingData(
-        frame=frame, fmt="all", source_eans=[prod], dest_eans=dests,
-        production=production, demand=demand, coverage=coverage,
+        frame=frame, fmt="all", source_eans=prods, dest_eans=dests,
+        production=production, productions=productions, demand=demand, coverage=coverage,
         first_data=first, notes=notes, n_rows=len(frame),
     )
 
@@ -503,3 +516,23 @@ def per_destination(data: SharingData) -> pd.DataFrame:
             "first_data": data.first_data.get(ean),
         })
     return pd.DataFrame(rows)
+
+
+def to_kwh_hundredths(s: pd.Series) -> np.ndarray:
+    return np.round(s.to_numpy(dtype=float) * 100).astype(np.int64)
+
+
+def producer_arrays(data: SharingData) -> tuple[np.ndarray, np.ndarray]:
+    """(P[T, np] production of each producer, D[T, n] demand of each destination) as
+    int64 hundredths of kWh, negatives clipped (all report)."""
+    if data.fmt != "all" or len(data.productions) != len(data.source_eans):
+        raise ValueError("Billing needs an all report with the production of every producer.")
+    P = np.stack([to_kwh_hundredths(data.productions[e]) for e in data.source_eans], axis=1)
+    D = np.stack([to_kwh_hundredths(data.demand[e]) for e in data.dest_eans], axis=1)
+    return np.clip(P, 0, None), np.clip(D, 0, None)
+
+
+def supplied_per_source(data: SharingData) -> np.ndarray:
+    """kWh each producer shared: production − unshared (all report)."""
+    return np.array([float((data.productions[e] - data.frame[key_unshared(e)])
+                           .clip(lower=0).sum()) for e in data.source_eans])

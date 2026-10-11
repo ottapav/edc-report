@@ -21,7 +21,7 @@ from keyfit import replay_match
 from procjob import run_in_child
 from presna_staticka import rozdel
 from edc_data import (
-    SharingData, key_shared, key_unmet, key_unshared,
+    SharingData, key_shared, key_unmet, key_unshared, producer_arrays,
 )
 
 ProgressFn = Callable[[str, float], None]  # (phase, fraction 0..1)
@@ -41,10 +41,8 @@ def to_hundredths(data: SharingData) -> tuple[np.ndarray, np.ndarray, np.ndarray
     if data.fmt != "all" or data.production is None or len(data.source_eans) != 1:
         raise ValueError("Recompute needs an all report with exactly one producer.")
     src = data.source_eans[0]
-    P = np.round(data.production.to_numpy(dtype=float) * 100).astype(np.int64)
-    P = np.clip(P, 0, None)
-    D = np.stack([np.round(data.demand[e].to_numpy(dtype=float) * 100)
-                  for e in data.dest_eans], axis=1).astype(np.int64)
+    P2, D = producer_arrays(data)
+    P = P2[:, 0]
     S = np.stack([np.round(data.frame[key_shared(src, e)].to_numpy(dtype=float) * 100)
                   for e in data.dest_eans], axis=1).astype(np.int64)
     return P, D, S
