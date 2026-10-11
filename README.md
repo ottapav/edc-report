@@ -74,7 +74,10 @@ with the computation timed per 15-min interval.
   before the recompute.
 * **Recompute:** one button runs `rozdel()` for every 15-min interval, with a progress bar.
 * **Side by side:** the approximate static method (EDC) and the exact method, with shared axes, differences to EDC in
-  the tiles, and a per-member comparison table.
+  the tiles, and a per-member comparison table. The two columns share the rows of one grid
+  (CSS subgrid): every card sits next to its counterpart at the same height, tile values are
+  level, the "by flow" charts keep each member on the same row, and paired plots get the same
+  height and number of legend rows, so their x axes line up.
 * **Sharing error:** when the recompute is done, a callout gives the error of the approximate static method (EDC)
   algorithm as a percentage of the maximum sharing (what the exact method shares), with the
   kWh missed.

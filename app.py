@@ -46,8 +46,8 @@ from flask import Response, request
 from figures import (
     PRODUCER, bill_columns, colour_map, fig_bill_daily, fig_bill_heatmap,
     fig_bill_intraday, fig_bill_pie, fig_bill_split, fig_daily, fig_heatmap, fig_intraday,
-    fig_total_by_flow, fig_wasted_pie, heat_metrics, heat_pivot, intraday_ymax, theme,
-    top_dests,
+    fig_total_by_flow, fig_wasted_pie, flow_order, heat_metrics, heat_pivot, intraday_ymax,
+    pair_figures, theme, top_dests,
 )
 from billing import ShapleyTotals, compute_shapley, settle
 from i18n import fmt_date, fmt_duration, fmt_num, fmt_pct, fmt_signed, t
@@ -1731,12 +1731,13 @@ def _render(key, _rev, _bill_rev, view, selected, _changed, name_values, lang, g
     right = _right_mode(entry, view)
     timing = _timing(exact, data, enabled, names, lang) if exact is not None else []
     head_b, table_b = "", hidden
+    order = flow_order(df, data, opts["top"])     # same member rows in both flow charts
     if right is None:
         b = ([], {}, {}, {}, {}, {}, {}, hidden, [])
         mode = "compare single"
     elif right == "exact":
         df_b = filter_dests(exact.data, enabled)
-        ov_b = fig_total_by_flow(df_b, exact.data, names, **opts)
+        ov_b = fig_total_by_flow(df_b, exact.data, names, order=order, **opts)
         dy_b = fig_daily(df_b, exact.data, names, sel_day=sel_day, **opts)
         pie_b = fig_wasted_pie(compute_wasted_split(df_b), lang, th)
         _align_overview(ov_a, ov_b)
@@ -1748,7 +1749,7 @@ def _render(key, _rev, _bill_rev, view, selected, _changed, name_values, lang, g
         bill = _billing(entry)
         cols, n_rest = _bill_cols(entry, enabled, opts["top"])
         bnames = dict(names, **{PRODUCER: names[data.source_eans[0]]})
-        ov_b = fig_bill_split(bill, data, bnames, enabled, **opts)
+        ov_b = fig_bill_split(bill, data, bnames, enabled, order=order, **opts)
         dy_b = fig_bill_daily(cols, data, bnames, n_rest=n_rest, sel_day=sel_day, **opts)
         pie_b = fig_bill_pie(bill, data, enabled, lang, th)
         b = (_bill_tiles(bill, data, enabled, lang), ov_b, dy_b, pie_b,
@@ -1756,10 +1757,14 @@ def _render(key, _rev, _bill_rev, view, selected, _changed, name_values, lang, g
         head_b, table_b = t("col_bill", lang), {}
     if right is not None:
         mode = "compare dual"
-        # keep paired graphs the same height, so both columns stay aligned
-        hh = max(ov_a.layout.height, b[1].layout.height)
-        ov_a.update_layout(height=hh)
-        b[1].update_layout(height=hh)
+        # paired cards line up row by row: same heights, legend rows and pie margins
+        pair_figures(ov_a, b[1])
+        pair_figures(dy_a, b[2])
+        if pie_a and b[3]:
+            mb = max(pie_a.layout.margin.b or 0, b[3].layout.margin.b or 0)
+            pie_a.update_layout(margin_b=mb)
+            b[3].update_layout(margin_b=mb)
+            pair_figures(pie_a, b[3])
         b = (b[0], b[1], b[2], b[3], h(b[1]), h(b[2]), h(b[3]), *b[7:])
     b = (*b, timing)
 
@@ -1918,8 +1923,10 @@ def _hourly(day, key, _rev, _bill_rev, view, selected, _changed, name_values, la
         bnames = dict(names, **{PRODUCER: names[data.source_eans[0]]})
         fb = fig_bill_intraday(cols, data, bnames, _day(day), n_rest=n_rest, lang=lang,
                                th=opts["th"], top=opts["top"])
-        return fa, style, fb, style
-    fb = fig_intraday(frames[1], entry.exact.data, names, _day(day), **opts)
+    else:
+        fb = fig_intraday(frames[1], entry.exact.data, names, _day(day), **opts)
+    pair_figures(fa, fb)
+    style = {"height": f"{fa.layout.height}px"}
     return fa, style, fb, style
 
 

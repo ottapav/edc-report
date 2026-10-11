@@ -177,3 +177,28 @@ def test_bill_needs_prices(entry_key):
     rows = [{"ean": e, "price": None} for e in entry.data.dest_eans]
     out = app._start_bill(1, entry_key, rows, 1.2, None, "en")
     assert out[3] == "progress error" and "price" in out[5]
+
+
+def test_paired_figures_line_up(entry_key):
+    """Right-column figures take the left one's member order, height and legend rows."""
+    entry = app._cache_get(entry_key)
+    data = entry.data
+    rows = [{"ean": e, "price": 4.0 + 0.3 * j} for j, e in enumerate(data.dest_eans)]
+    _wait(app._JOBS[app._start_bill(1, entry_key, rows, 1.2, None, "cs")[0]])
+    enabled = set(data.dest_eans)
+    names = app.default_names(data, "cs")
+    df = core.filter_dests(data, enabled)
+    order = figures.flow_order(df, data)
+    left = figures.fig_total_by_flow(df, data, names, lang="cs")
+    bill = app._billing(entry)
+    right = figures.fig_bill_split(bill, data, dict(names, **{figures.PRODUCER: "A"}), enabled,
+                                   lang="cs", order=order)
+    member_rows = lambda f: list(f.layout.yaxis.ticktext[:len(order)])  # noqa: E731
+    assert member_rows(left) == member_rows(right) == [names[e] for e in order]
+    cols, _ = app._bill_cols(entry, enabled, None)
+    fa = figures.fig_daily(df, data, names, lang="cs")
+    fb = figures.fig_bill_daily(cols, data, dict(names, **{figures.PRODUCER: "A"}), lang="cs")
+    figures.pair_figures(fa, fb)
+    assert fa.layout.height == fb.layout.height
+    assert figures._legend_entries(fa) == figures._legend_entries(fb)
+    assert figures._legend_entries(fa) % 2 == 0

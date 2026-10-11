@@ -209,6 +209,18 @@ def daily_totals(df: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
+def flow_order(df: pd.DataFrame, data: SharingData,
+               top: tuple[str, ...] | None = None) -> list[str]:
+    """Destinations (EANs, OTHER for the folded rest) bottom-to-top as
+    :func:`fig_total_by_flow` draws them: ascending by shared energy. Pass it to the
+    paired chart of the right column, so every member sits on the same row."""
+    if top is not None:
+        df = _fold(df, top)[0]
+    totals = df.sum()
+    sc = shared_cols(df)
+    return [key_dest(c) for c in totals[sc].sort_values(ascending=True).index]
+
+
 def fig_total_by_flow(
     df: pd.DataFrame,
     data: SharingData,
@@ -217,10 +229,11 @@ def fig_total_by_flow(
     lang: str = "cs",
     th: dict | None = None,
     top: tuple[str, ...] | None = None,
+    order: list[str] | None = None,
 ) -> go.Figure:
     """Stacked horizontal bars, bottom-to-top: destinations (shared | unmet),
-    ascending by shared), source (shared | shared to unselected | unshared), gap,
-    summary rows."""
+    ascending by shared, or in ``order`` (see :func:`flow_order`)), source (shared |
+    shared to unselected | unshared), gap, summary rows."""
     th = th or THEMES["light"]
     fig = _figure(t("total_by_flow_title", lang), lang, 420, th)
     df, names, cmap = _folded(df, data, names, lang, top)
@@ -238,7 +251,11 @@ def fig_total_by_flow(
 
     # every row: s = shared | o = shared to unselected members | u = unmet / unshared
     rows: list[dict | None] = []
-    for col in totals[sc].sort_values(ascending=True).index:
+    ranked = list(totals[sc].sort_values(ascending=True).index)
+    if order is not None:
+        rank = {d: i for i, d in enumerate(order)}
+        ranked.sort(key=lambda c: rank.get(key_dest(c), len(rank)))   # stable
+    for col in ranked:
         dst = key_dest(col)
         label = names[dst] if n_sources == 1 else series_label(col, names, lang)
         rows.append(dict(label=label, s=float(totals[col]), o=0.0,
@@ -628,7 +645,8 @@ def _bill_areas(fig: go.Figure, df: pd.DataFrame, cmap: dict, th: dict, names: d
 
 def fig_bill_split(bill, data: SharingData, names: dict[str, str], enabled: set[str], *,
                    lang: str = "cs", th: dict | None = None,
-                   top: tuple[str, ...] | None = None) -> go.Figure:
+                   top: tuple[str, ...] | None = None,
+                   order: list[str] | None = None) -> go.Figure:
     """Value of the shared electricity per member: share of the benefit (member's
     colour) + payment to the producer (grey) = value at the supplier price; the
     producer: feed-in value (grey) + its share (green) = what the members pay."""
@@ -653,16 +671,21 @@ def fig_bill_split(bill, data: SharingData, names: dict[str, str], enabled: set[
     for key, members in groups:
         share = float(sum(bill.share[idx[e]] for e in members))
         pay = float(sum(bill.payment[idx[e]] for e in members))
-        rows.append(dict(label=_bill_label(key, names, lang, n_rest), a=share, b=pay,
+        rows.append(dict(key=key, label=_bill_label(key, names, lang, n_rest), a=share, b=pay,
                          ca=cmap.get(key, OTHER_COLOUR), cb=th["unmet"],
                          la=t("bill_col_share_short", lang), lb=t("bill_pays", lang),
                          summary=False))
-    rows.sort(key=lambda r: r["a"] + r["b"])
+    if order is not None:                   # rows of the paired flow chart
+        rank = {d: i for i, d in enumerate(order)}
+        rows.sort(key=lambda r: rank.get(r["key"], len(rank)))
+    else:
+        rows.sort(key=lambda r: r["a"] + r["b"])
+    many = len(rows) > 1
     rows.append(dict(label=_bill_label(PRODUCER, names, lang), a=bill.producer_share,
                      b=bill.feed_in_value, ca=th["source"], cb=th["unshared"],
                      la=t("bill_col_share_short", lang), lb=t("bill_feed_in_value", lang),
                      summary=False))
-    if len(sel) > 1:
+    if many:
         rows.append(None)
         rows.append(dict(label=t("bill_total_members", lang),
                          a=float(sum(bill.share[idx[e]] for e in sel)),
@@ -829,3 +852,40 @@ def fig_bill_heatmap(cols: pd.DataFrame, *, lang: str = "cs", th: dict | None = 
         xaxis=dict(tickangle=-30, type="category", showgrid=False),
     )
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Paired figures (left: EDC report, right: exact method or billing)
+# ---------------------------------------------------------------------------
+
+
+def _legend_entries(fig: go.Figure) -> int:
+    return sum(1 for tr in fig.data if tr.showlegend is not False and tr.name)
+
+
+def pair_figures(fa: go.Figure, fb: go.Figure | None) -> None:
+    """Make two paired figures line up row by row: the same height, and, for the
+    horizontal legends below the plot, the same number of legend rows (two entries per
+    row; the shorter legend gets blank entries), so the plot areas are the same size and
+    the x axes sit at the same height."""
+    if not fb or not getattr(fb, "data", None) or not fa.data:
+        return
+    height = max(fa.layout.height or 0, fb.layout.height or 0)
+    for f in (fa, fb):
+        f.update_layout(height=height)
+    if fa.layout.legend.orientation != "h" or fb.layout.legend.orientation != "h":
+        return
+    n = max(_legend_entries(fa), _legend_entries(fb))
+    n += n % 2
+    for f in (fa, fb):
+        k = n - _legend_entries(f)
+        # a blank entry needs a real x value: it comes first in the data, and plotly
+        # guesses the axis type (date) from the first trace
+        x0 = next((list(tr.x[:1]) for tr in f.data if tr.x is not None and len(tr.x)), [None])
+        for _ in range(k):
+            f.add_scatter(x=x0, y=[None], mode="lines", name="\u2007", hoverinfo="skip",
+                          line=dict(width=0, color="rgba(0,0,0,0)"), showlegend=True)
+        if k:   # stacked areas list the legend bottom-up: put the blanks first in data,
+            f.data = f.data[-k:] + f.data[:-k]          # so they come last on screen
+        f.update_layout(legend=dict(entrywidth=0.5, entrywidthmode="fraction",
+                                    traceorder="reversed"))
