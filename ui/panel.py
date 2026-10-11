@@ -1,12 +1,12 @@
 """Callbacks of the page frame: labels in the chosen language, theme, upload, and the
-members grid (tick all / none, restore the estimated keys)."""
+grids (producers, members; restore the estimated keys)."""
 
 from __future__ import annotations
 
 import base64
 
 import dash
-from dash import ALL, Input, Output, State, callback, clientside_callback, ctx, html, no_update
+from dash import Input, Output, State, callback, clientside_callback, html, no_update
 
 import config
 import jobs
@@ -16,7 +16,7 @@ from figures import heat_metrics
 from i18n import t, tn
 
 from . import members
-from .layout import job_ids, source_rows, upload_content
+from .layout import job_ids, upload_content
 
 #: (component id, property, i18n key): labels that depend on the language only
 LABELS = [
@@ -31,8 +31,6 @@ LABELS = [
     ("lbl-source-hint", "children", "panel_source_hint"),
     ("lbl-dest", "children", "panel_dest"),
     ("lbl-dest-hint", "children", "panel_dest_hint"),
-    ("btn-all", "children", "all"),
-    ("btn-none", "children", "none"),
     ("lbl-keys-hint", "children", "keys_hint"),
     ("btn-clear-keys", "children", "clear_keys"),
     ("lbl-day", "children", "sel_day"),
@@ -69,24 +67,19 @@ def _labels(lang):
         heat_value=Output("heat-metric", "value"),
         heat_box=Output("heat-box", "style"),
         columns=Output("members", "columnDefs"),
-        placeholders=Output({"type": "name", "ean": ALL}, "placeholder"),
         source_title=Output("lbl-source", "children"),
-        feed_ph=Output({"type": "feed", "ean": ALL}, "placeholder"),
-        feed_tip=Output({"type": "feed-tip", "ean": ALL}, "title"),
+        producer_columns=Output("producers", "columnDefs"),
         exact_title=Output("exact-btn", "title"),
         bill_title=Output("bill-btn", "title"),
     ),
     inputs=dict(lang=Input("lang", "value"), key=Input("data-key", "data")),
-    state=dict(heat=State("heat-metric", "value"),
-               src_ids=State({"type": "name", "ean": ALL}, "id"),
-               feed_ids=State({"type": "feed", "ean": ALL}, "id")),
+    state=dict(heat=State("heat-metric", "value")),
 )
-def _report_labels(lang, key, heat, src_ids, feed_ids):
+def _report_labels(lang, key, heat):
     """Labels that also depend on the uploaded report."""
     entry = store.get(key)
     data = entry.data if entry else None
     metrics = heat_metrics(data) if data else ("production", "consumption")
-    names = members.default_names(data, lang) if data else {}
     part = data is not None and data.fmt != "all"
     multi = data is not None and len(data.source_eans) > 1
     return dict(
@@ -96,10 +89,8 @@ def _report_labels(lang, key, heat, src_ids, feed_ids):
         heat_value=heat if heat in metrics else metrics[0],
         heat_box={"display": "none"} if len(metrics) < 2 else {},   # part report: no choice
         columns=members.columns(lang, editable=not part),
-        placeholders=[names.get(i["ean"], "") for i in src_ids],
         source_title=tn("panel_source", lang, len(data.source_eans) if data else 1),
-        feed_ph=[t("feed_ph", lang)] * len(feed_ids),
-        feed_tip=[t("feed_tip", lang)] * len(feed_ids),
+        producer_columns=members.producer_columns(lang),
         exact_title=(t("part_no_recompute", lang) if part
                      else t("multi_no_recompute", lang) if multi else ""),
         bill_title=t("part_no_bill", lang) if part else "",
@@ -140,7 +131,7 @@ _EXACT, _BILL = job_ids("exact"), job_ids("bill")
 UPLOAD_OUTPUTS = dict(
     key=Output("data-key", "data"),
     status=Output("upload-status", "children"),
-    sources=Output("src-panel", "children"),
+    sources=Output("producers", "rowData"),
     report=Output("report", "className"),
     box=Output("upload", "className"),
     first=Output("day-picker", "min_date_allowed"),
@@ -188,7 +179,7 @@ def _on_upload(contents, filename, lang, old_key):
     first, last = days.min().date().isoformat(), days.max().date().isoformat()
     many = len(data.dest_eans) > 12
     out.update(
-        key=key, sources=source_rows(data.source_eans, members.default_names(data, lang), lang),
+        key=key, sources=members.producer_rows(data),
         report="report", box="upload upload-small",
         first=first, last=last, day=last, month=last,
         rows=members.rows(data), selected={"ids": list(data.dest_eans)},
@@ -198,20 +189,6 @@ def _on_upload(contents, filename, lang, old_key):
         # estimate the keys right away, to check them before a recompute
         out.update(fit_job=jobs.start_fit(key), fit_poll_off=False)
     return out
-
-
-@callback(
-    Output("members", "selectedRows"),
-    Input("btn-all", "n_clicks"),
-    Input("btn-none", "n_clicks"),
-    State("data-key", "data"),
-    prevent_initial_call=True,
-)
-def _all_none(_a, _n, key):
-    entry = store.get(key)
-    if entry is None:
-        raise dash.exceptions.PreventUpdate
-    return {"ids": list(entry.data.dest_eans)} if ctx.triggered_id == "btn-all" else []
 
 
 @callback(
