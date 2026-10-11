@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 
 import dash
-from dash import ALL, Input, Output, State, callback, no_update
+from dash import Input, Output, State, callback, no_update
 
 import jobs
 import store
@@ -54,10 +54,10 @@ def _usable(entry, lang: str, part_reason: str, one_producer: bool = False) -> d
     return None
 
 
-def bill_inputs(data: SharingData, rows, feed_ids, feed_values, feed_default, default):
-    """(supplier prices, feed-in prices) for the billing, or (None, i18n key of what is
-    missing)."""
-    feed_ins = members.feed_ins(data, feed_ids, feed_values, feed_default)
+def bill_inputs(data: SharingData, rows, src_rows, feed_default, default):
+    """(supplier prices, feed-in prices) for the billing from the two grids and the
+    defaults, or (None, i18n key of what is missing)."""
+    feed_ins = members.feed_ins(data, src_rows, feed_default)
     if any(f is None for f in feed_ins):
         return None, "bill_need_feed_in"
     prices = members.prices(data, rows, default)
@@ -88,20 +88,19 @@ def start_exact(n, key, rows, reserve, lang):
     output=_start_outputs("bill"),
     inputs=dict(n=Input(_BILL["btn"], "n_clicks")),
     state=dict(key=State("data-key", "data"), rows=State("members", "rowData"),
-               feed_ids=State({"type": "feed", "ean": ALL}, "id"),
-               feed_values=State({"type": "feed", "ean": ALL}, "value"),
+               src_rows=State("producers", "rowData"),
                feed_in=State("feed-in", "value"), default=State("price-default", "value"),
                lang=State("lang", "value")),
     prevent_initial_call=True,
 )
-def start_bill(n, key, rows, feed_ids, feed_values, feed_in, default, lang):
+def start_bill(n, key, rows, src_rows, feed_in, default, lang):
     if not n:
         raise dash.exceptions.PreventUpdate
     entry = store.get(key)
     refused = _usable(entry, lang, "part_no_bill")
     if refused:
         return refused
-    inputs, missing = bill_inputs(entry.data, rows, feed_ids, feed_values, feed_in, default)
+    inputs, missing = bill_inputs(entry.data, rows, src_rows, feed_in, default)
     if missing:
         return _refused(missing, lang)
     return _started(jobs.start_bill(key, *inputs))
@@ -173,9 +172,10 @@ for _kind in JOB_KINDS:
 # Results
 # ---------------------------------------------------------------------------
 
-_NAMES = dict(name_values=Input({"type": "name", "ean": ALL}, "value"))
-_NAME_STATE = dict(name_ids=State({"type": "name", "ean": ALL}, "id"),
-                   rows=State("members", "rowData"))
+#: a name or price typed in either grid; the grids' contents
+_EDITS = dict(changed=Input("members", "cellValueChanged"),
+              src_changed=Input("producers", "cellValueChanged"))
+_GRIDS = dict(rows=State("members", "rowData"), src_rows=State("producers", "rowData"))
 
 
 @callback(
@@ -222,10 +222,10 @@ def exact_stale(_changed, rows, reserve, _rev, lang, key):
     output=Output("exact-result", "children"),
     inputs=dict(rev=Input(_EXACT["rev"], "data"), key=Input("data-key", "data"),
                 lang=Input("lang", "value"), selected=Input("members", "selectedRows"),
-                changed=Input("members", "cellValueChanged"), **_NAMES),
-    state=_NAME_STATE,
+                **_EDITS),
+    state=_GRIDS,
 )
-def exact_result(rev, key, lang, selected, changed, name_values, name_ids, rows):
+def exact_result(rev, key, lang, selected, changed, src_changed, rows, src_rows):
     """Sharing error of the EDC report (for the ticked members), timing, keys used."""
     if members.key_only_edit():
         raise dash.exceptions.PreventUpdate
@@ -234,31 +234,30 @@ def exact_result(rev, key, lang, selected, changed, name_values, name_ids, rows)
         return []
     data = entry.data
     return views.exact_result(entry.exact, data, members.enabled(data, selected),
-                              members.names(data, lang, name_ids, name_values, rows), lang)
+                              members.names(data, lang, src_rows, rows), lang)
 
 
 @callback(
     output=dict(result=Output("bill-result", "children"), stale=Output("bill-stale", "children"),
                 table=Output("settle-table", "children")),
     inputs=dict(rev=Input(_BILL["rev"], "data"), key=Input("data-key", "data"),
-                lang=Input("lang", "value"), changed=Input("members", "cellValueChanged"),
-                selected=Input("members", "selectedRows"), feed_in=Input("feed-in", "value"),
-                default=Input("price-default", "value"),
-                feed_values=Input({"type": "feed", "ean": ALL}, "value"), **_NAMES),
-    state=dict(feed_ids=State({"type": "feed", "ean": ALL}, "id"), **_NAME_STATE),
+                lang=Input("lang", "value"), selected=Input("members", "selectedRows"),
+                feed_in=Input("feed-in", "value"), default=Input("price-default", "value"),
+                **_EDITS),
+    state=_GRIDS,
 )
-def bill_result(rev, key, lang, changed, selected, feed_in, default, feed_values, name_values,
-                feed_ids, name_ids, rows):
+def bill_result(rev, key, lang, selected, feed_in, default, changed, src_changed, rows,
+                src_rows):
     """Summary of the last billing in its card, the settlement table below the columns,
     and a note when the prices have changed since."""
     entry = store.get(key)
     if entry is None or entry.bill is None:
         return dict(result=[], stale=[], table=[])
     data, result = entry.data, entry.bill
-    names = members.names(data, lang, name_ids, name_values, rows)
+    names = members.names(data, lang, src_rows, rows)
     table = views.bill_table(result.settlement, data, names, lang, top_dests(data.frame, data),
                              members.enabled(data, selected))
-    inputs, _missing = bill_inputs(data, rows, feed_ids, feed_values, feed_in, default)
+    inputs, _missing = bill_inputs(data, rows, src_rows, feed_in, default)
     totals = result.totals
     changed = inputs is None or any(
         abs(a - b) > 1e-9 for a, b in zip([*inputs[0], *inputs[1]],

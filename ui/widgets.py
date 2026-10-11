@@ -62,9 +62,14 @@ def muted(text) -> str:
     return f'<span class="muted"> ({text})</span>'
 
 
+def tail(ean: str) -> str:
+    """An EAN as shown on the page: its last three digits (anonymity, room)."""
+    return f"…{ean[-3:]}"
+
+
 def name_cell(name: str, ean: str, colour: str) -> str:
     return cell(f'<div><span class="swatch" style="background:{esc(colour)}"></span>'
-                f'{esc(name)}</div><div class="mono sub-ean">{esc(ean)}</div>', "name")
+                f'{esc(name)}</div><div class="mono sub-ean">{esc(tail(ean))}</div>', "name")
 
 
 def table(head: list[str], rows: list[tuple[str, str]], foot: str | list[str]) -> dcc.Markdown:

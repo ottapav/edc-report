@@ -170,7 +170,10 @@ def producer_hatch(th: dict, colour: str | None = None) -> dict:
 def figure(title: str, lang: str, height: int, th: dict) -> go.Figure:
     """Empty figure with the common layout, set in one validated call."""
     return go.Figure(layout=dict(
-        title=dict(text=title, x=0.01, xanchor="left", font=dict(size=15)),
+        # fixed distance from the top of the card, so paired titles are level whatever
+        # the plot below them does with its margins
+        title=dict(text=title, x=0.01, xanchor="left", yref="container", y=1, yanchor="top",
+                   pad=dict(t=16), font=dict(size=15)),
         height=height,
         margin=dict(l=10, r=20, t=50, b=10),
         font=dict(family=FONT_FAMILY, size=12, color=th["ink"]),

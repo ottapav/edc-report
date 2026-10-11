@@ -20,7 +20,7 @@ from recompute import Recomputed, grid_loss
 from . import members
 from .widgets import (
     BLUE, GREEN, GREY, LIGHT_GREY, NBSP, RED, cell, hint, kv, muted, name_cell, num, table,
-    tile, tiles, two_lines,
+    tail, tile, tiles, two_lines,
 )
 
 
@@ -45,7 +45,7 @@ def facts(filename: str, data: SharingData, enabled: set[str], names: dict, lang
         kv(t("period", lang),
            f"{fmt_date(s.date_from, lang)} – {fmt_date(s.date_to, lang)} "
            f"({s.n_days} {t('days', lang)}, {fmt_num(s.n_rows, lang)} {t('intervals', lang)})"),
-        kv(t("producer", lang), ", ".join(f"{names[e]} ({e})" for e in data.source_eans)),
+        kv(t("producer", lang), ", ".join(f"{names[e]} ({tail(e)})" for e in data.source_eans)),
         kv(t("n_dest", lang), t("selected_of", lang).format(sel=s.n_selected, n=s.n_dests)),
     ]
     if s.peak_production_kw is not None:

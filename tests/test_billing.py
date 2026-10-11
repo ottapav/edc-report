@@ -195,7 +195,7 @@ def _billed(key, lang="cs", default=None):
     entry = store.get(key)
     rows = [{"ean": e, "price": None if default else 4.0 + 0.3 * j}
             for j, e in enumerate(entry.data.dest_eans)]
-    job_id = compute.start_bill(1, key, rows, [], [], 1.2, default, lang)["job"]
+    job_id = compute.start_bill(1, key, rows, [], 1.2, default, lang)["job"]
     _wait(job_id)
     return entry, rows, job_id
 
@@ -207,12 +207,12 @@ def test_prices_from_the_grid_with_default():
             {"ean": d.dest_eans[2], "price": None}]
     assert members.prices(d, rows, None) == [4.5, 3.9, None]
     assert members.prices(d, rows, 4.1) == [4.5, 3.9, 4.1]
-    assert compute.bill_inputs(d, rows, [], [], None, 4.1) == (None, "bill_need_feed_in")
-    assert compute.bill_inputs(d, rows, [], [], 1.2, None) == (None, "bill_need_prices")
-    assert compute.bill_inputs(d, rows, [], [], "1,2", 4.1) == (([4.5, 3.9, 4.1], [1.2]), None)
-    # a producer's own price wins over the default
-    feed = [{"type": "feed", "ean": d.source_eans[0]}]
-    assert compute.bill_inputs(d, rows, feed, ["0,9"], 1.2, 4.1)[0][1] == [0.9]
+    assert compute.bill_inputs(d, rows, [], None, 4.1) == (None, "bill_need_feed_in")
+    assert compute.bill_inputs(d, rows, [], 1.2, None) == (None, "bill_need_prices")
+    assert compute.bill_inputs(d, rows, [], "1,2", 4.1) == (([4.5, 3.9, 4.1], [1.2]), None)
+    # a producer's own price (producers grid) wins over the default
+    src = [{"ean": d.source_eans[0], "price": "0,9"}]
+    assert compute.bill_inputs(d, rows, src, 1.2, 4.1)[0][1] == [0.9]
 
 
 def test_bill_job_and_result(entry_key):
@@ -220,20 +220,18 @@ def test_bill_job_and_result(entry_key):
     state = compute.poll_state(job_id, 0, "cs")
     assert state[2] == "progress done" and state[5] == 1
     assert len(entry.bill.totals.consumers) == 5
-    out = compute.bill_result(1, entry_key, "cs", None, None, 1.2, 4.3, [], [], [], [], rows)
+    out = compute.bill_result(1, entry_key, "cs", None, 1.2, 4.3, None, None, rows, [])
     assert out["result"] and out["table"] and out["stale"] == []
     # a changed price marks the billing as stale until the button is pressed again
-    assert compute.bill_result(1, entry_key, "cs", None, None, 1.2, 4.4, [], [], [], [],
-                               rows)["stale"]
-    feed = [{"type": "feed", "ean": entry.data.source_eans[0]}]
-    assert compute.bill_result(1, entry_key, "cs", None, None, 1.2, 4.3, [1.3], [], feed, [],
-                               rows)["stale"]
+    assert compute.bill_result(1, entry_key, "cs", None, 1.2, 4.4, None, None, rows, [])["stale"]
+    src = [{"ean": entry.data.source_eans[0], "price": 1.3}]
+    assert compute.bill_result(1, entry_key, "cs", None, 1.2, 4.3, None, None, rows, src)["stale"]
 
 
 def test_bill_needs_prices(entry_key):
     entry = store.get(entry_key)
     rows = [{"ean": e, "price": None} for e in entry.data.dest_eans]
-    out = compute.start_bill(1, entry_key, rows, [], [], 1.2, None, "en")
+    out = compute.start_bill(1, entry_key, rows, [], 1.2, None, "en")
     assert out["cls"] == "progress error" and "price" in out["text"]
 
 
@@ -313,8 +311,8 @@ def test_billing_of_several_producers(pool_key):
     entry = store.get(pool_key)
     data = entry.data
     rows = [{"ean": e, "price": 4.0 + 0.3 * j} for j, e in enumerate(data.dest_eans)]
-    feed = [{"type": "feed", "ean": e} for e in data.source_eans]
-    job_id = compute.start_bill(1, pool_key, rows, feed, [1.0, None, 2.0], 1.5, None, "cs")["job"]
+    src = [{"ean": e, "price": p} for e, p in zip(data.source_eans, [1.0, None, 2.0])]
+    job_id = compute.start_bill(1, pool_key, rows, src, 1.5, None, "cs")["job"]
     _wait(job_id)
     res = entry.bill.totals
     assert res.feed_ins == [1.0, 1.5, 2.0] and len(res.producers) == 3
@@ -338,3 +336,17 @@ def test_billing_of_several_producers(pool_key):
     # the exact static method is refused, with a reason
     out = compute.start_exact(1, pool_key, rows, 0, "cs")
     assert out["cls"] == "progress error" and "jednou výrobnou" in out["text"]
+
+
+def test_panel_grids_and_ean_tails(pool_key):
+    """Producers have their own grid (name, EAN, feed-in price); EANs show three digits."""
+    data = store.get(pool_key).data
+    prow = members.producer_rows(data)
+    assert [r["ean"] for r in prow] == data.source_eans
+    assert all(r["tail"] == "…" + r["ean"][-3:] for r in prow + members.rows(data))
+    assert [c["field"] for c in members.producer_columns("cs")] == ["name", "tail", "price"]
+    prow[0]["name"] = "Střecha"
+    names = members.names(data, "cs", prow, [{"ean": data.dest_eans[0], "name": "Škola"}])
+    assert names[data.source_eans[0]] == "Střecha" and names[data.dest_eans[0]] == "Škola"
+    facts = str(views.facts("x.csv", data, set(data.dest_eans), names, "cs"))
+    assert data.source_eans[0] not in facts and "…" + data.source_eans[0][-3:] in facts

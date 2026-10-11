@@ -117,17 +117,12 @@ body {
 .panel-section { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .panel-section:last-child { border-bottom: 0; }
 .panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); margin: 4px 0 8px; font-weight: 650; }
-.panel-head { display: flex; align-items: center; justify-content: space-between; }
-.mini-btns { display: flex; gap: 4px; }
 .mini { font: inherit; font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); cursor: pointer; color: var(--ink-2); }
 .mini:hover { border-color: var(--ink-3); color: var(--ink); }
 .hint { color: var(--ink-3); font-size: 12px; margin: 0 0 8px; }
-.dest-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; margin-right: 6px; vertical-align: middle; }
-.dest-row .swatch { margin-right: 0; }
-.name-in, .text-in { font: inherit; font-size: 13px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; min-width: 0; flex: 1; width: 100%; }
-.name-in:focus, .text-in:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-.ean { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--ink-3); flex: none; }
+.text-in { font: inherit; font-size: 13px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; min-width: 0; flex: 1; width: 100%; }
+.text-in:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 .field-label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
 .radios label { display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 3px 0; cursor: pointer; }
 .radios input { accent-color: var(--accent); margin: 0; }
@@ -172,10 +167,6 @@ body {
 #lbl-day-hint { margin: 6px 0 0; }
 
 /* ---- panel: keys --------------------------------------------------- */
-.name-cell { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.name-cell .ean { font-size: 10px; margin-top: 1px; padding-left: 2px; }
-.dest-row { align-items: flex-start; }
-.dest-row .swatch { margin-top: 8px; }
 .num-in { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; width: 72px; text-align: right; font-variant-numeric: tabular-nums; }
 .num-in:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 .keys-foot { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; }
@@ -231,9 +222,11 @@ body {
 .compare.dual .hourly-card { grid-row: 6; }
 .compare.dual .heat-card { grid-row: 7; }
 .compare.dual .table-card { display: none; }
-/* tile labels take two lines, so the values of paired tiles are level */
+/* every part of a tile has a fixed height (label two lines, sub-line three), so paired
+   tiles are level row by row even when a sub-line of one of them wraps */
 .compare.dual .tile-label { min-height: 2.6em; align-items: flex-start; line-height: 1.3; }
 .compare.dual .tile-dot { margin-top: .3em; }
+.compare.dual .tile-sub { line-height: 1.35; min-height: calc(3 * 1.35em); }
 .col-head { font-size: 15px; margin: 0; padding: 10px 14px; border-radius: var(--radius); font-weight: 650; }
 .col-head-a { background: var(--head-a); }
 .col-head-b { background: var(--accent-soft); color: var(--accent-ink); }
@@ -265,8 +258,8 @@ body {
 }
 
 /* ---- inputs follow the theme ---------------------------------------- */
-input, .name-in, .text-in, .num-in { background: var(--field); color: var(--ink); }
-.name-in::placeholder, .text-in::placeholder { color: var(--ink-3); }
+input, .text-in, .num-in { background: var(--field); color: var(--ink); }
+.text-in::placeholder { color: var(--ink-3); }
 
 /* ---- theme icon next to the language switch ------------------------ */
 .lang { display: flex; align-items: center; gap: 8px; }
@@ -329,6 +322,9 @@ input, .name-in, .text-in, .num-in { background: var(--field); color: var(--ink)
   --ag-wrapper-border-radius: 8px;
   --ag-cell-horizontal-padding: 6px;
 }
+/* auto height: as tall as the rows, no empty space reserved for the "no rows" overlay */
+.members-grid .ag-layout-auto-height .ag-center-cols-viewport,
+.members-grid .ag-layout-auto-height .ag-center-cols-container { min-height: 0 !important; }
 .members-grid .ag-root-wrapper { background: var(--card); color: var(--ink); border-color: var(--line); }
 .members-grid .ag-header-cell-text { font-weight: 600; font-size: 12px; }
 .members-grid .muted-name { color: var(--ink-3); }

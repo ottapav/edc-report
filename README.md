@@ -87,7 +87,8 @@ with the computation timed per 15-min interval.
 **Billing by contribution (the Shapley value; proposal):**
 
 * **Prices:** each member's supplier price (the *Price* column of the grid, next to the keys)
-  and each producer's feed-in price (next to its name), or default prices for the empty ones.
+  and each producer's feed-in price (the producers' grid above it), or default prices for the
+  empty cells. Every number is typed the same way, with a decimal comma or point.
 * **Several producers:** the producers share as a pool (any producer can supply any member);
   each has its own feed-in price.
 * **Compute:** one button computes the exact Shapley values over the whole report in the
@@ -105,6 +106,7 @@ with the computation timed per 15-min interval.
 
 **Interface:**
 
+* EANs are shown by their last three digits only (anonymity, room in the panel).
 * CZ / EN.
 * Light and dark mode: the default follows the system, and the ☾/☀ icon switches and
   remembers the choice.

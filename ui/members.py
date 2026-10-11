@@ -1,8 +1,10 @@
-"""The members grid (tick, name, key, price) and reading what the user typed in it.
+"""The two grids of the panel and reading what the user typed in them: the producers
+(name, feed-in price) and the members (tick, name, key, supplier price).
 
 One AG Grid holds every destination: a group of 150 members would otherwise put 600
 pattern-matching inputs on the page, and the Dash renderer needs tens of seconds per
-update.
+update. The producers use the same kind of grid, so every value is typed the same way.
+EANs are shown by their last three digits only (anonymity, room).
 """
 
 from __future__ import annotations
@@ -14,6 +16,12 @@ from dash import ctx
 from edc_data import POOL, SharingData
 from figures import colour_map, top_dests
 from i18n import t
+
+from .widgets import tail
+
+
+#: the grids that hold names and prices
+GRIDS = ("producers", "members")
 
 
 def default_names(data: SharingData, lang: str) -> dict[str, str]:
@@ -27,12 +35,11 @@ def default_names(data: SharingData, lang: str) -> dict[str, str]:
     return names
 
 
-def names(data: SharingData, lang: str, src_ids: list[dict], src_values: list,
+def names(data: SharingData, lang: str, src_rows: list[dict] | None,
           rows: list[dict] | None) -> dict[str, str]:
-    """Display names: typed names (sources: inputs, destinations: grid) or defaults."""
+    """Display names: typed in the two grids, or the defaults."""
     out = default_names(data, lang)
-    typed = [(i["ean"], v) for i, v in zip(src_ids or [], src_values or [])]
-    typed += [(r.get("ean"), r.get("name")) for r in rows or []]
+    typed = [(r.get("ean"), r.get("name")) for r in [*(src_rows or []), *(rows or [])]]
     for ean, value in typed:
         if value and str(value).strip() and ean in out:
             out[ean] = str(value).strip()
@@ -73,11 +80,10 @@ def prices(data: SharingData, rows: list[dict] | None, default) -> list[float | 
     return out
 
 
-def feed_ins(data: SharingData, ids: list[dict], values: list,
-             default) -> list[float | None]:
-    """Feed-in price (Kč/kWh) per producer in report order; empty inputs take
-    ``default``."""
-    typed = {i["ean"]: number(v) for i, v in zip(ids or [], values or [])}
+def feed_ins(data: SharingData, src_rows: list[dict] | None, default) -> list[float | None]:
+    """Feed-in price (Kč/kWh) per producer in report order (producers grid); empty cells
+    take ``default``."""
+    typed = {r.get("ean"): number(r.get("price")) for r in src_rows or []}
     fallback = number(default)
     out = []
     for e in data.source_eans:
@@ -98,13 +104,18 @@ def pct_key(x: float) -> float:
 
 
 def key_only_edit() -> bool:
-    """True when the callback fired only because a key or price cell was edited (names
-    and selection unchanged): the figures need not be redrawn."""
-    if set(ctx.triggered_prop_ids or {}) != {"members.cellValueChanged"}:
+    """True when the callback fired only because a key or price cell was edited in one
+    of the grids (names and selection unchanged): the figures need not be redrawn."""
+    edits = {f"{g}.cellValueChanged" for g in GRIDS}
+    trig = set(ctx.triggered_prop_ids or {})
+    if not trig or not trig <= edits:
         return False
-    changes = ctx.triggered[0].get("value") if ctx.triggered else None
-    changes = changes if isinstance(changes, list) else [changes or {}]
-    return all((c or {}).get("colId") != "name" for c in changes)
+    for item in ctx.triggered or []:
+        changes = item.get("value")
+        changes = changes if isinstance(changes, list) else [changes or {}]
+        if any((c or {}).get("colId") == "name" for c in changes):
+            return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -112,13 +123,29 @@ def key_only_edit() -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _number_column(field: str, header: str, editable: bool, width: int, precision: int,
-                   lang: str, **extra) -> dict:
+def _name_column(lang: str) -> dict:
+    return {"field": "name", "headerName": t("col_name", lang), "editable": True, "flex": 1,
+            "minWidth": 84,
+            "valueFormatter": {"function": f"params.value || params.data.default_{lang}"},
+            "cellClassRules": {"muted-name": "!params.value"},
+            "cellStyle": {"function": "({borderLeft: '6px solid ' + params.data.colour})"}}
+
+
+_TAIL_COLUMN = {"field": "tail", "headerName": "EAN", "width": 48, "cellClass": "mono-cell"}
+
+
+def _number_column(field: str, header: str, editable: bool, width: int, lang: str,
+                   **extra) -> dict:
     dec = "," if lang == "cs" else "."
+    # typed as text, so a decimal comma works in every browser locale (the number editor
+    # drops it: "1,1" became 11); anything that is not a number keeps the old value.
+    # Grid functions are expressions without globals (no String, Math, isNaN).
+    num = "(+((params.newValue + '').trim().replace(',', '.')))"
     return {"field": field, "headerName": header, "editable": editable, "width": width,
-            "type": "rightAligned", "cellEditor": "agNumberCellEditor",
-            "cellEditorParams": {"min": 0, "max": 100, "precision": precision},
-            # values are rounded already; no globals (String/Math) in grid functions
+            "type": "rightAligned", "cellEditor": "agTextCellEditor",
+            "valueParser": {"function":
+                            f"(params.newValue == null || (params.newValue + '').trim() === '') ? null"
+                            f" : ({num} === {num} && {num} >= 0 ? {num} : params.oldValue)"},
             "valueFormatter": {"function":
                                f"params.value == null ? '' : (params.value + '').replace('.', '{dec}')"},
             **extra}
@@ -128,16 +155,11 @@ def columns(lang: str, editable: bool) -> list[dict]:
     """Grid columns; formatters depend on the language (decimal comma, default names).
     Keys and prices are editable only for an all report."""
     return [
-        {"field": "name", "headerName": t("col_name", lang), "editable": True, "flex": 1,
-         "minWidth": 84, "tooltipField": "ean",
-         "valueFormatter": {"function": f"params.value || params.data.default_{lang}"},
-         "cellClassRules": {"muted-name": "!params.value"},
-         "cellStyle": {"function": "({borderLeft: '6px solid ' + params.data.colour})"}},
-        {"field": "tail", "headerName": "EAN", "width": 64, "cellClass": "mono-cell",
-         "tooltipField": "ean"},
-        _number_column("key", t("keys", lang), editable, 70, 2, lang, tooltipField="range",
+        _name_column(lang),
+        _TAIL_COLUMN,
+        _number_column("key", t("keys", lang), editable, 64, lang, tooltipField="range",
                        cellClassRules={"key-warn": "params.data.warn"}),
-        _number_column("price", t("price_col", lang), editable, 62, 4, lang,
+        _number_column("price", t("price_col", lang), editable, 58, lang,
                        headerTooltip=t("price_col_tip", lang)),
     ]
 
@@ -145,15 +167,40 @@ def columns(lang: str, editable: bool) -> list[dict]:
 def rows(data: SharingData) -> list[dict]:
     cmap = colour_map(data, top_dests(data.frame, data))
     default = {lg: default_names(data, lg) for lg in ("cs", "en")}
-    return [{"ean": e, "tail": f"…{e[-6:]}", "name": "",
+    return [{"ean": e, "tail": tail(e), "name": "",
              "default_cs": default["cs"][e], "default_en": default["en"][e],
              "colour": cmap[e], "key": None, "range": "", "warn": False, "price": None}
             for e in data.dest_eans]
 
 
+def producer_columns(lang: str) -> list[dict]:
+    """Producers grid: name, EAN, feed-in price (typed like the members' keys and prices)."""
+    return [
+        _name_column(lang),
+        _TAIL_COLUMN,
+        _number_column("price", t("feed_col", lang), True, 64, lang,
+                       headerTooltip=t("feed_tip", lang)),
+    ]
+
+
+def producer_rows(data: SharingData) -> list[dict]:
+    default = {lg: default_names(data, lg) for lg in ("cs", "en")}
+    return [{"ean": e, "tail": tail(e), "name": "", "default_cs": default["cs"][e],
+             "default_en": default["en"][e], "colour": "#339933", "price": None}
+            for e in data.source_eans]
+
+
+def producer_options() -> dict:
+    return {"singleClickEdit": True, "stopEditingWhenCellsLoseFocus": True,
+            "tooltipShowDelay": 250, "rowHeight": 32, "headerHeight": 30,
+            "domLayout": "autoHeight"}
+
+
 def options(many: bool) -> dict:
     return {
         "rowSelection": {"mode": "multiRow", "enableClickSelection": False},
+        # the tick column as narrow as its checkbox: the whole grid fits the panel
+        "selectionColumnDef": {"width": 34, "minWidth": 34, "maxWidth": 34},
         "singleClickEdit": True, "stopEditingWhenCellsLoseFocus": True,
         "tooltipShowDelay": 250, "rowHeight": 32, "headerHeight": 30,
         "domLayout": "normal" if many else "autoHeight",

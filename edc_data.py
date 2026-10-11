@@ -271,7 +271,7 @@ def _load_all(df: pd.DataFrame) -> SharingData:
         gap = int((c_in.notna() & c_out.isna()).sum())
         if gap:
             notes.append(
-                f"EAN …{ean[-6:]}: {gap} intervals have consumption (IN-O) but no "
+                f"EAN …{ean[-3:]}: {gap} intervals have consumption (IN-O) but no "
                 f"OUT-O value; unmet energy is under-reported for those intervals."
             )
 

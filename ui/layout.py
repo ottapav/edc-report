@@ -56,28 +56,13 @@ def upload_content(lang: str, loaded: bool) -> html.Div:
     ])
 
 
-def source_rows(eans: list[str], placeholders: dict[str, str], lang: str) -> list:
-    """Name and feed-in price inputs of the producers (destinations are in the grid)."""
-    return [
-        html.Div(className="dest-row", children=[
-            html.Span(className="swatch", style={"background": "#339933"}),
-            html.Div(className="name-cell", children=[
-                dcc.Input(id={"type": "name", "ean": e}, type="text", debounce=True,
-                          placeholder=placeholders[e], className="name-in"),
-                html.Div(e, className="ean"),
-            ]),
-            html.Span(id={"type": "feed-tip", "ean": e}, title=t("feed_tip", lang),
-                      children=dcc.Input(id={"type": "feed", "ean": e}, type="number", min=0,
-                                         step=0.01, debounce=True, className="num-in feed-src",
-                                         placeholder=t("feed_ph", lang))),
-        ]) for e in eans
-    ]
-
-
-def _number_input(id_: str, label_id: str, **kw) -> html.Label:
+def _number_input(id_: str, label_id: str, value=None) -> html.Label:
+    """A number typed like the grid cells: decimal comma or point, applied on Enter or
+    when the field loses focus."""
     return html.Label(className="reserve", children=[
         html.Span(id=label_id),
-        dcc.Input(id=id_, type="number", min=0, debounce=True, className="num-in", **kw),
+        dcc.Input(id=id_, type="text", inputMode="decimal", debounce=True, value=value,
+                  autoComplete="off", className="num-in"),
     ])
 
 
@@ -102,29 +87,24 @@ def job_card(kind: str, inputs: list, results: list) -> html.Section:
     ])
 
 
+def _grid(id_: str, columns: list, options: dict, **kw) -> dag.AgGrid:
+    return dag.AgGrid(
+        id=id_, rowData=[], columnDefs=columns, getRowId="params.data.ean",
+        defaultColDef={"sortable": False, "resizable": False, "suppressMovable": True},
+        dashGridOptions=options, className="members-grid", style={"height": None}, **kw)
+
+
 def _panel() -> html.Aside:
     return html.Aside(className="panel", children=[
         html.Section(className="panel-section", children=[
             html.H3(id="lbl-source"),
-            html.Div(id="src-panel"),
+            _grid("producers", members.producer_columns("cs"), members.producer_options()),
             html.P(id="lbl-source-hint", className="hint"),
         ]),
         html.Section(className="panel-section", children=[
-            html.Div(className="panel-head", children=[
-                html.H3(id="lbl-dest"),
-                html.Div(className="mini-btns", children=[
-                    html.Button(id="btn-all", n_clicks=0, className="mini"),
-                    html.Button(id="btn-none", n_clicks=0, className="mini"),
-                ]),
-            ]),
+            html.H3(id="lbl-dest"),
             html.P(className="hint", id="lbl-dest-hint"),
-            dag.AgGrid(
-                id="members", rowData=[], columnDefs=members.columns("cs", True),
-                getRowId="params.data.ean",
-                defaultColDef={"sortable": False, "resizable": False, "suppressMovable": True},
-                dashGridOptions=members.options(False), selectedRows=[],
-                className="members-grid", style={"height": None},
-            ),
+            _grid("members", members.columns("cs", True), members.options(False), selectedRows=[]),
             html.Div(className="keys-foot", children=[
                 html.P(className="hint", id="lbl-keys-hint"),
                 html.Button(id="btn-clear-keys", n_clicks=0, className="mini"),
@@ -187,11 +167,11 @@ def _report() -> html.Div:
         html.Main(className="main", children=[
             html.Section(className="card", children=[
                 html.H2(id="info-title"), html.Div(id="info"), html.Div(id="notes")]),
-            job_card("exact", [_number_input("reserve", "lbl-reserve", max=100, step=0.1, value=0)],
+            job_card("exact", [_number_input("reserve", "lbl-reserve", value="0")],
                      [html.Div(id="fit-info"), html.Div(id="exact-stale"),
                       html.Div(id="exact-result")]),
-            job_card("bill", [_number_input("feed-in", "lbl-feed-in", step=0.01),
-                              _number_input("price-default", "lbl-price-default", step=0.01)],
+            job_card("bill", [_number_input("feed-in", "lbl-feed-in"),
+                              _number_input("price-default", "lbl-price-default")],
                      [html.Div(id="bill-stale"), html.Div(id="bill-result")]),
             # what the right column shows when both computations exist
             html.Div(id="right-view-box", className="right-view", style={"display": "none"},

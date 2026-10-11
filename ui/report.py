@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 import dash
 import numpy as np
-from dash import ALL, Input, Output, State, callback, clientside_callback, ctx, html, no_update
+from dash import Input, Output, State, callback, clientside_callback, ctx, html, no_update
 
 import store
 from edc_data import (
@@ -32,9 +32,8 @@ _REVS = dict(exact_rev=Input(job_ids("exact")["rev"], "data"),
              view=Input("right-view", "value"))
 _MEMBERS = dict(selected=Input("members", "selectedRows"),
                 changed=Input("members", "cellValueChanged"),
-                name_values=Input({"type": "name", "ean": ALL}, "value"))
-_MEMBER_STATE = dict(name_ids=State({"type": "name", "ean": ALL}, "id"),
-                     rows=State("members", "rowData"))
+                src_changed=Input("producers", "cellValueChanged"))
+_MEMBER_STATE = dict(rows=State("members", "rowData"), src_rows=State("producers", "rowData"))
 
 
 def right_mode(entry: store.Entry | None, view: str | None) -> str | None:
@@ -93,13 +92,13 @@ class Scope:
         return dict(lang=self.lang, th=self.th, top=self.top)
 
 
-def _scope(key, selected, lang, theme_name, name_ids, name_values, rows) -> Scope | None:
+def _scope(key, selected, lang, theme_name, src_rows, rows) -> Scope | None:
     entry = store.get(key)
     if entry is None:
         return None
     data = entry.data
     enabled = members.enabled(data, selected)
-    return Scope(entry, enabled, members.names(data, lang, name_ids, name_values, rows), lang,
+    return Scope(entry, enabled, members.names(data, lang, src_rows, rows), lang,
                  theme(theme_name), top_dests(filter_dests(data, enabled), data))
 
 
@@ -199,13 +198,13 @@ RENDER_OUTPUTS = dict(
     state=dict(**_MEMBER_STATE, sel_day=State("day-picker", "date")),
     prevent_initial_call="initial_duplicate",
 )
-def render(key, exact_rev, bill_rev, view, selected, changed, name_values, lang, group,
-           heat_metric, theme_name, name_ids, rows, sel_day):
+def render(key, exact_rev, bill_rev, view, selected, changed, src_changed, lang, group,
+           heat_metric, theme_name, rows, src_rows, sel_day):
     if members.key_only_edit():
         raise dash.exceptions.PreventUpdate      # a key or price changed: figures unaffected
     group = (group or "").strip()
     title = t("report_title_group", lang).format(group=group) if group else t("report_title", lang)
-    s = _scope(key, selected, lang, theme_name, name_ids, name_values, rows)
+    s = _scope(key, selected, lang, theme_name, src_rows, rows)
     if s is None:
         out = {k: {} for k in RENDER_OUTPUTS}
         out.update(title=title, info=[], notes=[], compare="compare single", head_b="",
@@ -329,13 +328,13 @@ clientside_callback(
                 **_MEMBERS, lang=Input("lang", "value"), theme_name=Input("theme", "data")),
     state=_MEMBER_STATE,
 )
-def hourly(day, key, exact_rev, bill_rev, view, selected, changed, name_values, lang,
-           theme_name, name_ids, rows):
+def hourly(day, key, exact_rev, bill_rev, view, selected, changed, src_changed, lang,
+           theme_name, rows, src_rows):
     """The selected day in 15-min steps. The energy plots share one y axis fitted to
     the day, so both methods compare on one scale; the billing (Kč) has its own."""
     if members.key_only_edit():
         raise dash.exceptions.PreventUpdate
-    s = _scope(key, selected, lang, theme_name, name_ids, name_values, rows)
+    s = _scope(key, selected, lang, theme_name, src_rows, rows)
     if s is None or not day:
         return {}, {}, {}, {}
     day = _day(day)
