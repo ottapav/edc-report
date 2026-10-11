@@ -274,6 +274,16 @@ add up, so the year is the sum of the intervals and the layers.
   lookups in *H*, summed over the player's layers with weights Δλ (a member is in the first
   layers, a producer in the last ones).
 
+The approach — Owen's integral over u plus a DP of the distribution of a weighted sum — is the
+one of F. Illés, *Linearly representable games and pseudo-polynomial calculation of the
+Shapley value* ([arXiv:2205.12324](https://arxiv.org/abs/2205.12324)), for games whose value
+depends only on a sum of player weights. Here `min(G, D) = D − (D − G)⁺` is an additive game
+plus such a game; the code extends it with signed weights (producers), price layers, a
+rigorous node count for the quadrature and the leave-one-out series. Energy-sharing papers
+with batteries (e.g. [arXiv:1903.11047](https://arxiv.org/abs/1903.11047),
+[arXiv:2301.00174](https://arxiv.org/abs/2301.00174)) estimate the Shapley value by sampling,
+because there the value of each coalition comes from a simulation or optimisation over time.
+
 The suite checks the result against brute force over all coalitions (one and several
 producers, mixed prices, members without demand, prices below the feed-in price) to 10⁻⁹ Kč.
 
