@@ -141,6 +141,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "recompute_desc": "Every 15-min interval is recomputed with rozdel() from presna_staticka.py: "
                           "s_i = min(D_i, k_i · H), with the level H computed to the end. "
                           "The result is shown side by side with the approximate static method (the EDC report).",
+        "recompute_article": "How the exact static method works: explanatory article (in Czech) ↗",
         "recompute_btn": "Recompute sharing with the exact static method",
         "part_no_recompute": "Recompute needs an all report (members' consumption is required).",
         "phase_fit": "Estimating keys from the report",
@@ -391,6 +392,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "recompute_desc": "Každá čtvrthodina se přepočítá funkcí rozdel() z presna_staticka.py: "
                           "s_i = min(D_i, k_i · H), hladina H dopočtená do konce. "
                           "Výsledek se zobrazí vedle přibližné statické metody (reportu EDC).",
+        "recompute_article": "Jak přesná statická metoda funguje: vysvětlující článek ↗",
         "recompute_btn": "Přepočítat sdílení přesnou statickou metodou",
         "part_no_recompute": "Přepočet potřebuje úplný report (odběry členů).",
         "phase_fit": "Odhad klíčů z reportu",

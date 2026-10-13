@@ -1,0 +1,401 @@
+<title>Sdílení do poslední kilowatthodiny</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: jeden čtecí sloupec (~68 znaků), obrázky a tabulky smí být širší; technický časopis, ne landing page */
+:root {
+  --bg: #fbfcfd; --paper: #ffffff; --ink: #15202b; --muted: #586674; --rule: #d8dfe6;
+  --accent: #0065bd; --tint: #e7f0f9; --shared: #359a35; --lost: #cc3227; --grid-c: #8c8c8c;
+  --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --col: 42rem; --wide: 58rem;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10161c; --paper: #f4f6f8; --ink: #e4e9ee; --muted: #9aa7b3; --rule: #2b3640;
+  --accent: #5fa8ea; --tint: #16283a; --shared: #4cb84c; --lost: #e5554b; --grid-c: #8b949e; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #10161c; --paper: #f4f6f8; --ink: #e4e9ee; --muted: #9aa7b3; --rule: #2b3640;
+  --accent: #5fa8ea; --tint: #16283a; --shared: #4cb84c; --lost: #e5554b; --grid-c: #8b949e; color-scheme: dark }
+
+body { background: var(--bg); color: var(--ink); font: 400 1.09rem/1.68 var(--body); padding-inline: 18px; padding-block: 0 4rem; }
+main { display: flex; flex-direction: column; align-items: center; }
+main > * { width: 100%; max-width: var(--col); min-width: 0; }
+main > .wide { max-width: var(--wide); }
+
+header.lead { padding-block: 3.2rem 1.6rem; border-bottom: 1px solid var(--rule); margin-bottom: 1.6rem; }
+.kicker { font: 600 .78rem/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 1rem; }
+h1 { font: 760 clamp(2rem, 5.4vw, 3.1rem)/1.04 var(--display); font-stretch: 82%; letter-spacing: -.01em; margin: 0 0 1rem; text-wrap: balance; }
+.perex { font-size: 1.22rem; line-height: 1.55; color: var(--ink); margin: 0 0 1.2rem; }
+.byline { font: 500 .88rem/1.4 var(--display); color: var(--muted); margin: 0; }
+
+h2 { font: 720 1.55rem/1.15 var(--display); font-stretch: 88%; margin: 2.6rem 0 .2rem; text-wrap: balance; }
+h2 .no { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .45em; }
+h3 { font: 680 1.08rem/1.3 var(--display); margin: 1.6rem 0 0; }
+p { margin: .85rem 0 0; }
+strong { font-weight: 650; }
+em { font-style: italic; }
+.term { font-weight: 650; color: var(--accent); }
+
+figure { margin: 1.8rem 0 .6rem; }
+figure .plate { background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: .6rem; overflow-x: auto; }
+figure .plate img { display: block; width: 100%; height: auto; }
+figure .pair { display: grid; grid-template-columns: 1fr; gap: .6rem; }
+figcaption { font: 400 .86rem/1.5 var(--display); color: var(--muted); margin-top: .55rem; }
+figcaption b { color: var(--ink); font-weight: 650; }
+.fig-no { font-weight: 700; color: var(--accent); margin-right: .35em; }
+
+svg { display: block; width: 100%; height: auto; max-width: 100%; }
+svg .lbl { font: 500 13px var(--display); fill: var(--ink); }
+svg .lbl.b { font-weight: 700; }
+svg .lbl.mut { fill: var(--muted); font-weight: 450; }
+svg .lbl.acc { fill: var(--accent); font-weight: 650; }
+svg .vessel { fill: none; stroke: var(--ink); stroke-width: 2.4; }
+svg .water { fill: var(--accent); opacity: .32; }
+svg .dash { stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 6 5; }
+svg .grid { stroke: var(--rule); stroke-width: 1; }
+svg .mark { stroke: var(--lost); stroke-width: 1.2; stroke-dasharray: 3 3; }
+svg .line { fill: none; stroke: var(--ink); stroke-width: 2; }
+svg .dot { fill: var(--ink); }
+svg .dot.hi { fill: var(--lost); }
+svg .node { fill: var(--bg); stroke: var(--ink); stroke-width: 1.4; }
+svg .pool { fill: var(--tint); stroke: var(--accent); stroke-width: 2; }
+svg .edge { stroke: var(--muted); stroke-width: 1.8; }
+svg .ahead { fill: var(--muted); }
+.svgplate { background: var(--bg); border: 1px solid var(--rule); border-radius: 4px; padding: 1rem .8rem .6rem; overflow-x: auto; }
+.svgplate svg { min-width: 520px; }
+
+.tbl { overflow-x: auto; margin: 1.4rem 0 .4rem; }
+table { border-collapse: collapse; width: 100%; font: 400 .93rem/1.35 var(--display); font-variant-numeric: tabular-nums; }
+th, td { padding: .5rem .55rem; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-weight: 650; color: var(--muted); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; border-bottom: 1.6px solid var(--ink); }
+tr.hl td { background: var(--tint); font-weight: 650; }
+tr.ref td { color: var(--muted); font-style: italic; border-bottom: 1.6px solid var(--rule); }
+td.loss { color: var(--lost); font-weight: 650; }
+.tcap { font: 400 .86rem/1.5 var(--display); color: var(--muted); margin-top: .4rem; }
+
+.formula { font: 500 1.02rem/1.6 var(--mono); background: var(--tint); border-left: 3px solid var(--accent); padding: .9rem 1.1rem; margin: 1.3rem 0 .4rem; overflow-x: auto; white-space: nowrap; }
+.formula sub { font-size: .72em; }
+.formula .c { color: var(--muted); font-size: .86em; }
+pre { font: 400 .84rem/1.55 var(--mono); background: var(--tint); padding: 1rem 1.1rem; overflow-x: auto; border-radius: 4px; margin: 1.3rem 0 .4rem; }
+code { font-family: var(--mono); font-size: .9em; }
+
+.keypoint { border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule); padding-block: 1rem; margin-top: 1.8rem; font: 600 1.12rem/1.5 var(--display); }
+.keypoint span { color: var(--accent); }
+
+ul.plain { margin: .8rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .35rem; }
+
+.sources { font: 400 .84rem/1.55 var(--display); color: var(--muted); border-top: 1px solid var(--rule); margin-top: 3rem; padding-top: 1rem; }
+.sources h2 { font-size: 1rem; margin-top: 0; color: var(--ink); }
+.sources ol { padding-left: 1.2rem; margin: .6rem 0 0; display: flex; flex-direction: column; gap: .25rem; }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+
+.inbrief { background: var(--tint); border-radius: 4px; padding: 1.1rem 1.3rem 1.2rem; margin-top: .4rem; }
+.inbrief-h, .box-h { font: 700 .78rem/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 .6rem; }
+.inbrief ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: .45rem; font: 450 .98rem/1.5 var(--display); }
+.glossary { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .9rem 1.4rem; margin: 1.4rem 0 .4rem; padding: 1rem 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.glossary div { min-width: 0; }
+.glossary dt { font: 700 .92rem/1.3 var(--display); color: var(--accent); }
+.glossary dd { margin: .2rem 0 0; font: 400 .9rem/1.5 var(--display); color: var(--ink); }
+.box { border: 1px solid var(--rule); border-radius: 4px; padding: 1rem 1.2rem .4rem; margin-top: 1.8rem; }
+.box > p { font: 400 .92rem/1.5 var(--display); margin: 0; }
+.box pre { margin-top: .9rem; }
+.about { margin-top: 2.6rem; font: 400 .9rem/1.55 var(--display); color: var(--muted); border-left: 3px solid var(--accent); padding-left: 1rem; }
+.about p { margin: 0; }
+</style>
+
+<main>
+<header class="lead">
+  <p class="kicker">Sdílení elektřiny · UCEEB ČVUT v Praze</p>
+  <h1>Sdílení elektřiny do poslední kilowatthodiny</h1>
+  <p class="perex">Sdílení elektřiny se v Česku rychle rozběhlo. Zapojily se do něj desítky tisíc domácností, bytových domů a firem. Ukážeme, jak výpočet sdílení funguje a kde má ještě rezervy. Navrhneme také, jak ho jednoduše zpřesnit. Klíče, smlouvy i zúčtování přitom zůstanou stejné.</p>
+  <p class="byline">Ing. Pavel Otta, PhD. · Řídicí systémy a optimalizace, UCEEB ČVUT v Praze · pracovní verze 7. 10. 2026</p>
+</header>
+
+<aside class="inbrief" aria-label="V kostce">
+  <p class="inbrief-h">V kostce</p>
+  <ul>
+    <li>Dnešní výpočet EDC dělí výrobu podle dohodnutých klíčů po kolech. Říkáme mu <strong>přibližná statická metoda</strong>. Po posledním kole totiž může zbýt elektřina, kterou by členové spotřebovali. Ta odejde do sítě.</li>
+    <li>Stejný výpočet lze dotáhnout do konce jedním vzorcem. Říkáme mu <strong>přesná statická metoda</strong>. Klíče platí dál a nikdo nepřijde zkrátka.</li>
+    <li>Výrobu více výroben lze sečíst a rozdělit stejným vzorcem. Říkáme mu <strong>režim bazén</strong>. Hodí se pro skupiny, kde sdílí všichni se všemi.</li>
+    <li>Zúčtování zůstává stejné. Zpřesní se jen spočítané objemy.</li>
+  </ul>
+</aside>
+
+<h2>Jak sdílení funguje</h2>
+<p>Skupina sdílení spojuje výrobny a odběrná místa svých členů. Výrobnou bývá nejčastěji fotovoltaika na střeše. Elektřina přitom neteče zvláštním drátem, sdílí se jen účetně. Elektroenergetické datové centrum (EDC) vezme naměřenou výrobu a spotřebu v každé čtvrthodině. Pak spočítá, kolik z výroby připadne kterému členovi. Za tuto elektřinu člen neplatí dodavateli cenu silové elektřiny. Distribuční poplatky ale platí dál [1]. Pravidla výpočtu stanoví Energetický regulační úřad (ERÚ) ve vyhlášce č. 408/2015 Sb., v příloze č. 25 [2].</p>
+<p>Sdílet lze od srpna 2024 a zájem je velký. V srpnu 2026 evidovalo EDC téměř 30 000 skupin sdílení. Patří mezi ně 1 171 bytových domů a 228 energetických společenství [3].</p>
+<dl class="glossary">
+  <div><dt>Odběrné místo</dt><dd>Místo s elektroměrem, například byt, dům nebo provozovna. EDC ho označuje kódem EANo. Výrobna má vlastní kód EANd.</dd></div>
+  <div><dt>Alokační klíč</dt><dd>Dohodnutý podíl člena na výrobě, například 50 %. Může odpovídat třeba tomu, kolik člen do výrobny investoval.</dd></div>
+  <div><dt>Čtvrthodina</dt><dd>Sdílet lze jen elektřinu vyrobenou a spotřebovanou ve stejné čtvrthodině. Výpočet proto proběhne pro každou čtvrthodinu zvlášť, 96krát denně.</dd></div>
+  <div><dt>EDC</dt><dd>Elektroenergetické datové centrum. Eviduje skupiny sdílení. Z naměřených dat vyhodnocuje, kolik elektřiny si členové nasdíleli.</dd></div>
+</dl>
+
+<h2>Dělení po kolech</h2>
+<p>Dnes se používá statická metoda. Výroba se dělí podle pevných klíčů a výpočet běží v kolech. V každém kole dostane člen svůj podíl z výroby, která zbývá k rozdělení. Nedostane ale víc, než ještě potřebuje. Co zbude, se rozdělí v dalším kole. Výsledky se zaokrouhlují dolů na setiny kWh. Postup je názorný a dá se dobře popsat ve vyhlášce.</p>
+<p>Ukážeme si to na malém příkladu, který nás bude provázet celým článkem. Výrobna v jedné čtvrthodině vyrobí 12 kWh. Dana má klíč 50 % a potřebuje 4 kWh. Emil má klíč 30 % a potřebuje 5 kWh. Filip má klíč 20 % a potřebuje 6 kWh. Průběh výpočtu po kolech ukazuje tabulka 1.</p>
+<div class="tbl wide"><table>
+<thead><tr><th>Kolo</th><th>K rozdělení</th><th>Dana (50 %)</th><th>Emil (30 %)</th><th>Filip (20 %)</th><th>Zbývá</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>12,00</td><td>4,00</td><td>3,60</td><td>2,40</td><td>2,00</td></tr>
+<tr><td>2</td><td>2,00</td><td>–</td><td>0,60</td><td>0,40</td><td>1,00</td></tr>
+<tr><td>3</td><td>1,00</td><td>–</td><td>0,30</td><td>0,20</td><td>0,50</td></tr>
+<tr><td>4</td><td>0,50</td><td>–</td><td>0,15</td><td>0,10</td><td>0,25</td></tr>
+<tr><td>5</td><td>0,25</td><td>–</td><td>0,07</td><td>0,05</td><td class="loss">0,13 → síť</td></tr>
+<tr class="hl"><td>Celkem</td><td></td><td>4,00</td><td>4,72</td><td>3,15</td><td></td></tr>
+</tbody></table></div>
+<p class="tcap">Tabulka 1: Statická metoda v pěti kolech (kWh). Dana dostane vše hned v prvním kole. Emil a Filip dostávají v dalších kolech zbytek. Ten se v každém kole zmenší na polovinu.</p>
+<p>Pravidla se průběžně vylepšují. Od srpna 2026 platí novela vyhlášky. Pět kol se nově počítá u skupin až se 100 odběrnými a výrobními místy. U větších skupin proběhne jedno kolo [2, 4]. Každé kolo rozdělí další část zbytku. Celý zbytek by ale rozdělilo až nekonečně mnoho kol.</p>
+<p>Jak rychle zbytek mizí, záleží na klíčích členů, kteří ještě něco potřebují. V příkladu mají Emil a Filip dohromady 50 %. Zbytek se proto v každém kole půlí. Kdyby měli dohromady jen 10 %, zůstaly by po pěti kolech nerozděleny dvě třetiny zbytku z prvního kola.</p>
+<p>Dnešní výpočet tedy dává přibližný výsledek, který je s každým kolem přesnější. Odtud název <span class="term">přibližná statická metoda</span>. EDC od srpna 2026 postupně přechází z počátečního, provizorního režimu do plného provozu. Ten má být dokončen nejpozději do konce roku 2027 [5]. Je to dobrá příležitost výpočet ještě zpřesnit.</p>
+
+<h2>Co ukazují data reálné skupiny</h2>
+<p>Z portálu EDC si lze stáhnout report sdílení se čtvrthodinovými daty. Každá skupina si tak může prohlédnout, jak u ní sdílení funguje. Vzali jsme report jedné skupiny. Má fotovoltaiku 11,44 kWp s baterií 11,6 kWh a pět odběrných míst. Klíče jsou 50 % a čtyřikrát 10 %. Za rok od září 2025 do září 2026 výrobna vyrobila 4 275 kWh. Členové spotřebovali 36 854 kWh.</p>
+<p>Report jsme zpracovali volně dostupnou aplikací edc-report [6]. Aplikace dnešní výpočet napodobuje. V 99,2 % čtvrthodin dojde k přesně stejnému výsledku jako EDC. Jejím přepočtům proto můžeme věřit.</p>
+<figure>
+  <div class="plate"><img src="img/kolac.png" alt="Koláčový graf: sdíleno 2 235 kWh (52,3 %), mohlo být sdíleno 367 kWh (8,6 %), přetok 1 673 kWh (39,1 %)" width="1520" height="1120"></div>
+  <figcaption><span class="fig-no">Obr. 1</span>Kam šla výroba skupiny za rok. <b>Zelená</b> je elektřina, kterou si členové nasdíleli. <b>Červená</b> je elektřina, kterou členové ve stejné čtvrthodině spotřebovali a přesný výpočet by ji také rozdělil. <b>Šedá</b> je přetok, který ve skupině nikdo nespotřeboval.</figcaption>
+</figure>
+<p>Kam šla výroba za celý rok, ukazuje obr. 1. Z výroby se nasdílelo 2 235 kWh (52,3 %). Přesný výpočet by se stejnými klíči rozdělil dalších <strong>367 kWh, tedy 8,6 % výroby</strong>. Zbylých 1 673 kWh (39,1 %) by ve skupině nikdo nespotřeboval. Tento přetok nerozdělí žádná metoda a odchází do sítě. Přesný výpočet by pomohl v 80 % čtvrthodin, kdy výrobna vyráběla. Jak to vypadá během jednoho dne, ukazuje obr. 2.</p>
+<figure>
+  <div class="pair">
+    <div class="plate"><img src="img/den_priblizna.png" alt="Sdílení dne 28. 6. 2026 přibližnou statickou metodou" width="1800" height="880"></div>
+    <div class="plate"><img src="img/den_presna.png" alt="Sdílení dne 28. 6. 2026 přesnou statickou metodou" width="1800" height="880"></div>
+  </div>
+  <figcaption><span class="fig-no">Obr. 2</span>Jeden den po čtvrthodinách (28. 6. 2026). Nahoře dnešní výpočet, dole přesný. Barevné plochy ukazují elektřinu nasdílenou jednotlivým členům. <b>Tmavě šedá</b> je výroba poslaná do sítě, světle šedá spotřeba ze sítě. Výrobna ten den vyrobila 30,8 kWh. Podle dnešního výpočtu šlo do sítě 8,4 kWh. Podle přesného jen 3,0 kWh, které už nikdo ve skupině nepotřeboval.</figcaption>
+</figure>
+<p>Jde o jednu skupinu, jiné skupiny budou mít jiná čísla. Rozdíl roste s počtem členů a s menšími klíči. Týká se proto hlavně bytových domů a energetických společenství. Přínos za celou republiku by šlo spočítat z dat EDC.</p>
+
+<h2>Skupiny s více výrobnami</h2>
+<p>Když má skupina více výroben, nastavuje se klíč pro každou dvojici výrobna–odběrné místo. Odběrné místo může čerpat až z pěti výroben. Záleží přitom i na jejich pořadí. Takové zadání je velmi pružné a umožní téměř libovolné uspořádání. Pro běžnou skupinu je ale nastavení pracné a členové mu těžko rozumějí. Vrátíme se k tomu v druhé části článku.</p>
+
+<h2>Jak spravedlivě rozdělit jednu hromádku</h2>
+<p>Rozdělit jednu hromádku mezi více lidí je úloha stará jako lidstvo samo. Nejtěžší je, když na všechny nestačí. Řeší ji dědické právo, konkurzní řízení i přídělový systém. Matematici ji zkoumají jako úlohu spravedlivého dělení, přesněji jako úlohu o dělení nároků (anglicky <em>claims problem</em>) [7, 8]. Nárokem může být pohledávka věřitele, podíl dědice nebo u nás spotřeba člena. Pravidel je celá řada. <strong>Proporcionální pravidlo</strong> dělí v poměru nároků. <strong>Pravidlo rovných dílů</strong> (<em>constrained equal awards</em>) dává všem stejně, ale nikomu víc, než kolik požaduje. Žádné pravidlo není jediné správné. Každé jinak odpovídá na otázku, kdo má dostat víc.</p>
+<p>Ve sdílení elektřiny se dnes používá <strong>statická metoda</strong>. Dělí podle dohodnutých klíčů, víc tedy dostane ten, kdo má větší podíl. Dopočítaná do konce odpovídá váženému pravidlu rovných dílů. Místo stejného dílu dostane každý díl podle svého klíče, nejvýš však svou spotřebu. Diskutuje se o dvou dalších metodách. <strong>Dynamická metoda</strong> by dělila v poměru okamžité spotřeby. Je to proporcionální pravidlo, ve kterém je nárokem spotřeba. Víc by dostal ten, kdo zrovna víc spotřebovává. <strong>Hybridní metoda</strong> by obě pravidla kombinovala. První kolo by rozdělila podle klíčů a zbytek v poměru zbývající spotřeby.</p>
+<p>O zavedení dynamické a hybridní metody zatím rozhodnuto není. Podle EDC by byly možné nejdříve od 1. 12. 2027. Legislativní návrh Unie komunitní energetiky počítá s 1. 12. 2028 [9]. Přesná podoba výpočtu zatím nebyla zveřejněna. V tabulce 2 proto vycházíme z obvyklého popisu.</p>
+<div class="tbl wide"><table>
+<thead><tr><th>Metoda</th><th>Dana (50 %)</th><th>Emil (30 %)</th><th>Filip (20 %)</th><th>Do sítě</th><th>Podle klíčů</th></tr></thead>
+<tbody>
+<tr class="ref"><td>Spotřeba</td><td>4,00</td><td>5,00</td><td>6,00</td><td></td><td></td></tr>
+<tr><td>Statická, 1 kolo</td><td>4,00</td><td>3,60</td><td>2,40</td><td class="loss">2,00</td><td>ano</td></tr>
+<tr><td>Statická, 5 kol</td><td>4,00</td><td>4,72</td><td>3,15</td><td class="loss">0,13</td><td>ano</td></tr>
+<tr><td>Dynamická</td><td>3,20</td><td>4,00</td><td>4,80</td><td>0,00</td><td>ne</td></tr>
+<tr><td>Hybridní</td><td>4,00</td><td>4,16</td><td>3,84</td><td>0,00</td><td>v 1. kole</td></tr>
+<tr class="hl"><td>Přesná statická</td><td>4,00</td><td>4,80</td><td>3,20</td><td>0,00</td><td>ano</td></tr>
+</tbody></table></div>
+<p class="tcap">Tabulka 2: Stejná výroba 12 kWh rozdělená různými pravidly (kWh). První řádek připomíná spotřebu členů. Statická metoda dělí podle klíčů, dynamická podle spotřeby, hybridní podle obojího. Poslední řádek vysvětlíme vzápětí.</p>
+<p>Které pravidlo je nejvhodnější, není otázka matematiky. Je to věc dohody členů a rozhodnutí regulace. My se v článku věnujeme statické metodě, kterou dnes používají všechny skupiny. Zajímá nás jediná otázka: jak ji spočítat přesně.</p>
+
+<h2>Spojené nádoby</h2>
+<p>Představme si každého člena jako nádobu. Šířka nádoby odpovídá jeho klíči, objem jeho spotřebě. Výrobu nalijeme do všech nádob najednou. Nádoby jsou spojené, a tak hladina stoupá všude stejně. Plná nádoba už nic nepřijme a voda stoupá dál v ostatních. Každý člen nakonec dostane tolik, kolik vody je v jeho nádobě:</p>
+<div class="formula">nasdíleno = menší z hodnot ( spotřeba ; klíč × H )</div>
+<p>Písmeno H označuje společnou hladinu. Udává, kolik by dostal člen s klíčem 100 %, a proto ji měříme v kWh. Množství vody v nádobě je šířka × výška. U nenaplněné nádoby je to klíč × H, a to je nasdílená energie. V příkladu vyjde H = 16 kWh. Dana by při ní mohla dostat až 0,5 × 16 = 8 kWh. Potřebuje ale jen 4 kWh, a tak dostane 4 kWh. Emil dostane 0,3 × 16 = 4,8 kWh a Filip 0,2 × 16 = 3,2 kWh. Celou situaci ukazuje obr. 3.</p>
+<figure>
+  <div class="svgplate"><svg viewBox="0 112 640 228" role="img" aria-label="Tři nádoby se společnou hladinou H = 16 kWh na 100 % klíče">
+<line x1="62" y1="270" x2="62" y2="125" class="edge"/>
+<line x1="56" y1="270.0" x2="62" y2="270.0" class="edge"/>
+<text x="52" y="275.0" class="lbl mut" text-anchor="end">0</text>
+<line x1="56" y1="214.0" x2="62" y2="214.0" class="edge"/>
+<text x="52" y="219.0" class="lbl mut" text-anchor="end">8</text>
+<line x1="56" y1="158.0" x2="62" y2="158.0" class="edge"/>
+<text x="52" y="163.0" class="lbl mut" text-anchor="end">16</text>
+<text transform="translate(18 214.0) rotate(-90)" class="lbl mut" text-anchor="middle">hladina (kWh na 100 % klíče)</text>
+<rect x="90" y="214.0" width="200.0" height="56.0" class="water"/>
+<path d="M90,214.0 V270 H290.0 V214.0" class="vessel"/>
+<text x="190.0" y="248.0" class="lbl b" text-anchor="middle">4 kWh</text>
+<text x="190.0" y="292" class="lbl b" text-anchor="middle">Dana</text>
+<text x="190.0" y="310" class="lbl mut" text-anchor="middle">klíč 50 %</text>
+<text x="190.0" y="328" class="lbl mut" text-anchor="middle">spotřeba 4 kWh</text>
+<text x="190.0" y="206.0" class="lbl mut" text-anchor="middle">plná</text>
+<rect x="340" y="158.0" width="120.0" height="112.0" class="water"/>
+<path d="M340,153.3 V270 H460.0 V153.3" class="vessel"/>
+<text x="400.0" y="220.0" class="lbl b" text-anchor="middle">4,8 kWh</text>
+<text x="400.0" y="292" class="lbl b" text-anchor="middle">Emil</text>
+<text x="400.0" y="310" class="lbl mut" text-anchor="middle">klíč 30 %</text>
+<text x="400.0" y="328" class="lbl mut" text-anchor="middle">spotřeba 5 kWh</text>
+<text x="400.0" y="136.0" class="lbl mut" text-anchor="middle">plná až při 16,7</text>
+<rect x="520" y="158.0" width="80.0" height="112.0" class="water"/>
+<path d="M520,60.0 V270 H600.0 V60.0" class="vessel"/>
+<text x="560.0" y="220.0" class="lbl b" text-anchor="middle">3,2 kWh</text>
+<text x="560.0" y="292" class="lbl b" text-anchor="middle">Filip</text>
+<text x="560.0" y="310" class="lbl mut" text-anchor="middle">klíč 20 %</text>
+<text x="560.0" y="328" class="lbl mut" text-anchor="middle">spotřeba 6 kWh</text>
+<line x1="62" y1="158.0" x2="625" y2="158.0" class="dash"/>
+<text x="72" y="150.0" class="lbl acc">hladina H = 16 kWh</text>
+</svg></div>
+  <figcaption><span class="fig-no">Obr. 3</span>Nádoby pro příklad z tabulky 1. Šířka nádoby je klíč, výška se měří v kWh na 100 % klíče. Číslo ve vodě je nasdílená energie. Danina nádoba je plná. Emil a Filip mají společnou hladinu H = 16 kWh. Dostanou proto přesně v poměru svých klíčů, tedy 30 : 20. Rozděleno je všech 12 kWh.</figcaption>
+</figure>
+
+<h2>Jak se hladina spočítá</h2>
+<p>Hladinu není třeba hledat zkoušením. Členy seřadíme podle toho, jak brzy se jejich nádoba naplní. Pak je procházíme jednoho po druhém. U každého spočítáme, jaká by byla hladina, kdyby se všichni před ním naplnili. Stačí vydělit zbývající výrobu součtem klíčů zbývajících členů. Správná hladina je nejvyšší z takto spočtených hodnot. Postup pro náš příklad ukazuje tabulka 3. Pro zájemce vzorec:</p>
+<div class="formula">H = max<sub>j</sub> ( P − Σ<sub>i&lt;j</sub> spotřeba<sub>i</sub> ) / ( Σ<sub>i≥j</sub> klíč<sub>i</sub> ) &nbsp;<span class="c">P = výroba (kWh)</span></div>
+<div class="tbl"><table>
+<thead><tr><th>Pořadí</th><th>Člen</th><th>Naplní se při (kWh)</th><th>Výpočet</th><th>Hladina (kWh)</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Dana</td><td>4 / 0,5 = 8</td><td>12 / (0,5 + 0,3 + 0,2)</td><td>12</td></tr>
+<tr class="hl"><td>2</td><td>Emil</td><td>5 / 0,3 = 16,7</td><td>(12 − 4) / (0,3 + 0,2)</td><td>16 ← max</td></tr>
+<tr><td>3</td><td>Filip</td><td>6 / 0,2 = 30</td><td>(12 − 4 − 5) / 0,2</td><td>15</td></tr>
+</tbody></table></div>
+<p class="tcap">Tabulka 3: Výpočet hladiny pro příklad. Výpočet může skončit u prvního člena, který se nenaplní. Tady je to Emil. Jeho nádoba by se naplnila až při hladině 16,7 kWh. Hladina se udává v kWh na 100 % klíče.</p>
+<p>Klíče se berou jako poměry. Mohou proto dávat dohromady i méně než 100 %. Nerozdělený podíl se pak přerozdělí, stejně jako v dalších kolech dnešního výpočtu. Skupina, která chce část výroby záměrně prodávat, ji může před výpočtem odečíst jako pevnou rezervu.</p>
+
+<h2>Stejná metoda, jen dopočítaná</h2>
+<p>Přesná statická metoda nezavádí nové pravidlo. Je to dnešní statická metoda, jen dopočítaná do konce. V teorii spravedlivého dělení jde o dobře prozkoumané vážené pravidlo rovných dílů [8]. Každé kolo si můžeme představit jako další dávku vody. Členové s nenaplněnou nádobou přibírají v poměru svých klíčů. Po každém kole je proto v těchto nádobách stejná hladina. Ta s každým kolem roste (obr. 4). Nad H ale vystoupat nemůže, protože by se muselo rozdělit víc, než se vyrobilo.</p>
+<figure>
+  <div class="svgplate"><svg viewBox="0 0 660 290" role="img" aria-label="Hladina po kolech se blíží k H = 16">
+<line x1="70" y1="194.3" x2="600" y2="194.3" class="grid"/>
+<text x="60" y="198.3" class="lbl mut" text-anchor="end">12</text>
+<line x1="70" y1="158.6" x2="600" y2="158.6" class="grid"/>
+<text x="60" y="162.6" class="lbl mut" text-anchor="end">13</text>
+<line x1="70" y1="122.9" x2="600" y2="122.9" class="grid"/>
+<text x="60" y="126.9" class="lbl mut" text-anchor="end">14</text>
+<line x1="70" y1="87.1" x2="600" y2="87.1" class="grid"/>
+<text x="60" y="91.1" class="lbl mut" text-anchor="end">15</text>
+<line x1="70" y1="51.4" x2="600" y2="51.4" class="grid"/>
+<text x="60" y="55.4" class="lbl mut" text-anchor="end">16</text>
+<line x1="70" y1="51.4" x2="640" y2="51.4" class="dash"/>
+<text x="640" y="43.4" class="lbl acc" text-anchor="end">H = 16 kWh (přesná statická)</text>
+<line x1="80" y1="222.9" x2="80" y2="202.3" class="mark"/>
+<line x1="304" y1="222.9" x2="304" y2="68.4" class="mark"/>
+<polyline points="80.0,194.3 136.0,122.9 192.0,87.1 248.0,69.3 304.0,60.4 360.0,55.9 416.0,53.7 472.0,52.5 528.0,52.0 584.0,51.7" class="line"/>
+<circle cx="80.0" cy="194.3" r="5" class="dot hi"/>
+<text x="80.0" y="256" class="lbl mut" text-anchor="middle">1</text>
+<circle cx="136.0" cy="122.9" r="3.5" class="dot"/>
+<text x="136.0" y="256" class="lbl mut" text-anchor="middle">2</text>
+<circle cx="192.0" cy="87.1" r="3.5" class="dot"/>
+<text x="192.0" y="256" class="lbl mut" text-anchor="middle">3</text>
+<circle cx="248.0" cy="69.3" r="3.5" class="dot"/>
+<text x="248.0" y="256" class="lbl mut" text-anchor="middle">4</text>
+<circle cx="304.0" cy="60.4" r="5" class="dot hi"/>
+<text x="304.0" y="256" class="lbl mut" text-anchor="middle">5</text>
+<circle cx="360.0" cy="55.9" r="3.5" class="dot"/>
+<text x="360.0" y="256" class="lbl mut" text-anchor="middle">6</text>
+<circle cx="416.0" cy="53.7" r="3.5" class="dot"/>
+<text x="416.0" y="256" class="lbl mut" text-anchor="middle">7</text>
+<circle cx="472.0" cy="52.5" r="3.5" class="dot"/>
+<text x="472.0" y="256" class="lbl mut" text-anchor="middle">8</text>
+<circle cx="528.0" cy="52.0" r="3.5" class="dot"/>
+<text x="528.0" y="256" class="lbl mut" text-anchor="middle">9</text>
+<circle cx="584.0" cy="51.7" r="3.5" class="dot"/>
+<text x="584.0" y="256" class="lbl mut" text-anchor="middle">10</text>
+<text x="90" y="216.3" class="lbl">12 kWh · nad 100 EAN končí po 1. kole</text>
+<text x="314" y="86.4" class="lbl">15,75 kWh · do 100 EAN končí po 5. kole</text>
+<text x="340" y="282" class="lbl mut" text-anchor="middle">kolo výpočtu</text><text x="14" y="18" class="lbl mut">hladina (kWh na 100 % klíče)</text>
+</svg></div>
+  <figcaption><span class="fig-no">Obr. 4</span>Hladina po jednotlivých kolech dnešního výpočtu: 12, 14, 15, 15,5, 15,75… kWh. S každým kolem se blíží k H = 16 kWh. Přesná metoda spočítá H rovnou.</figcaption>
+</figure>
+<p>Přesná metoda tedy dává výsledek, ke kterému dnešní výpočet s každým kolem směřuje. Nikdo proto nepřijde zkrátka. Výjimkou jsou jen čtvrthodiny s velmi malou výrobou. V nich může zaokrouhlení přesunout mezi členy pár setin kWh. Za celý rok si v ukázkové skupině polepšil každý z pěti členů, a to o 30 až 142 kWh.</p>
+
+<h2>Co přesný výpočet přinese</h2>
+<ul class="plain">
+<li><strong>Členové si rozdělí vše, co mohou spotřebovat,</strong> a to se stejnými klíči.</li>
+<li><strong>Výpočet nezávisí na počtu kol ani na velikosti skupiny.</strong> Stejně přesný je pro rodinný dům i pro velké společenství.</li>
+<li><strong>Je rychlý.</strong> Přepočet celého roku ukázkové skupiny (35 040 čtvrthodin) trval 0,18 s. U skupiny s 1 000 odběrnými místy trvá výpočet jedné čtvrthodiny asi půl milisekundy. Srovnání s dnešním výpočtem ukazuje obr. 5.</li>
+<li><strong>Je snadno ověřitelný.</strong> Stačí znát klíč a hladinu H. Každý si pak svůj podíl spočítá sám jako menší z hodnot spotřeba a klíč × H.</li>
+</ul>
+<figure class="wide">
+  <div class="plate"><img src="img/srovnani-vypoctu.png" alt="Graf: doba výpočtu a podíl rozdělené elektřiny podle velikosti skupiny" width="2330" height="1018"></div>
+  <figcaption><span class="fig-no">Obr. 5</span>Vlevo doba výpočtu jedné čtvrthodiny podle velikosti skupiny, vpravo podíl rozdělené elektřiny. Srovnáváme dnešní výpočet podle platných pravidel s přesnou metodou. Dnes se počítá 5 kol do 100 odběrných a výrobních míst, nad 100 jedno kolo. Jde o simulaci s náhodnými klíči a spotřebou.</figcaption>
+</figure>
+<aside class="box">
+<p class="box-h">Pro programátory</p>
+<p>Jádro přesné statické metody v Pythonu. Nejnáročnější krok je seřazení členů, zbytek je jediný průchod. Plná referenční implementace je volně dostupná [6]. Obsahuje celočíselnou aritmetiku, zaokrouhlení a testy.</p>
+<pre><code>def presna_staticka(P, D, k):
+    """P výroba, D spotřeby, k klíče (jako poměry). Vrací nasdílená množství."""
+    idx = sorted(range(len(D)), key=lambda i: D[i] / k[i])   # seřazení: O(n log n)
+    H, zbyva_P, zbyva_k = 0.0, P, sum(k)                     # jeden průchod: O(n)
+    for i in idx:
+        H = max(H, zbyva_P / zbyva_k)
+        if D[i] / k[i] &gt;= H:          # další člen se nenaplní, hladina je hotová
+            break
+        zbyva_P -= D[i]
+        zbyva_k -= k[i]
+    return [min(D[i], k[i] * H) for i in range(len(D))]</code></pre>
+</aside>
+
+<h2>Když je výroben víc</h2>
+<p>U jedné výrobny se dělí jedna hromádka a vše je jednoduché. Pro více výroben je ale dnešní zadání obecnější. Klíč patří dvojici výrobna–odběrné místo. Rozhodnutí na jedné vazbě pak mění možnosti na ostatních. Z dělení jedné hromádky se tak stává síťová úloha. Ukazuje to jednoduchý příklad na obr. 6.</p>
+<figure>
+  <div class="svgplate"><svg viewBox="0 0 600 230" role="img" aria-label="Dvě výrobny a dvě odběrná místa s vazbami po dvojicích">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahead"/></marker></defs>
+<rect x="40" y="30" width="150" height="54" rx="6" class="node"/><text x="115.0" y="54.0" class="lbl b" text-anchor="middle">Výrobna B</text><text x="115.0" y="72.0" class="lbl mut" text-anchor="middle">10 kWh</text>
+<rect x="40" y="146" width="150" height="54" rx="6" class="node"/><text x="115.0" y="170.0" class="lbl b" text-anchor="middle">Výrobna A</text><text x="115.0" y="188.0" class="lbl mut" text-anchor="middle">10 kWh</text>
+<rect x="410" y="30" width="150" height="54" rx="6" class="node"/><text x="485.0" y="54.0" class="lbl b" text-anchor="middle">Odběr O1</text><text x="485.0" y="72.0" class="lbl mut" text-anchor="middle">potřebuje 10 kWh</text>
+<rect x="410" y="146" width="150" height="54" rx="6" class="node"/><text x="485.0" y="170.0" class="lbl b" text-anchor="middle">Odběr O2</text><text x="485.0" y="188.0" class="lbl mut" text-anchor="middle">potřebuje 10 kWh</text>
+<line x1="190" y1="57" x2="406" y2="57" class="edge" marker-end="url(#ah)"/><text x="300" y="46" class="lbl acc" text-anchor="middle">klíč 100 %</text>
+<line x1="190" y1="173" x2="406" y2="173" class="edge" marker-end="url(#ah)"/><text x="300" y="162" class="lbl acc" text-anchor="middle">klíč 50 %</text>
+<line x1="190" y1="152" x2="406" y2="80" class="edge" marker-end="url(#ah)"/>
+<text x="215" y="112" class="lbl acc">klíč 50 %</text>
+</svg></div>
+  <figcaption><span class="fig-no">Obr. 6</span>Výrobna A dělí svých 10 kWh mezi O1 a O2 po 50 %. Výrobna B smí sdílet jen do O1. Obě odběrná místa potřebují 10 kWh.</figcaption>
+</figure>
+<p>Statická metoda dá O1 10 kWh, z toho 5 z A a 5 z B. O2 dostane 5 kWh z A. Nasdílí se 15 kWh a 5 kWh z výrobny B zůstane nevyužito. Přitom by šlo nasdílet všech 20 kWh: výrobna A by poslala vše do O2 a výrobna B do O1. Pravidlo, které dělí každou výrobnu zvlášť, takové řešení nenajde. Nejde o slabinu konkrétní metody, ale o vlastnost úlohy. Stejně by dopadla i dynamická nebo hybridní metoda, pokud by dělila každou výrobnu zvlášť.</p>
+
+<h2>Optimalizace, nebo bazén?</h2>
+<p>Pro obecné vazby je správným nástrojem optimalizace, například úloha maximálního toku. Počítač ji zvládne. Nemá ale jednoduchý vzorec a člen skupiny si výsledek těžko ověří. Otevírá navíc další otázku. Optimalizace zajistí, že se nasdílí co nejvíc. Často ale existuje víc rozdělení, která nasdílí stejné množství, a liší se tím, kdo kolik dostane. Mezi nimi musí rozhodnout další pravidlo, a jsme zpátky u politické otázky spravedlnosti.</p>
+<p>Většina skupin s více výrobnami ale nic tak složitého nepotřebuje. Chtějí prostě sdílet všichni se všemi. Použít na ně optimalizaci by bylo jako střílet kanónem na vrabce. Má smysl jen tam, kde smí výrobna sdílet jen s některými členy.</p>
+
+<h2>Režim bazén</h2>
+<p>Když sdílí všichni se všemi, můžeme výrobu všech výroben sesypat na jednu hromádku. Říkáme jí bazén. Každý člen má jeden klíč pro celou skupinu. Souhrnná výroba se rozdělí přesnou statickou metodou. Výsledek se pak vrátí na jednotlivé výrobny v poměru jejich výroby. Každá výrobna tak v dané čtvrthodině sdílí stejný podíl své výroby. Žádná není zvýhodněna pořadím. Příklad ukazuje obr. 7 a tabulka 4.</p>
+<figure>
+  <div class="svgplate"><svg viewBox="0 0 680 250" role="img" aria-label="Režim bazén: výroba se sečte, rozdělí a vrátí na výrobny">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahead"/></marker></defs>
+<rect x="20" y="30" width="140" height="54" rx="6" class="node"/><text x="90.0" y="54.0" class="lbl b" text-anchor="middle">Výrobna A</text><text x="90.0" y="72.0" class="lbl mut" text-anchor="middle">10 kWh</text>
+<rect x="20" y="150" width="140" height="54" rx="6" class="node"/><text x="90.0" y="174.0" class="lbl b" text-anchor="middle">Výrobna B</text><text x="90.0" y="192.0" class="lbl mut" text-anchor="middle">6 kWh</text>
+<rect x="260" y="82" width="160" height="70" rx="6" class="pool"/><text x="340.0" y="114.0" class="lbl b" text-anchor="middle">Bazén 16 kWh</text><text x="340.0" y="132.0" class="lbl mut" text-anchor="middle">H = 28 kWh</text>
+<rect x="520" y="30" width="140" height="54" rx="6" class="node"/><text x="590.0" y="54.0" class="lbl b" text-anchor="middle">Odběr O1</text><text x="590.0" y="72.0" class="lbl mut" text-anchor="middle">dostane 2 kWh</text>
+<rect x="520" y="150" width="140" height="54" rx="6" class="node"/><text x="590.0" y="174.0" class="lbl b" text-anchor="middle">Odběr O2</text><text x="590.0" y="192.0" class="lbl mut" text-anchor="middle">dostane 14 kWh</text>
+<line x1="160" y1="57" x2="256" y2="105" class="edge" marker-end="url(#ah)"/>
+<line x1="160" y1="177" x2="256" y2="130" class="edge" marker-end="url(#ah)"/>
+<line x1="420" y1="105" x2="516" y2="60" class="edge" marker-end="url(#ah)"/><text x="452" y="74" class="lbl acc" text-anchor="middle">klíč 50 %</text>
+<line x1="420" y1="130" x2="516" y2="175" class="edge" marker-end="url(#ah)"/><text x="452" y="172" class="lbl acc" text-anchor="middle">klíč 50 %</text>
+<text x="340" y="236" class="lbl mut" text-anchor="middle">Zpět na výrobny v poměru jejich výroby: A 62,5 %, B 37,5 % z každého odběru</text>
+</svg></div>
+  <figcaption><span class="fig-no">Obr. 7</span>Výrobny A (10 kWh) a B (6 kWh), klíče 50/50. O1 potřebuje 2 kWh, O2 20 kWh. Hladina vyjde 28 kWh. O1 dostane celé 2 kWh, O2 dostane 0,5 × 28 = 14 kWh. Rozdělí se všech 16 kWh.</figcaption>
+</figure>
+<div class="tbl"><table>
+<thead><tr><th></th><th>O1</th><th>O2</th><th>Celkem</th></tr></thead>
+<tbody>
+<tr><td>Z výrobny A (62,5 %)</td><td>1,25</td><td>8,75</td><td>10,00</td></tr>
+<tr><td>Z výrobny B (37,5 %)</td><td>0,75</td><td>5,25</td><td>6,00</td></tr>
+<tr class="hl"><td>Celkem</td><td>2,00</td><td>14,00</td><td>16,00</td></tr>
+</tbody></table></div>
+<p class="tcap">Tabulka 4: Rozdělení bazénu zpět na výrobny (kWh).</p>
+<p>Bazén by byl nový, volitelný režim. Dnešní zadání by nenahradil, stál by vedle něj. Skupiny se zvláštními vazbami mohou dál používat klíče po dvojicích. Ostatním by bazén přinesl jednodušší nastavení s jedním klíčem na člena. A rozdělilo by se vše, co lze spotřebovat.</p>
+
+<h2>A co zúčtování?</h2>
+<p>Výsledek výpočtu má stejnou podobu jako dnes. Je to objem sdílené elektřiny pro každou dvojici výrobna–odběrné místo v každé čtvrthodině. Měsíční objem je součtem čtvrthodinových. U jedné výrobny se mění jen hodnoty, které budou přesnější. U bazénu je navíc jiné pravidlo, jak se objem odběrného místa rozdělí mezi výrobny. Ceny a finanční vypořádání mezi členy se řídí jejich smlouvami. Výpočet do nich nezasahuje.</p>
+<p class="keypoint">Zúčtování zůstává beze změny. <span>Zpřesní se jen spočítané objemy sdílené elektřiny.</span></p>
+
+<h2>Další kroky</h2>
+<p>Sdílení elektřiny funguje v Česku od srpna 2024. Za krátkou dobu se ušel velký kus cesty. Vznikl systém, který každou čtvrthodinu rozděluje výrobu desítek tisíc skupin. Pravidla se navíc průběžně vylepšují. Náš návrh na tuto práci navazuje dvěma malými úpravami přílohy č. 25:</p>
+<ul class="plain">
+<li><strong>Přesná statická metoda</strong> pro skupiny s jednou výrobnou. Dnešní výpočet se dotáhne do konce jedním vzorcem.</li>
+<li><strong>Režim bazén</strong> pro skupiny s více výrobnami, kde sdílí všichni se všemi. Výroba se sečte a rozdělí stejným vzorcem.</li>
+</ul>
+<p>Obě úpravy zachovávají klíče i smlouvy a nemění zúčtování. Nezávisejí ani na tom, zda a kdy přibudou další metody sdílení. Návrh jsme v UCEEB připravili jako podklad pro diskusi s ERÚ a EDC. Referenční implementace je volně dostupná [6]. Volně dostupná je i aplikace, ve které si každá skupina může prohlédnout svůj report z portálu EDC.</p>
+
+<aside class="about">
+<p><strong>Univerzitní centrum energeticky efektivních budov ČVUT v Praze (UCEEB)</strong> se věnuje výzkumu energetiky budov. Tým Řídicí systémy a optimalizace se zabývá řízením a optimalizací energetických systémů. Kontakt: pavel.otta@cvut.cz</p>
+</aside>
+
+<section class="sources">
+<h2>Zdroje</h2>
+<ol>
+<li>L. Šimšová: Jak funguje komunitní sdílení elektřiny a jaké změny lze očekávat od 1. srpna letošního roku. TZB-info, 29. 7. 2026, <a href="https://energetika.tzb-info.cz/30134-jak-funguje-komunitni-sdileni-elektriny-a-jake-zmeny-lze-ocekavat-od-1-srpna-letosniho-roku">energetika.tzb-info.cz</a>.</li>
+<li>Vyhláška č. 408/2015 Sb., o Pravidlech trhu s elektřinou, ve znění pozdějších předpisů, zejména vyhlášky č. 132/2026 Sb.</li>
+<li>Rozvoj EDC pokračuje: nový web usnadní přístup ke službám moderní energetiky. Feedit, 19. 8. 2026 (tisková zpráva EDC), <a href="https://feedit.cz/2026/08/19/rozvoj-edc-pokracuje-novy-web-usnadni-pristup-ke-sluzbam-moderni-energetiky/">feedit.cz</a>.</li>
+<li>ERÚ usnadnil sdílení elektřiny. Další změny ale budou potřeba. TZB-info, 13. 7. 2026, <a href="https://energetika.tzb-info.cz/energeticka-politika/30083-eru-usnadnil-sdileni-elektriny-dalsi-zmeny-ale-budou-potreba">energetika.tzb-info.cz</a>.</li>
+<li>Elektroenergetické datové centrum vstupuje do plného provozu. Co to přinese domácnostem? Naše střecha, 2. 8. 2026, <a href="https://www.nasestrecha.cz/clanky/elektroenergeticke-datove-centrum-vstupuje-do-plneho-provozu-co-to-prinese-domacnostem/">nasestrecha.cz</a>.</li>
+<li>P. Otta: edc-report. Aplikace pro rozbor reportu sdílení a referenční implementace přesné statické metody, <a href="https://github.com/ottapav/edc-report">github.com/ottapav/edc-report</a>.</li>
+<li>B. O'Neill: A problem of rights arbitration from the Talmud. Mathematical Social Sciences 2(4), 1982.</li>
+<li>W. Thomson: Axiomatic and game-theoretic analysis of bankruptcy and taxation problems. Mathematical Social Sciences 45(3), 2003. W. Thomson: How to Divide When There Isn't Enough. Cambridge University Press, 2019.</li>
+<li>Komunitní energetika vyhlíží dynamické sdílení a chystá se na chytré řízení toků energie. Hospodářské noviny, 19. 5. 2026, <a href="https://archiv.hn.cz/c1-67878010-komunitni-energetika-vyhlizi-dynamicke-sdileni-a-chysta-se-na-chytre-rizeni-toku-energie">hn.cz</a>.</li>
+</ol>
+</section>
+</main>

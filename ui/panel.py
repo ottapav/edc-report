@@ -44,6 +44,7 @@ LABELS = [
     # computation cards
     ("exact-title", "children", "recompute_title"),
     ("exact-desc", "children", "recompute_desc"),
+    ("exact-article", "children", "recompute_article"),
     ("exact-btn", "children", "recompute_btn"),
     ("lbl-reserve", "children", "reserve"),
     ("bill-title", "children", "bill_title"),

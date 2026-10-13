@@ -28,6 +28,10 @@ JOB_KINDS = ("exact", "bill")
 PAIRED_FIGURES = ("overview", "pie", "daily", "hourly", "heat")
 
 
+# explanatory article on the exact static method and the pool mode (Czech), served from assets/
+ARTICLE_URL = "/assets/clanek/index.html"
+
+
 def job_ids(kind: str) -> dict[str, str]:
     """Component ids of a computation card."""
     return {part: f"{kind}-{part}" for part in
@@ -66,9 +70,9 @@ def _number_input(id_: str, label_id: str, value=None) -> html.Label:
     ])
 
 
-def job_card(kind: str, inputs: list, results: list) -> html.Section:
-    """A card that starts a computation: title, description, the button and its inputs,
-    a progress bar, then the results."""
+def job_card(kind: str, inputs: list, results: list, link: str | None = None) -> html.Section:
+    """A card that starts a computation: title, description (with an optional link to an
+    explanatory text), the button and its inputs, a progress bar, then the results."""
     ids = job_ids(kind)
     return html.Section(id=f"{kind}-card", className="card job-card", children=[
         dcc.Store(id=ids["job"]),
@@ -76,6 +80,8 @@ def job_card(kind: str, inputs: list, results: list) -> html.Section:
         dcc.Interval(id=ids["poll"], interval=200, disabled=True),
         html.H2(id=ids["title"]),
         html.P(id=ids["desc"], className="hint"),
+        *([html.P(className="hint article-link", children=html.A(
+            id=f"{kind}-article", href=link, target="_blank", rel="noopener"))] if link else []),
         html.Div(className="rc-row", children=[
             html.Button(id=ids["btn"], n_clicks=0, className="btn-primary"), *inputs]),
         html.Div(id=ids["progress"], className="progress idle", children=[
@@ -169,7 +175,7 @@ def _report() -> html.Div:
                 html.H2(id="info-title"), html.Div(id="info"), html.Div(id="notes")]),
             job_card("exact", [_number_input("reserve", "lbl-reserve", value="0")],
                      [html.Div(id="fit-info"), html.Div(id="exact-stale"),
-                      html.Div(id="exact-result")]),
+                      html.Div(id="exact-result")], link=ARTICLE_URL),
             job_card("bill", [_number_input("feed-in", "lbl-feed-in"),
                               _number_input("price-default", "lbl-price-default")],
                      [html.Div(id="bill-stale"), html.Div(id="bill-result")]),

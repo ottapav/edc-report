@@ -175,6 +175,9 @@ body {
 /* ---- recompute card ------------------------------------------------- */
 .job-card h2 { margin-bottom: 4px; }
 .job-card > .hint { margin: 0 0 12px; }
+.job-card > .article-link { margin: -6px 0 12px; }
+.article-link a { color: var(--accent-ink); font-weight: 600; text-decoration: none; }
+.article-link a:hover { text-decoration: underline; }
 .rc-row { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
 .btn-primary { font: inherit; font-weight: 600; font-size: 14px; color: var(--on-accent); background: var(--accent); border: 0; border-radius: 8px; padding: 9px 16px; cursor: pointer; }
 .btn-primary:hover { background: var(--accent-hover); }

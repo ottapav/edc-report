@@ -54,7 +54,7 @@ with the computation timed per 15-min interval.
 * **Daily energy:** stacked areas (linear axis) with the grid flows, unshared and unmet, and
   the hatched energy that went to unticked members. **Click a day** to select it.
 * **Sharing on the selected day:** 15-min steps from 06:00 to 21:00, always directly under the
-  daily plot. The y axis is fixed over the whole period, so days compare on one scale.
+  daily plot. The y axis fits the selected day and is shared by both methods, so they compare on one scale.
 * **Heatmap hour × month:** the **total production** (independent of the selection) or the
   **total consumption** of the ticked members. A part report has neither, so it shows the
   shared energy. Neither depends on the sharing method, so next to the exact method it is
@@ -227,6 +227,11 @@ longer.
 consumed is shared while the keys hold. `recompute.py` calls `rozdel()` for every 15-min
 interval of the report and builds a second report in the same structure, so every figure and
 table works for both.
+
+**Explanatory article (Czech).** [`assets/clanek/index.html`](assets/clanek/index.html) explains
+the approximate and the exact static method, the pool mode for several producers and the
+results for one real group, for a broad audience (written for TZB-info, UCEEB ČVUT). The app
+serves it at `/assets/clanek/index.html` and links it from the *Exact static method* card.
 
 **Timing.** The loop runs in a forked worker process: it gets a whole core, and the web
 server's threads do not disturb the measurement. It is timed with that process's CPU clock:
