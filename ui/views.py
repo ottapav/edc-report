@@ -95,8 +95,9 @@ def energy_tiles(data: SharingData, enabled: set[str], lang: str, *,
         if cur is None or old is None:
             return two_lines(main) if pad else main
         d = cur - old
-        cls = ("delta" if abs(d) <= 0.05
-               else "delta good" if (d > 0) == higher_is_better else "delta bad")
+        if abs(d) <= 0.05:                   # unchanged: no "+0,0 kWh vs EDC" line
+            return two_lines(main)
+        cls = "delta good" if (d > 0) == higher_is_better else "delta bad"
         return two_lines(main, html.Span(f"{fmt_signed(d, lang)} kWh {t('vs_edc', lang)}",
                                          className=cls))
 
@@ -371,8 +372,10 @@ def exact_result(exact: Recomputed, data: SharingData, enabled: set[str], names:
         html.P([html.B(f"{t('keys_used', lang)} ({source}): "), used,
                 f" ({t('keys_sum', lang)} {fmt_pct(100 * sum(exact.keys), lang, 1)}){reserve}"],
                className="keys-line"),
-        hint(t("edc_check", lang).format(rounds=t(f"rounds_{exact.rounds}", lang),
-                                         pct=fmt_pct(100 * exact.edc_match, lang, 1))),
+        # estimated keys: the fit line above the result already gives this check
+        *([] if exact.keys_estimated else [
+            hint(t("edc_check", lang).format(rounds=t(f"rounds_{exact.rounds}", lang),
+                                             pct=fmt_pct(100 * exact.edc_match, lang, 1)))]),
     ]
 
 

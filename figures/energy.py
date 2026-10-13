@@ -206,11 +206,12 @@ def fig_daily(
 
 
 def fig_wasted_pie(split: WastedSplit, lang: str = "cs", th: dict | None = None,
-                   exact_based: bool = False) -> go.Figure:
+                   exact_based: bool = False, explain: bool = True) -> go.Figure:
     """Where the production went. The slices always add up to the production:
     shared to the selected members, shared to the unselected ones, could have been
     shared (unshared while selected members bought from the grid; with ``exact_based``
-    what the exact method adds to them), unshared."""
+    what the exact method adds to them), unshared. ``explain=False`` (the exact method's
+    own pie) leaves out the note on "could have been shared", which is ~0 there."""
     th = th or THEMES["light"]
     fig = figure(t("pie_title", lang), lang, 500, th)
     total = split.shared_total + split.shared_others + split.unshared_only + split.overlap
@@ -222,10 +223,11 @@ def fig_wasted_pie(split: WastedSplit, lang: str = "cs", th: dict | None = None,
         (t("pie_wasted", lang), split.overlap, th["wasted"], False, True),
         (t("pie_unshared_only", lang), split.unshared_only, th["unshared"], False, False),
     ]
-    note = [t("pie_union", lang).format(total=fmt_num(total, lang)),
-            t("pie_subtitle_exact" if exact_based else "pie_subtitle", lang)]
-    if split.overlap <= 0:
-        note.append(t("pie_no_overlap", lang))
+    note = [t("pie_union", lang).format(total=fmt_num(total, lang))]
+    if explain:
+        note.append(t("pie_subtitle_exact" if exact_based else "pie_subtitle", lang))
+        if split.overlap <= 0:
+            note.append(t("pie_no_overlap", lang))
     return pie(fig, slices, note, th=th, unit=UNIT, hover_decimals=1)
 
 

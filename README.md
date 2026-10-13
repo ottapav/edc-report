@@ -57,7 +57,8 @@ with the computation timed per 15-min interval.
   daily plot. The y axis is fixed over the whole period, so days compare on one scale.
 * **Heatmap hour × month:** the **total production** (independent of the selection) or the
   **total consumption** of the ticked members. A part report has neither, so it shows the
-  shared energy.
+  shared energy. Neither depends on the sharing method, so next to the exact method it is
+  shown once (the billing column has its own heatmap in Kč).
 * **Per-member table:** consumption, shared, unmet, coverage and data availability.
 
 **Selection panel:**

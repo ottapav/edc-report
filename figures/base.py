@@ -291,7 +291,7 @@ def pie(fig: go.Figure, slices: list[tuple], note: list[str], *, th: dict, unit:
         annotations=[dict(text="<br>".join(note), x=0.5, y=0, yshift=-58, xref="paper",
                           yref="paper", yanchor="top", showarrow=False,
                           font=dict(size=11, color=th["muted"]))],
-        margin=dict(l=40, r=40, t=60, b=100 + 14 * (len(note) - 2)),
+        margin=dict(l=40, r=40, t=60, b=100 + 14 * (max(len(note), 2) - 2)),
     )
     return fig
 

@@ -8,7 +8,6 @@ import datetime as dt
 from dataclasses import dataclass
 
 import dash
-import numpy as np
 from dash import Input, Output, State, callback, clientside_callback, ctx, html, no_update
 
 import store
@@ -133,7 +132,7 @@ def _right_exact(s: Scope, sel_day: str | None, order: list[str]) -> dict:
         tiles=views.energy_tiles(exact.data, s.enabled, s.lang, ref=s.data, exact=exact.data),
         overview=fig_total_by_flow(df, exact.data, s.names, order=order, **s.opts),
         daily=fig_daily(df, exact.data, s.names, sel_day=sel_day, **s.opts),
-        pie=fig_wasted_pie(compute_wasted_split(df), s.lang, s.th),
+        pie=fig_wasted_pie(compute_wasted_split(df), s.lang, s.th, explain=False),
     )
 
 
@@ -149,17 +148,13 @@ def _right_bill(s: Scope, sel_day: str | None, order: list[str]) -> dict:
 
 
 def _heatmaps(s: Scope, right: str | None, metric: str) -> tuple:
-    """Left: production or consumption (part report: shared). Right: the same of the
-    exact method on one colour scale, or the benefit in Kč on its own."""
+    """Left: production or consumption (part report: shared). Right: the benefit in Kč
+    for the billing; nothing for the exact method (production and consumption do not
+    depend on the sharing method, the right card is hidden)."""
     data = s.data
     metrics = heat_metrics(data)
     metric = metric if metric in metrics else metrics[0]
-    pivots = [heat_pivot(data, s.enabled, metric)]
-    if right == "exact":
-        pivots.append(heat_pivot(s.entry.exact.data, s.enabled, metric))
-    peaks = [float(np.nanmax(p.to_numpy())) for p in pivots if not p.empty]
-    z_max = max(peaks) if peaks else None
-    figs = [fig_heatmap(p, metric, z_max=z_max, lang=s.lang, th=s.th) for p in pivots]
+    figs = [fig_heatmap(heat_pivot(data, s.enabled, metric), metric, lang=s.lang, th=s.th)]
     if right == "bill":
         total = s.entry.bill.per_interval.sum(axis=1)
         figs.append(fig_bill_heatmap(total, lang=s.lang, th=s.th))
@@ -238,7 +233,7 @@ def render(key, exact_rev, bill_rev, view, selected, changed, src_changed, lang,
                          html.B(s.entry.filename)], className="status-ok"),
         info=views.facts(s.entry.filename, data, s.enabled, s.names, lang),
         notes=views.data_notes(data, lang),
-        compare="compare dual" if right else "compare single",
+        compare=f"compare dual right-{right}" if right else "compare single",
         head_b={"exact": t("col_exact", lang), "bill": t("col_bill", lang)}.get(right, ""),
         pie_card={} if data.fmt == "all" else HIDDEN,
         dest_table=views.dest_table(data, s.enabled, s.names, lang, s.top),

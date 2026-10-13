@@ -222,6 +222,8 @@ body {
 .compare.dual .hourly-card { grid-row: 6; }
 .compare.dual .heat-card { grid-row: 7; }
 .compare.dual .table-card { display: none; }
+/* production / consumption do not depend on the sharing method: one heatmap is enough */
+.compare.dual.right-exact .col-b .heat-card { display: none; }
 /* every part of a tile has a fixed height (label two lines, sub-line three), so paired
    tiles are level row by row even when a sub-line of one of them wraps */
 .compare.dual .tile-label { min-height: 2.6em; align-items: flex-start; line-height: 1.3; }
