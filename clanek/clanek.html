@@ -1,3 +1,10 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Zdroj článku. Text upravujte zde. Značky ve dvojitých složených závorkách
+     nahradí schémata ze schemata.py. Viz clanek/README.md. -->
 <title>Sdílení do poslední kilowatthodiny</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -107,6 +114,8 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .about { margin-top: 2.6rem; font: 400 .9rem/1.55 var(--display); color: var(--muted); border-left: 3px solid var(--accent); padding-left: 1rem; }
 .about p { margin: 0; }
 </style>
+</head>
+<body>
 
 <main>
 <header class="lead">
@@ -196,38 +205,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <div class="formula">nasdíleno = menší z hodnot ( spotřeba ; klíč × H )</div>
 <p>Písmeno H označuje společnou hladinu. Udává, kolik by dostal člen s klíčem 100 %, a proto ji měříme v kWh. Množství vody v nádobě je šířka × výška. U nenaplněné nádoby je to klíč × H, a to je nasdílená energie. V příkladu vyjde H = 16 kWh. Dana by při ní mohla dostat až 0,5 × 16 = 8 kWh. Potřebuje ale jen 4 kWh, a tak dostane 4 kWh. Emil dostane 0,3 × 16 = 4,8 kWh a Filip 0,2 × 16 = 3,2 kWh. Celou situaci ukazuje obr. 3.</p>
 <figure>
-  <div class="svgplate"><svg viewBox="0 112 640 228" role="img" aria-label="Tři nádoby se společnou hladinou H = 16 kWh na 100 % klíče">
-<line x1="62" y1="270" x2="62" y2="125" class="edge"/>
-<line x1="56" y1="270.0" x2="62" y2="270.0" class="edge"/>
-<text x="52" y="275.0" class="lbl mut" text-anchor="end">0</text>
-<line x1="56" y1="214.0" x2="62" y2="214.0" class="edge"/>
-<text x="52" y="219.0" class="lbl mut" text-anchor="end">8</text>
-<line x1="56" y1="158.0" x2="62" y2="158.0" class="edge"/>
-<text x="52" y="163.0" class="lbl mut" text-anchor="end">16</text>
-<text transform="translate(18 214.0) rotate(-90)" class="lbl mut" text-anchor="middle">hladina (kWh na 100 % klíče)</text>
-<rect x="90" y="214.0" width="200.0" height="56.0" class="water"/>
-<path d="M90,214.0 V270 H290.0 V214.0" class="vessel"/>
-<text x="190.0" y="248.0" class="lbl b" text-anchor="middle">4 kWh</text>
-<text x="190.0" y="292" class="lbl b" text-anchor="middle">Dana</text>
-<text x="190.0" y="310" class="lbl mut" text-anchor="middle">klíč 50 %</text>
-<text x="190.0" y="328" class="lbl mut" text-anchor="middle">spotřeba 4 kWh</text>
-<text x="190.0" y="206.0" class="lbl mut" text-anchor="middle">plná</text>
-<rect x="340" y="158.0" width="120.0" height="112.0" class="water"/>
-<path d="M340,153.3 V270 H460.0 V153.3" class="vessel"/>
-<text x="400.0" y="220.0" class="lbl b" text-anchor="middle">4,8 kWh</text>
-<text x="400.0" y="292" class="lbl b" text-anchor="middle">Emil</text>
-<text x="400.0" y="310" class="lbl mut" text-anchor="middle">klíč 30 %</text>
-<text x="400.0" y="328" class="lbl mut" text-anchor="middle">spotřeba 5 kWh</text>
-<text x="400.0" y="136.0" class="lbl mut" text-anchor="middle">plná až při 16,7</text>
-<rect x="520" y="158.0" width="80.0" height="112.0" class="water"/>
-<path d="M520,60.0 V270 H600.0 V60.0" class="vessel"/>
-<text x="560.0" y="220.0" class="lbl b" text-anchor="middle">3,2 kWh</text>
-<text x="560.0" y="292" class="lbl b" text-anchor="middle">Filip</text>
-<text x="560.0" y="310" class="lbl mut" text-anchor="middle">klíč 20 %</text>
-<text x="560.0" y="328" class="lbl mut" text-anchor="middle">spotřeba 6 kWh</text>
-<line x1="62" y1="158.0" x2="625" y2="158.0" class="dash"/>
-<text x="72" y="150.0" class="lbl acc">hladina H = 16 kWh</text>
-</svg></div>
+  <div class="svgplate">{{NADOBY}}</div>
   <figcaption><span class="fig-no">Obr. 3</span>Nádoby pro příklad z tabulky 1. Šířka nádoby je klíč, výška se měří v kWh na 100 % klíče. Číslo ve vodě je nasdílená energie. Danina nádoba je plná. Emil a Filip mají společnou hladinu H = 16 kWh. Dostanou proto přesně v poměru svých klíčů, tedy 30 : 20. Rozděleno je všech 12 kWh.</figcaption>
 </figure>
 
@@ -247,46 +225,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <h2>Stejná metoda, jen dopočítaná</h2>
 <p>Přesná statická metoda nezavádí nové pravidlo. Je to dnešní statická metoda, jen dopočítaná do konce. V teorii spravedlivého dělení jde o dobře prozkoumané vážené pravidlo rovných dílů [8]. Každé kolo si můžeme představit jako další dávku vody. Členové s nenaplněnou nádobou přibírají v poměru svých klíčů. Po každém kole je proto v těchto nádobách stejná hladina. Ta s každým kolem roste (obr. 4). Nad H ale vystoupat nemůže, protože by se muselo rozdělit víc, než se vyrobilo.</p>
 <figure>
-  <div class="svgplate"><svg viewBox="0 0 660 290" role="img" aria-label="Hladina po kolech se blíží k H = 16">
-<line x1="70" y1="194.3" x2="600" y2="194.3" class="grid"/>
-<text x="60" y="198.3" class="lbl mut" text-anchor="end">12</text>
-<line x1="70" y1="158.6" x2="600" y2="158.6" class="grid"/>
-<text x="60" y="162.6" class="lbl mut" text-anchor="end">13</text>
-<line x1="70" y1="122.9" x2="600" y2="122.9" class="grid"/>
-<text x="60" y="126.9" class="lbl mut" text-anchor="end">14</text>
-<line x1="70" y1="87.1" x2="600" y2="87.1" class="grid"/>
-<text x="60" y="91.1" class="lbl mut" text-anchor="end">15</text>
-<line x1="70" y1="51.4" x2="600" y2="51.4" class="grid"/>
-<text x="60" y="55.4" class="lbl mut" text-anchor="end">16</text>
-<line x1="70" y1="51.4" x2="640" y2="51.4" class="dash"/>
-<text x="640" y="43.4" class="lbl acc" text-anchor="end">H = 16 kWh (přesná statická)</text>
-<line x1="80" y1="222.9" x2="80" y2="202.3" class="mark"/>
-<line x1="304" y1="222.9" x2="304" y2="68.4" class="mark"/>
-<polyline points="80.0,194.3 136.0,122.9 192.0,87.1 248.0,69.3 304.0,60.4 360.0,55.9 416.0,53.7 472.0,52.5 528.0,52.0 584.0,51.7" class="line"/>
-<circle cx="80.0" cy="194.3" r="5" class="dot hi"/>
-<text x="80.0" y="256" class="lbl mut" text-anchor="middle">1</text>
-<circle cx="136.0" cy="122.9" r="3.5" class="dot"/>
-<text x="136.0" y="256" class="lbl mut" text-anchor="middle">2</text>
-<circle cx="192.0" cy="87.1" r="3.5" class="dot"/>
-<text x="192.0" y="256" class="lbl mut" text-anchor="middle">3</text>
-<circle cx="248.0" cy="69.3" r="3.5" class="dot"/>
-<text x="248.0" y="256" class="lbl mut" text-anchor="middle">4</text>
-<circle cx="304.0" cy="60.4" r="5" class="dot hi"/>
-<text x="304.0" y="256" class="lbl mut" text-anchor="middle">5</text>
-<circle cx="360.0" cy="55.9" r="3.5" class="dot"/>
-<text x="360.0" y="256" class="lbl mut" text-anchor="middle">6</text>
-<circle cx="416.0" cy="53.7" r="3.5" class="dot"/>
-<text x="416.0" y="256" class="lbl mut" text-anchor="middle">7</text>
-<circle cx="472.0" cy="52.5" r="3.5" class="dot"/>
-<text x="472.0" y="256" class="lbl mut" text-anchor="middle">8</text>
-<circle cx="528.0" cy="52.0" r="3.5" class="dot"/>
-<text x="528.0" y="256" class="lbl mut" text-anchor="middle">9</text>
-<circle cx="584.0" cy="51.7" r="3.5" class="dot"/>
-<text x="584.0" y="256" class="lbl mut" text-anchor="middle">10</text>
-<text x="90" y="216.3" class="lbl">12 kWh · nad 100 EAN končí po 1. kole</text>
-<text x="314" y="86.4" class="lbl">15,75 kWh · do 100 EAN končí po 5. kole</text>
-<text x="340" y="282" class="lbl mut" text-anchor="middle">kolo výpočtu</text><text x="14" y="18" class="lbl mut">hladina (kWh na 100 % klíče)</text>
-</svg></div>
+  <div class="svgplate">{{HLADINA}}</div>
   <figcaption><span class="fig-no">Obr. 4</span>Hladina po jednotlivých kolech dnešního výpočtu: 12, 14, 15, 15,5, 15,75… kWh. S každým kolem se blíží k H = 16 kWh. Přesná metoda spočítá H rovnou.</figcaption>
 </figure>
 <p>Přesná metoda tedy dává výsledek, ke kterému dnešní výpočet s každým kolem směřuje. Nikdo proto nepřijde zkrátka. Výjimkou jsou jen čtvrthodiny s velmi malou výrobou. V nich může zaokrouhlení přesunout mezi členy pár setin kWh. Za celý rok si v ukázkové skupině polepšil každý z pěti členů, a to o 30 až 142 kWh.</p>
@@ -321,17 +260,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <h2>Když je výroben víc</h2>
 <p>U jedné výrobny se dělí jedna hromádka a vše je jednoduché. Pro více výroben je ale dnešní zadání obecnější. Klíč patří dvojici výrobna–odběrné místo. Rozhodnutí na jedné vazbě pak mění možnosti na ostatních. Z dělení jedné hromádky se tak stává síťová úloha. Ukazuje to jednoduchý příklad na obr. 6.</p>
 <figure>
-  <div class="svgplate"><svg viewBox="0 0 600 230" role="img" aria-label="Dvě výrobny a dvě odběrná místa s vazbami po dvojicích">
-<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahead"/></marker></defs>
-<rect x="40" y="30" width="150" height="54" rx="6" class="node"/><text x="115.0" y="54.0" class="lbl b" text-anchor="middle">Výrobna B</text><text x="115.0" y="72.0" class="lbl mut" text-anchor="middle">10 kWh</text>
-<rect x="40" y="146" width="150" height="54" rx="6" class="node"/><text x="115.0" y="170.0" class="lbl b" text-anchor="middle">Výrobna A</text><text x="115.0" y="188.0" class="lbl mut" text-anchor="middle">10 kWh</text>
-<rect x="410" y="30" width="150" height="54" rx="6" class="node"/><text x="485.0" y="54.0" class="lbl b" text-anchor="middle">Odběr O1</text><text x="485.0" y="72.0" class="lbl mut" text-anchor="middle">potřebuje 10 kWh</text>
-<rect x="410" y="146" width="150" height="54" rx="6" class="node"/><text x="485.0" y="170.0" class="lbl b" text-anchor="middle">Odběr O2</text><text x="485.0" y="188.0" class="lbl mut" text-anchor="middle">potřebuje 10 kWh</text>
-<line x1="190" y1="57" x2="406" y2="57" class="edge" marker-end="url(#ah)"/><text x="300" y="46" class="lbl acc" text-anchor="middle">klíč 100 %</text>
-<line x1="190" y1="173" x2="406" y2="173" class="edge" marker-end="url(#ah)"/><text x="300" y="162" class="lbl acc" text-anchor="middle">klíč 50 %</text>
-<line x1="190" y1="152" x2="406" y2="80" class="edge" marker-end="url(#ah)"/>
-<text x="215" y="112" class="lbl acc">klíč 50 %</text>
-</svg></div>
+  <div class="svgplate">{{SIT}}</div>
   <figcaption><span class="fig-no">Obr. 6</span>Výrobna A dělí svých 10 kWh mezi O1 a O2 po 50 %. Výrobna B smí sdílet jen do O1. Obě odběrná místa potřebují 10 kWh.</figcaption>
 </figure>
 <p>Statická metoda dá O1 10 kWh, z toho 5 z A a 5 z B. O2 dostane 5 kWh z A. Nasdílí se 15 kWh a 5 kWh z výrobny B zůstane nevyužito. Přitom by šlo nasdílet všech 20 kWh: výrobna A by poslala vše do O2 a výrobna B do O1. Pravidlo, které dělí každou výrobnu zvlášť, takové řešení nenajde. Nejde o slabinu konkrétní metody, ale o vlastnost úlohy. Stejně by dopadla i dynamická nebo hybridní metoda, pokud by dělila každou výrobnu zvlášť.</p>
@@ -343,19 +272,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <h2>Režim bazén</h2>
 <p>Když sdílí všichni se všemi, můžeme výrobu všech výroben sesypat na jednu hromádku. Říkáme jí bazén. Každý člen má jeden klíč pro celou skupinu. Souhrnná výroba se rozdělí přesnou statickou metodou. Výsledek se pak vrátí na jednotlivé výrobny v poměru jejich výroby. Každá výrobna tak v dané čtvrthodině sdílí stejný podíl své výroby. Žádná není zvýhodněna pořadím. Příklad ukazuje obr. 7 a tabulka 4.</p>
 <figure>
-  <div class="svgplate"><svg viewBox="0 0 680 250" role="img" aria-label="Režim bazén: výroba se sečte, rozdělí a vrátí na výrobny">
-<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahead"/></marker></defs>
-<rect x="20" y="30" width="140" height="54" rx="6" class="node"/><text x="90.0" y="54.0" class="lbl b" text-anchor="middle">Výrobna A</text><text x="90.0" y="72.0" class="lbl mut" text-anchor="middle">10 kWh</text>
-<rect x="20" y="150" width="140" height="54" rx="6" class="node"/><text x="90.0" y="174.0" class="lbl b" text-anchor="middle">Výrobna B</text><text x="90.0" y="192.0" class="lbl mut" text-anchor="middle">6 kWh</text>
-<rect x="260" y="82" width="160" height="70" rx="6" class="pool"/><text x="340.0" y="114.0" class="lbl b" text-anchor="middle">Bazén 16 kWh</text><text x="340.0" y="132.0" class="lbl mut" text-anchor="middle">H = 28 kWh</text>
-<rect x="520" y="30" width="140" height="54" rx="6" class="node"/><text x="590.0" y="54.0" class="lbl b" text-anchor="middle">Odběr O1</text><text x="590.0" y="72.0" class="lbl mut" text-anchor="middle">dostane 2 kWh</text>
-<rect x="520" y="150" width="140" height="54" rx="6" class="node"/><text x="590.0" y="174.0" class="lbl b" text-anchor="middle">Odběr O2</text><text x="590.0" y="192.0" class="lbl mut" text-anchor="middle">dostane 14 kWh</text>
-<line x1="160" y1="57" x2="256" y2="105" class="edge" marker-end="url(#ah)"/>
-<line x1="160" y1="177" x2="256" y2="130" class="edge" marker-end="url(#ah)"/>
-<line x1="420" y1="105" x2="516" y2="60" class="edge" marker-end="url(#ah)"/><text x="452" y="74" class="lbl acc" text-anchor="middle">klíč 50 %</text>
-<line x1="420" y1="130" x2="516" y2="175" class="edge" marker-end="url(#ah)"/><text x="452" y="172" class="lbl acc" text-anchor="middle">klíč 50 %</text>
-<text x="340" y="236" class="lbl mut" text-anchor="middle">Zpět na výrobny v poměru jejich výroby: A 62,5 %, B 37,5 % z každého odběru</text>
-</svg></div>
+  <div class="svgplate">{{BAZEN}}</div>
   <figcaption><span class="fig-no">Obr. 7</span>Výrobny A (10 kWh) a B (6 kWh), klíče 50/50. O1 potřebuje 2 kWh, O2 20 kWh. Hladina vyjde 28 kWh. O1 dostane celé 2 kWh, O2 dostane 0,5 × 28 = 14 kWh. Rozdělí se všech 16 kWh.</figcaption>
 </figure>
 <div class="tbl"><table>
@@ -399,3 +316,5 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </ol>
 </section>
 </main>
+</body>
+</html>

@@ -21,8 +21,9 @@ import argparse
 import hmac
 
 import dash
-from flask import Response, request
+from flask import Response, request, send_from_directory
 
+import clanek
 import config
 import jobs
 import store
@@ -40,6 +41,17 @@ server = app.server  # for gunicorn: gunicorn app:server -c gunicorn.conf.py
 server.config["MAX_CONTENT_LENGTH"] = int((config.MAX_UPLOAD_MB * 1.4 + 2) * 2**20)
 app.index_string = INDEX_STRING
 app.layout = layout()
+
+
+@server.route("/clanek/")
+def _article():
+    """The explanatory article, assembled from clanek/ on every request."""
+    return Response(clanek.render(), mimetype="text/html")
+
+
+@server.route("/clanek/img/<path:name>")
+def _article_img(name: str):
+    return send_from_directory(clanek.IMG, name)
 
 
 @server.route("/healthz")

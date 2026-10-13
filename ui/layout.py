@@ -28,8 +28,8 @@ JOB_KINDS = ("exact", "bill")
 PAIRED_FIGURES = ("overview", "pie", "daily", "hourly", "heat")
 
 
-# explanatory article on the exact static method and the pool mode (Czech), served from assets/
-ARTICLE_URL = "/assets/clanek/index.html"
+# explanatory article on the exact static method and the pool mode (Czech), see clanek/
+ARTICLE_URL = "/clanek/"
 
 
 def job_ids(kind: str) -> dict[str, str]:

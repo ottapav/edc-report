@@ -228,10 +228,12 @@ consumed is shared while the keys hold. `recompute.py` calls `rozdel()` for ever
 interval of the report and builds a second report in the same structure, so every figure and
 table works for both.
 
-**Explanatory article (Czech).** [`assets/clanek/index.html`](assets/clanek/index.html) explains
-the approximate and the exact static method, the pool mode for several producers and the
-results for one real group, for a broad audience (written for TZB-info, UCEEB ČVUT). The app
-serves it at `/assets/clanek/index.html` and links it from the *Exact static method* card.
+**Explanatory article (Czech).** [`clanek/`](clanek/README.md) explains the approximate and
+the exact static method, the pool mode for several producers and the results for one real
+group, for a broad audience (written for TZB-info, UCEEB ČVUT). The app assembles it from
+`clanek/clanek.html` and the figures in `clanek/schemata.py` on every request, serves it at
+`/clanek/` and links it from the *Exact static method* card, so an edit in the repository is
+what the app shows.
 
 **Timing.** The loop runs in a forked worker process: it gets a whole core, and the web
 server's threads do not disturb the measurement. It is timed with that process's CPU clock:
