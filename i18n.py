@@ -193,7 +193,9 @@ STRINGS: dict[str, dict[str, str]] = {
                      "brings to the group (the Shapley value). "
                      "Enter each member's supplier price of electricity (commodity, without "
                      "distribution) in the Price column and each producer's feed-in price next to its "
-                     "name, or default prices below. The billing uses the shared energy of the EDC report.",
+                     "name, or default prices below. The billing uses the shared energy of the EDC report. "
+                     "It is a proposal of the price for the sharing contract; payment above the producer's "
+                     "costs may count as business and require a production licence from ERÚ.",
         "bill_btn": "Compute the billing by contribution",
         "feed_in": "Default feed-in price [CZK/kWh]",
         "feed_col": "Feed-in",
@@ -450,7 +452,8 @@ STRINGS: dict[str, dict[str, str]] = {
                      "přinese (Shapleyho hodnota). Do sloupce Cena v tabulce "
                      "odběrných míst zadejte cenu elektřiny od prodejce (silová elektřina, bez distribuce) "
                      "a vedle názvu každé výrobny její výkupní cenu, nebo níže výchozí ceny. Vyúčtování "
-                     "vychází z nasdílené energie v reportu EDC.",
+                     "vychází z nasdílené energie v reportu EDC. Jde o návrh ceny pro smlouvu o sdílení; "
+                     "úplata nad náklady výroby může být podnikáním a vyžadovat licenci ERÚ na výrobu.",
         "bill_btn": "Spočítat vyúčtování podle přínosu",
         "feed_in": "Výchozí výkupní cena [Kč/kWh]",
         "feed_col": "Výkup",
