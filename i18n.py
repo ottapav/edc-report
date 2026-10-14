@@ -134,13 +134,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "keys": "Key [%]",
         "keys_hint": "Allocation keys are estimated from the report right after upload "
                      "(so that the approximate static method reproduces it); correct them before the "
-                     "recompute. Keys act as ratios; 0 = member gets nothing.",
+                     "recompute. Keys are in %, not negative, summing to at most 100 %; 0 = member "
+                     "gets nothing. With changed keys the recompute replays the approximate method "
+                     "with them too (left column), so both columns use the same keys.",
         "clear_keys": "Estimate",
         "reserve": "Reserve for sale [%]",
         "recompute_title": "Exact static method (proposal)",
         "recompute_desc": "Every 15-min interval is recomputed with rozdel() from presna_staticka.py: "
                           "s_i = min(D_i, k_i · H), with the level H computed to the end. "
-                          "The result is shown side by side with the approximate static method (the EDC report).",
+                          "The result is shown side by side with the approximate static method: the EDC "
+                          "report, or with changed keys its replay with the same keys.",
         "recompute_article": "How the exact static method works: explanatory article (in Czech) ↗",
         "recompute_btn": "Recompute sharing with the exact static method",
         "part_no_recompute": "Recompute needs an all report (members' consumption is required).",
@@ -148,6 +151,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "phase_compute": "Recomputing 15-min intervals",
         "phase_error": "Recompute failed",
         "col_edc": "Approximate static method (EDC report)",
+        "col_edc_replay": "Approximate static method (EDC replayed with these keys)",
+        "keys_negative": "A key must not be negative. Correct it to run the recompute.",
+        "keys_sum_over": "The keys add up to more than 100 % (empty cells count with their estimate). Lower some of them to run the recompute.",
+        "keys_all_zero": "At least one key must be greater than 0.",
         "col_exact": "Exact static method (recomputed)",
         "vs_edc": "vs EDC",
         "timing_title": "Computation timing",
@@ -385,13 +392,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "keys": "Klíč [%]",
         "keys_hint": "Alokační klíče se odhadnou z reportu hned po nahrání (tak, aby je "
                      "přibližná statická metoda reprodukovala); před přepočtem je můžete opravit. "
-                     "Klíče se berou jako poměry; 0 = člen nedostane nic.",
+                     "Klíče jsou v %, nesmí být záporné a jejich součet je nejvýše 100 %; 0 = člen "
+                     "nedostane nic. Se změněnými klíči přepočet nasimuluje i přibližnou metodu "
+                     "(levý sloupec), aby oba sloupce měly stejné klíče.",
         "clear_keys": "Odhad",
         "reserve": "Rezerva k prodeji [%]",
         "recompute_title": "Přesná statická metoda (návrh)",
         "recompute_desc": "Každá čtvrthodina se přepočítá funkcí rozdel() z presna_staticka.py: "
                           "s_i = min(D_i, k_i · H), hladina H dopočtená do konce. "
-                          "Výsledek se zobrazí vedle přibližné statické metody (reportu EDC).",
+                          "Výsledek se zobrazí vedle přibližné statické metody: reportu EDC, nebo "
+                          "se změněnými klíči vedle její simulace se stejnými klíči.",
         "recompute_article": "Jak přesná statická metoda funguje: vysvětlující článek ↗",
         "recompute_btn": "Přepočítat sdílení přesnou statickou metodou",
         "part_no_recompute": "Přepočet potřebuje úplný report (odběry členů).",
@@ -399,6 +409,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "phase_compute": "Přepočet čtvrthodin",
         "phase_error": "Přepočet selhal",
         "col_edc": "Přibližná statická metoda (report EDC)",
+        "col_edc_replay": "Přibližná statická metoda (simulace EDC se zadanými klíči)",
+        "keys_negative": "Klíč nesmí být záporný. Opravte ho, jinak přepočet nelze spustit.",
+        "keys_sum_over": "Součet klíčů je přes 100 % (prázdné buňky se počítají s odhadem). Některé klíče snižte, jinak přepočet nelze spustit.",
+        "keys_all_zero": "Aspoň jeden klíč musí být větší než 0.",
         "col_exact": "Přesná statická metoda (přepočet)",
         "vs_edc": "oproti EDC",
         "timing_title": "Měření výpočtu",

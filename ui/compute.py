@@ -80,8 +80,11 @@ def start_exact(n, key, rows, reserve, lang):
     refused = _usable(entry, lang, "part_no_recompute", one_producer=True)
     if refused:
         return refused
-    return _started(jobs.start_exact(key, members.keys(entry.data, rows),
-                                     members.reserve(reserve)))
+    typed = members.keys(entry.data, rows)
+    problem = members.key_problem(typed, entry.fit)
+    if problem:
+        return _refused(problem, lang)
+    return _started(jobs.start_exact(key, typed, members.reserve(reserve)))
 
 
 @callback(
@@ -206,14 +209,20 @@ def fit_info(_rev, lang, key, rows):
     State("data-key", "data"),
 )
 def exact_stale(_changed, rows, reserve, _rev, lang, key):
-    """"Keys changed since the last recompute" - a tiny callback, so typing a key does
-    not re-render any figure."""
+    """Invalid keys (negative, sum over 100 %), or "keys changed since the last
+    recompute" - a tiny callback, so typing a key does not re-render any figure."""
     entry = store.get(key)
-    if entry is None or entry.exact is None:
+    if entry is None:
         return []
-    exact = entry.exact
     current = members.keys(entry.data, rows)
-    changed = (any(k is not None and abs(k - u) > 1e-6 for k, u in zip(current, exact.keys))
+    problem = members.key_problem(current, entry.fit)
+    if problem:
+        return views.hint(t(problem, lang), "stale bad")
+    exact = entry.exact
+    if exact is None:
+        return []
+    merged = members.merged_keys(current, entry.fit)
+    changed = (any(k is not None and abs(k - u) > 1e-6 for k, u in zip(merged, exact.keys))
                or abs(members.reserve(reserve) - exact.reserve) > 1e-9)
     return views.hint(t("stale", lang), "stale") if changed else []
 

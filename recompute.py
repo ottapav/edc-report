@@ -17,7 +17,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from keyfit import replay_match
+from keyfit import replay_edc, replay_match
 from procjob import run_in_child
 from presna_staticka import rozdel
 from edc_data import (
@@ -144,6 +144,58 @@ class Recomputed:
     timing: Timing
     edc_match: float           # replay of today's method with these keys vs report
     rounds: int = 5            # EDC rounds used for that replay
+    #: the approximate static method (today's EDC rounds) replayed with the same keys and
+    #: reserve, unless they are the report's own (estimated keys, no reserve: then None,
+    #: the report itself is the approximate method's result)
+    approx: SharingData | None = None
+
+    def left(self, report: SharingData) -> SharingData:
+        """What the exact method is compared with: the replay, or the EDC report."""
+        return self.approx if self.approx is not None else report
+
+
+class InvalidKeys(ValueError):
+    """Allocation keys that cannot be used; ``reason`` is the i18n key of the message."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def check_keys(keys: list[float]) -> None:
+    """Keys are fractions: none negative, at least one positive, sum at most 100 %."""
+    if any(k < 0 for k in keys):
+        raise InvalidKeys("keys_negative")
+    if sum(keys) > 1 + 1e-9:
+        raise InvalidKeys("keys_sum_over")
+    if not any(k > 0 for k in keys):
+        raise InvalidKeys("keys_all_zero")
+
+
+def _as_data(data: SharingData, s: np.ndarray, P: np.ndarray, D: np.ndarray) -> SharingData:
+    """Shares ``s`` (T×n hundredths) as a report like ``data`` (single producer)."""
+    src = data.source_eans[0]
+    idx = data.frame.index
+    cols: dict[str, pd.Series] = {}
+    for j, e in enumerate(data.dest_eans):
+        cols[key_shared(src, e)] = pd.Series(s[:, j] / 100, index=idx)
+        cols[key_unmet(e)] = pd.Series((D[:, j] - s[:, j]) / 100, index=idx)
+    cols[key_unshared(src)] = pd.Series((P - s.sum(axis=1)) / 100, index=idx)
+    return SharingData(
+        frame=pd.DataFrame(cols, index=idx), fmt="all", source_eans=list(data.source_eans),
+        dest_eans=list(data.dest_eans), production=data.production,
+        demand=data.demand, coverage=data.coverage, first_data=data.first_data,
+        notes=[], n_rows=data.n_rows,
+    )
+
+
+def replay_approx(data: SharingData, keys: list[float], rounds: int,
+                  reserve: float = 0.0) -> SharingData:
+    """Today's EDC method (``rounds`` rounds) with ``keys``, over the whole report; a
+    reserve for sale is taken off the production first, as in the exact method."""
+    P, D, _S = to_hundredths(data)
+    P_eff = P - np.round(P * reserve).astype(np.int64) if reserve > 0 else P
+    return _as_data(data, replay_edc(P_eff, D, keys, rounds), P, D)
 
 
 @dataclass(frozen=True)
@@ -191,8 +243,12 @@ def recompute(
 ) -> Recomputed:
     """Run ``rozdel`` for every 15-min interval and build a comparable SharingData.
 
-    ``keys`` are fractions per destination (file order). ``rounds`` is the number
-    of EDC rounds used to check how well the keys reproduce today's report.
+    ``keys`` are fractions per destination (file order); :class:`InvalidKeys` if they
+    cannot be used (:func:`check_keys`). ``rounds`` is the number of EDC rounds used to
+    check how well the keys reproduce today's report. Unless the keys are the ones
+    estimated from the report (and there is no reserve), today's method is replayed with
+    them as well (``Recomputed.approx``), so both sides of the comparison use the same
+    inputs.
     """
     t_job = time.perf_counter()
     tm = Timing()
@@ -200,9 +256,8 @@ def recompute(
     P, D, S = to_hundredths(data)
     tm.t_prepare += time.perf_counter() - t0
 
-    keys = [max(0.0, float(x)) for x in keys]
-    if not any(k > 0 for k in keys):
-        raise ValueError("At least one allocation key must be > 0.")
+    keys = [float(x) for x in keys]
+    check_keys(keys)
 
     T, n = D.shape
     tm.intervals, tm.members = T, n
@@ -217,24 +272,12 @@ def recompute(
     tm.t_total = tm.t_night + tm.t_enough + tm.t_full
 
     t0 = time.perf_counter()
-    s_arr = np.asarray(out, dtype=np.int64)
-    src = data.source_eans[0]
-    idx = data.frame.index
-    cols: dict[str, pd.Series] = {}
-    for j, e in enumerate(data.dest_eans):
-        cols[key_shared(src, e)] = pd.Series(s_arr[:, j] / 100, index=idx)
-        cols[key_unmet(e)] = pd.Series((D[:, j] - s_arr[:, j]) / 100, index=idx)
-    cols[key_unshared(src)] = pd.Series((P - s_arr.sum(axis=1)) / 100, index=idx)
-    frame = pd.DataFrame(cols, index=idx)
-    new = SharingData(
-        frame=frame, fmt="all", source_eans=list(data.source_eans),
-        dest_eans=list(data.dest_eans), production=data.production,
-        demand=data.demand, coverage=data.coverage, first_data=data.first_data,
-        notes=[], n_rows=data.n_rows,
-    )
+    new = _as_data(data, np.asarray(out, dtype=np.int64), P, D)
+    same_as_report = keys_estimated and reserve == 0
+    approx = None if same_as_report else replay_approx(data, keys, rounds, reserve)
     edc_match = replay_match(P, D, S, keys, rounds)
     tm.t_prepare += time.perf_counter() - t0
     tm.t_wall = time.perf_counter() - t_job
     progress("done", 1.0)
     return Recomputed(data=new, keys=keys, keys_estimated=keys_estimated, reserve=reserve,
-                      timing=tm, edc_match=edc_match, rounds=rounds)
+                      timing=tm, edc_match=edc_match, rounds=rounds, approx=approx)

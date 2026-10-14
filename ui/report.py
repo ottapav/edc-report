@@ -112,27 +112,43 @@ def _bill_frame(s: Scope, enabled: set[str] | None = None):
 # ---------------------------------------------------------------------------
 
 
-def _left(s: Scope, sel_day: str | None) -> dict:
+def _left_sides(s: Scope, right: str | None) -> tuple[SharingData, SharingData | None]:
+    """(the left column's data, the exact recompute it is compared with or None).
+
+    Next to the exact method the left column uses the same keys: the EDC report, or
+    today's method replayed with the keys the user typed. Next to the billing (which
+    is computed from the report) it is the report, compared with the exact method only
+    when that used the report's own keys."""
     data, exact = s.data, s.entry.exact
+    if exact is None:
+        return data, None
+    if right == "exact":
+        return exact.left(data), exact.data
+    return data, exact.data if exact.approx is None else None
+
+
+def _left(s: Scope, sel_day: str | None, data: SharingData,
+          exact: SharingData | None) -> dict:
     df = filter_dests(data, s.enabled)
     out = dict(tiles=None, overview=fig_total_by_flow(df, data, s.names, **s.opts),
                daily=fig_daily(df, data, s.names, sel_day=sel_day, **s.opts), pie={})
     if data.fmt == "all":
         split = compute_wasted_split(df)
         if exact is not None:     # "could have been shared" = what the exact method adds
-            split = with_overlap(split, exact_gain(data, exact.data, s.enabled))
+            split = with_overlap(split, exact_gain(data, exact, s.enabled))
         out["pie"] = fig_wasted_pie(split, s.lang, s.th, exact_based=exact is not None)
     return out
 
 
-def _right_exact(s: Scope, sel_day: str | None, order: list[str]) -> dict:
+def _right_exact(s: Scope, sel_day: str | None, order: list[str], left: SharingData) -> dict:
     exact = s.entry.exact
     df = filter_dests(exact.data, s.enabled)
     return dict(
-        tiles=views.energy_tiles(exact.data, s.enabled, s.lang, ref=s.data, exact=exact.data),
+        tiles=views.energy_tiles(exact.data, s.enabled, s.lang, ref=left, exact=exact.data),
         overview=fig_total_by_flow(df, exact.data, s.names, order=order, **s.opts),
         daily=fig_daily(df, exact.data, s.names, sel_day=sel_day, **s.opts),
-        pie=fig_wasted_pie(compute_wasted_split(df), s.lang, s.th, explain=False),
+        pie=fig_wasted_pie(with_overlap(compute_wasted_split(df), 0.0), s.lang, s.th,
+                           explain=False),     # the most these keys can share: see views
     )
 
 
@@ -172,6 +188,7 @@ RENDER_OUTPUTS = dict(
     info=Output("info", "children"),
     notes=Output("notes", "children"),
     compare=Output("compare", "className"),
+    head_a=Output("head-a", "children"),
     head_b=Output("head-b", "children"),
     pie_card=Output("pie-card", "style"),
     dest_table=Output("dest-table", "children"),
@@ -202,7 +219,7 @@ def render(key, exact_rev, bill_rev, view, selected, changed, src_changed, lang,
     s = _scope(key, selected, lang, theme_name, src_rows, rows)
     if s is None:
         out = {k: {} for k in RENDER_OUTPUTS}
-        out.update(title=title, info=[], notes=[], compare="compare single", head_b="",
+        out.update(title=title, info=[], notes=[], compare="compare single", head_a=t("col_edc", lang), head_b="",
                    dest_table=[], cmp_card=HIDDEN, cmp_table=[], settle_card=HIDDEN,
                    tiles_a=[], tiles_b=[],
                    status=html.Div(t("session_lost", lang), className="status-error")
@@ -212,12 +229,12 @@ def render(key, exact_rev, bill_rev, view, selected, changed, src_changed, lang,
     sel_day = _day(sel_day)
     right = right_mode(s.entry, view)
     order = flow_order(filter_dests(data, s.enabled), data, s.top)   # same member rows
-    a = _left(s, sel_day)
-    a["tiles"] = views.energy_tiles(data, s.enabled, lang, pad=right is not None,
-                                    exact=exact.data if exact is not None else None)
+    left, versus = _left_sides(s, right)
+    a = _left(s, sel_day, left, versus)
+    a["tiles"] = views.energy_tiles(left, s.enabled, lang, pad=right is not None, exact=versus)
     b = dict(tiles=[], overview={}, pie={}, daily={})
     if right == "exact":
-        b = _right_exact(s, sel_day, order)
+        b = _right_exact(s, sel_day, order, left)
         share_xrange(a["overview"], b["overview"])
         share_stack_ymax(a["daily"], b["daily"])
     elif right == "bill":
@@ -234,6 +251,7 @@ def render(key, exact_rev, bill_rev, view, selected, changed, src_changed, lang,
         info=views.facts(s.entry.filename, data, s.enabled, s.names, lang),
         notes=views.data_notes(data, lang),
         compare=f"compare dual right-{right}" if right else "compare single",
+        head_a=t("col_edc" if left is data else "col_edc_replay", lang),
         head_b={"exact": t("col_exact", lang), "bill": t("col_bill", lang)}.get(right, ""),
         pie_card={} if data.fmt == "all" else HIDDEN,
         dest_table=views.dest_table(data, s.enabled, s.names, lang, s.top),

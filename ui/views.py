@@ -73,11 +73,13 @@ def data_notes(data: SharingData, lang: str):
 
 def _summary(data: SharingData, enabled: set[str], exact: SharingData | None) -> Summary:
     """``summarize`` where, once the exact recompute exists, "could have been shared"
-    of the EDC report is what the exact method really adds to the selection."""
+    of the approximate method is what the exact method really adds to the selection,
+    and of the exact method itself 0: it is the most these keys can share (a member
+    with key 0 or a reserve for sale leaves surplus that is not "could have been")."""
     s = summarize(data, enabled)
-    if exact is None or data is exact or s.overlap is None:
+    if exact is None or s.overlap is None:
         return s
-    return with_overlap(s, exact_gain(data, exact, enabled))
+    return with_overlap(s, 0.0 if data is exact else exact_gain(data, exact, enabled))
 
 
 def energy_tiles(data: SharingData, enabled: set[str], lang: str, *,
@@ -208,8 +210,9 @@ def dest_table(data: SharingData, enabled: set[str], names: dict, lang: str, top
 
 def cmp_table(data: SharingData, exact: Recomputed, enabled: set[str], names: dict,
               lang: str, top=None) -> list:
-    """EDC report vs exact method per destination; Σ over the ticked ones."""
-    a = per_destination(data).set_index("ean")
+    """Approximate method (the EDC report, or its replay with the same keys) vs exact
+    method per destination; Σ over the ticked ones."""
+    a = per_destination(exact.left(data)).set_index("ean")
     b = per_destination(exact.data).set_index("ean")
     keys = dict(zip(data.dest_eans, exact.keys))
     ksum = sum(exact.keys) or 1.0
@@ -345,7 +348,7 @@ def exact_result(exact: Recomputed, data: SharingData, enabled: set[str], names:
               f"{fmt_duration(tm.per_full, lang)} {t('t_per_full', lang)}"),
         _stat(t("t_wall", lang), fmt_duration(tm.t_wall, lang), NBSP),
     ])
-    loss = grid_loss(data, exact.data, enabled)
+    loss = grid_loss(exact.left(data), exact.data, enabled)
     n_sel = len([e for e in data.dest_eans if e in enabled])
     scope = ("" if n_sel == len(data.dest_eans)
              else f" — {t('loss_selected', lang).format(n=n_sel, m=len(data.dest_eans))}")

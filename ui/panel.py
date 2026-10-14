@@ -22,7 +22,6 @@ from .layout import job_ids, upload_content
 LABELS = [
     ("info-title", "children", "info_title"),
     ("table-title", "children", "table_title"),
-    ("head-a", "children", "col_edc"),
     ("cmp-title", "children", "cmp_title"),
     ("settle-title", "children", "bill_table_title"),
     ("lbl-right-view", "children", "right_view"),

@@ -62,10 +62,30 @@ def number(v) -> float | None:
 
 
 def keys(data: SharingData, rows: list[dict] | None) -> list[float | None]:
-    """Key column (percent) -> fractions in destination order; None = not set."""
+    """Key column (percent) -> fractions in destination order; None = not set. Negative
+    values are kept, so :func:`key_problem` can report them."""
     by_ean = {r.get("ean"): number(r.get("key")) for r in rows or []}
-    return [None if by_ean.get(e) is None else max(0.0, by_ean[e]) / 100
-            for e in data.dest_eans]
+    return [None if by_ean.get(e) is None else by_ean[e] / 100 for e in data.dest_eans]
+
+
+def merged_keys(typed: list[float | None], fit) -> list[float | None]:
+    """Typed keys, empty cells filled with the estimate (None while there is none)."""
+    return [k if k is not None else (fit.keys[i] if fit is not None else None)
+            for i, k in enumerate(typed)]
+
+
+def key_problem(typed: list[float | None], fit) -> str | None:
+    """i18n key of what is wrong with the keys (negative, sum over 100 %, all zero), or
+    None. Empty cells count with their estimate; without one only the typed keys are
+    checked."""
+    keys = [k for k in merged_keys(typed, fit) if k is not None]
+    if any(k < 0 for k in keys):
+        return "keys_negative"
+    if sum(keys) > 1 + 1e-9:
+        return "keys_sum_over"
+    if len(keys) == len(typed) and not any(k > 0 for k in keys):
+        return "keys_all_zero"
+    return None
 
 
 def prices(data: SharingData, rows: list[dict] | None, default) -> list[float | None]:
@@ -135,17 +155,19 @@ _TAIL_COLUMN = {"field": "tail", "headerName": "EAN", "width": 48, "cellClass": 
 
 
 def _number_column(field: str, header: str, editable: bool, width: int, lang: str,
-                   **extra) -> dict:
+                   negative: bool = False, **extra) -> dict:
     dec = "," if lang == "cs" else "."
     # typed as text, so a decimal comma works in every browser locale (the number editor
-    # drops it: "1,1" became 11); anything that is not a number keeps the old value.
+    # drops it: "1,1" became 11); anything that is not a number keeps the old value, and
+    # so does a negative one unless ``negative`` (keys: kept and reported as an error).
     # Grid functions are expressions without globals (no String, Math, isNaN).
     num = "(+((params.newValue + '').trim().replace(',', '.')))"
+    ok = f"{num} === {num}" if negative else f"{num} === {num} && {num} >= 0"
     return {"field": field, "headerName": header, "editable": editable, "width": width,
             "type": "rightAligned", "cellEditor": "agTextCellEditor",
             "valueParser": {"function":
                             f"(params.newValue == null || (params.newValue + '').trim() === '') ? null"
-                            f" : ({num} === {num} && {num} >= 0 ? {num} : params.oldValue)"},
+                            f" : ({ok} ? {num} : params.oldValue)"},
             "valueFormatter": {"function":
                                f"params.value == null ? '' : (params.value + '').replace('.', '{dec}')"},
             **extra}
@@ -157,8 +179,10 @@ def columns(lang: str, editable: bool) -> list[dict]:
     return [
         _name_column(lang),
         _TAIL_COLUMN,
-        _number_column("key", t("keys", lang), editable, 64, lang, tooltipField="range",
-                       cellClassRules={"key-warn": "params.data.warn"}),
+        _number_column("key", t("keys", lang), editable, 64, lang, negative=True,
+                       tooltipField="range",
+                       cellClassRules={"key-warn": "params.data.warn",
+                                       "key-bad": "params.value != null && params.value < 0"}),
         _number_column("price", t("price_col", lang), editable, 58, lang,
                        headerTooltip=t("price_col_tip", lang)),
     ]

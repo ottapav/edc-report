@@ -22,7 +22,7 @@ from billing import BillResult, compute_shapley
 from edc_data import per_destination, producer_arrays, supplied_per_source
 from keyfit import estimate_keys
 from procjob import JobCancelled, JobTimeout, run_in_child
-from recompute import recompute, to_hundredths
+from recompute import InvalidKeys, recompute, to_hundredths
 
 
 @dataclass
@@ -103,6 +103,8 @@ def _run(job: Job, work: Work) -> None:
         job.error_key = "job_cancelled"
     except JobTimeout:
         job.error_key = "job_timeout"
+    except InvalidKeys as exc:
+        job.error_key = exc.reason
     except Exception as exc:  # reported in the UI
         traceback.print_exc()
         job.error = str(exc)
@@ -127,7 +129,9 @@ def start_fit(data_key: str) -> str:
 
 
 def start_exact(data_key: str, keys: list[float | None], reserve: float) -> str:
-    """Recompute with the exact static method; empty keys (None) take the estimate."""
+    """Recompute with the exact static method; empty keys (None) take the estimate. With
+    other keys than the estimate (or a reserve) today's method is replayed with them too
+    (see :func:`recompute.recompute`)."""
     def work(entry: store.Entry, job: Job) -> None:
         if entry.fit is None and any(k is None for k in keys):
             job.with_fit = True

@@ -72,7 +72,15 @@ with the computation timed per 15-min interval.
 **Exact static method (proposal):**
 
 * **Keys:** estimated from the report right after upload. You can check and correct them
-  before the recompute.
+  before the recompute. They are checked as you type: no key may be negative (the cell turns
+  red), and they may add up to at most 100 % (empty cells count with their estimate);
+  otherwise the recompute does not start and the card says why.
+* **Same keys on both sides:** with keys other than the estimate (or a reserve), the
+  recompute also replays the approximate static method (today's EDC rounds) with them, and
+  the left column shows that replay instead of the report ("EDC replayed with these keys").
+  Tiles, pie, comparison table and the sharing-error box then compare the two methods for
+  the same keys; **Odhad** and a new recompute bring the report back. A member with key 0
+  gets nothing in either method.
 * **Recompute:** one button runs `rozdel()` for every 15-min interval, with a progress bar.
 * **Side by side:** the approximate static method (EDC) and the exact method, with shared axes, differences to EDC in
   the tiles, and a per-member comparison table. The two columns share the rows of one grid
@@ -145,7 +153,9 @@ gunicorn app:server -c gunicorn.conf.py        # listens on $PORT (default 8050)
    marked, and hovering shows the range of equally consistent values.
 3. **Check the keys** against the contract and correct them in the grid if needed; **Odhad**
    restores the estimate. Keys act as ratios in the exact method, and 0 means the member gets
-   nothing. An optional *reserve for sale* is passed to `rozdel(..., rezerva=)`.
+   nothing. Negative keys and a sum over 100 % are refused. An optional *reserve for sale* is
+   passed to `rozdel(..., rezerva=)` (and taken off the production of the replayed
+   approximate method too).
 4. **Recompute.** The second column appears next to the EDC report, and the timing card shows
    the computation.
 5. **Explore:**

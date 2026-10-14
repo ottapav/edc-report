@@ -111,3 +111,9 @@ def test_healthz_counts_jobs(entry_key, monkeypatch):
     assert body["status"] == "ok" and body["jobs_running"] >= 1 and body["max_jobs"] == config.MAX_JOBS
     store.drop(entry_key)
     _wait(jobs.JOBS[job_id], 5)
+
+
+def test_exact_job_with_invalid_keys_reports_why(entry_key):
+    job = jobs.JOBS[jobs.start_exact(entry_key, [0.5, 0.4, 0.3, None, None], 0.0)]
+    _wait(job)
+    assert job.error_key == "keys_sum_over" and store.get(entry_key).exact is None
