@@ -7,6 +7,8 @@ sharing at a glance. The app also recomputes the whole period with the proposed 
 static method** (`presna_staticka.py`) and shows the result of the approximate static method (EDC's current implementation) and the exact one side by side,
 with the computation timed per 15-min interval.
 
+**Live app:** <https://edc-report.uceeb.cvut.cz/>
+
 > **Česky:** Webová aplikace, která zobrazuje data o sdílení elektřiny z CSV reportu
 > vygenerovaného na portálu edc-cr.cz. Po nahrání CSV ukáže
 > souhrny, denní a hodinové grafy, teplotní mapu a podíl, který „mohl být sdílen“.
@@ -427,8 +429,8 @@ Measured in a browser against the production setup (gunicorn, one worker):
 
 ## Deployment on Render
 
-The app runs on Render as the web service **edc-report** (project *edc-report*, environment
-*Production*, free plan, Frankfurt). `render.yaml` is the Blueprint of that service: it is
+The app runs at <https://edc-report.uceeb.cvut.cz/>, served by Render as the web service
+**edc-report** (project *edc-report*, environment *Production*, free plan, Frankfurt). `render.yaml` is the Blueprint of that service: it is
 based on Render's export of the live service, plus the settings the app relies on.
 
 | Setting | Value |
