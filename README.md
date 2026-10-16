@@ -7,6 +7,9 @@ sharing at a glance. The app also recomputes the whole period with the proposed 
 static method** (`presna_staticka.py`) and shows the result of the approximate static method (EDC's current implementation) and the exact one side by side,
 with the computation timed per 15-min interval.
 
+**Live:** <https://edc-report.uceeb.cvut.cz/> · explanatory article (Czech):
+<https://edc-report.uceeb.cvut.cz/clanek/>
+
 > **Česky:** Webová aplikace, která zobrazuje data o sdílení elektřiny z CSV reportu
 > vygenerovaného na portálu edc-cr.cz. Po nahrání CSV ukáže
 > souhrny, denní a hodinové grafy, teplotní mapu a podíl, který „mohl být sdílen“.

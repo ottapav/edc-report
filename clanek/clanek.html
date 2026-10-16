@@ -165,7 +165,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 <h2>Co ukazují data reálné skupiny</h2>
 <p>Z portálu EDC si lze stáhnout report sdílení se čtvrthodinovými daty. Každá skupina si tak může prohlédnout, jak u ní sdílení funguje. Vzali jsme report jedné skupiny. Má fotovoltaiku 11,44 kWp s baterií 11,6 kWh a pět odběrných míst. Klíče jsou 50 % a čtyřikrát 10 %. Za rok od září 2025 do září 2026 výrobna vyrobila 4 275 kWh. Členové spotřebovali 36 854 kWh.</p>
-<p>Report jsme zpracovali volně dostupnou aplikací edc-report [6]. Aplikace dnešní výpočet napodobuje. V 99,2 % čtvrthodin dojde k přesně stejnému výsledku jako EDC. Jejím přepočtům proto můžeme věřit.</p>
+<p>Report jsme zpracovali volně dostupnou aplikací edc-report, která běží na adrese <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a> [6]. Aplikace dnešní výpočet napodobuje. V 99,2 % čtvrthodin dojde k přesně stejnému výsledku jako EDC. Jejím přepočtům proto můžeme věřit.</p>
 <figure>
   <div class="plate"><img src="img/kolac.png" alt="Koláčový graf: sdíleno 2 235 kWh (52,3 %), mohlo být sdíleno 367 kWh (8,6 %), přetok 1 673 kWh (39,1 %)" width="1520" height="1120"></div>
   <figcaption><span class="fig-no">Obr. 1</span>Kam šla výroba skupiny za rok. <b>Zelená</b> je elektřina, kterou si členové nasdíleli. <b>Červená</b> je elektřina, kterou členové ve stejné čtvrthodině spotřebovali a přesný výpočet by ji také rozdělil. <b>Šedá</b> je přetok, který ve skupině nikdo nespotřeboval.</figcaption>
@@ -179,6 +179,8 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   <figcaption><span class="fig-no">Obr. 2</span>Jeden den po čtvrthodinách (28. 6. 2026). Nahoře dnešní výpočet, dole přesný. Barevné plochy ukazují elektřinu nasdílenou jednotlivým členům. <b>Tmavě šedá</b> je výroba poslaná do sítě, světle šedá spotřeba ze sítě. Výrobna ten den vyrobila 30,8 kWh. Podle dnešního výpočtu šlo do sítě 8,4 kWh. Podle přesného jen 3,0 kWh, které už nikdo ve skupině nepotřeboval.</figcaption>
 </figure>
 <p>Jde o jednu skupinu, jiné skupiny budou mít jiná čísla. Rozdíl roste s počtem členů a s menšími klíči. Týká se proto hlavně bytových domů a energetických společenství. Přínos za celou republiku by šlo spočítat z dat EDC.</p>
+<p>Každá skupina si může spočítat vlastní čísla. Stačí stáhnout report sdílení z portálu EDC a nahrát ho do aplikace. Aplikace odhadne klíče, přepočítá celé období přesnou statickou metodou a ukáže obě metody vedle sebe. Nahraný soubor se nikam neukládá.</p>
+<p class="keypoint">Vyzkoušejte to na své skupině. <span><a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a></span></p>
 
 <h2>Skupiny s více výrobnami</h2>
 <p>Když má skupina více výroben, nastavuje se klíč pro každou dvojici výrobna–odběrné místo. Odběrné místo může čerpat až z pěti výroben. Záleží přitom i na jejich pořadí. Takové zadání je velmi pružné a umožní téměř libovolné uspořádání. Pro běžnou skupinu je ale nastavení pracné a členové mu těžko rozumějí. Vrátíme se k tomu v druhé části článku.</p>
@@ -295,7 +297,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <li><strong>Přesná statická metoda</strong> pro skupiny s jednou výrobnou. Dnešní výpočet se dotáhne do konce jedním vzorcem.</li>
 <li><strong>Režim bazén</strong> pro skupiny s více výrobnami, kde sdílí všichni se všemi. Výroba se sečte a rozdělí stejným vzorcem.</li>
 </ul>
-<p>Obě úpravy zachovávají klíče i smlouvy a nemění zúčtování. Nezávisejí ani na tom, zda a kdy přibudou další metody sdílení. Návrh jsme v UCEEB připravili jako podklad pro diskusi s ERÚ a EDC. Referenční implementace je volně dostupná [6]. Volně dostupná je i aplikace, ve které si každá skupina může prohlédnout svůj report z portálu EDC.</p>
+<p>Obě úpravy zachovávají klíče i smlouvy a nemění zúčtování. Nezávisejí ani na tom, zda a kdy přibudou další metody sdílení. Návrh jsme v UCEEB připravili jako podklad pro diskusi s ERÚ a EDC. Referenční implementace je volně dostupná [6]. Volně dostupná je i aplikace <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a>. Každá skupina v ní uvidí, jak by přesná statická metoda rozdělila její elektřinu.</p>
 
 <aside class="about">
 <p><strong>Univerzitní centrum energeticky efektivních budov ČVUT v Praze (UCEEB)</strong> se věnuje výzkumu energetiky budov. Tým Řídicí systémy a optimalizace se zabývá řízením a optimalizací energetických systémů. Kontakt: pavel.otta@cvut.cz</p>
@@ -309,7 +311,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <li>Rozvoj EDC pokračuje: nový web usnadní přístup ke službám moderní energetiky. Feedit, 19. 8. 2026 (tisková zpráva EDC), <a href="https://feedit.cz/2026/08/19/rozvoj-edc-pokracuje-novy-web-usnadni-pristup-ke-sluzbam-moderni-energetiky/">feedit.cz</a>.</li>
 <li>ERÚ usnadnil sdílení elektřiny. Další změny ale budou potřeba. TZB-info, 13. 7. 2026, <a href="https://energetika.tzb-info.cz/energeticka-politika/30083-eru-usnadnil-sdileni-elektriny-dalsi-zmeny-ale-budou-potreba">energetika.tzb-info.cz</a>.</li>
 <li>Elektroenergetické datové centrum vstupuje do plného provozu. Co to přinese domácnostem? Naše střecha, 2. 8. 2026, <a href="https://www.nasestrecha.cz/clanky/elektroenergeticke-datove-centrum-vstupuje-do-plneho-provozu-co-to-prinese-domacnostem/">nasestrecha.cz</a>.</li>
-<li>P. Otta: edc-report. Aplikace pro rozbor reportu sdílení a referenční implementace přesné statické metody, <a href="https://github.com/ottapav/edc-report">github.com/ottapav/edc-report</a>.</li>
+<li>P. Otta: edc-report. Aplikace pro rozbor reportu sdílení a referenční implementace přesné statické metody, aplikace <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a>, zdrojový kód <a href="https://github.com/ottapav/edc-report">github.com/ottapav/edc-report</a>.</li>
 <li>B. O'Neill: A problem of rights arbitration from the Talmud. Mathematical Social Sciences 2(4), 1982.</li>
 <li>W. Thomson: Axiomatic and game-theoretic analysis of bankruptcy and taxation problems. Mathematical Social Sciences 45(3), 2003. W. Thomson: How to Divide When There Isn't Enough. Cambridge University Press, 2019.</li>
 <li>Komunitní energetika vyhlíží dynamické sdílení a chystá se na chytré řízení toků energie. Hospodářské noviny, 19. 5. 2026, <a href="https://archiv.hn.cz/c1-67878010-komunitni-energetika-vyhlizi-dynamicke-sdileni-a-chysta-se-na-chytre-rizeni-toku-energie">hn.cz</a>.</li>
