@@ -30,6 +30,30 @@ def _schemata():
     return schemata
 
 
+NBSP = "\u00a0"
+# Tags and blocks left alone by the typography pass: markup, code, styles and figures.
+_SKIP = re.compile(r"(<(?:pre|style|svg|script)\b[\s\S]*?</(?:pre|style|svg|script)>|<[^>]+>)")
+_TYPO = [
+    (re.compile(r"(?<!\w)([ksvzouaiKSVZOUAI]) (?=\S)"), "\\1" + NBSP),         # no one-letter word ends a line
+    (re.compile(r"(?<=\d) (?=\d{3}\b)"), NBSP),                                # 30 000
+    (re.compile(r"(?<=\d) (?=(?:kWh|kWp|kW|ms|s|%)(?!\w))"), NBSP),             # 12 kWh, 50 %
+    (re.compile(r"\b(Ing\.|č\.|obr\.|Obr\.|[Tt]abulk\w+|[Tt]abulce) (?=[\w\d])"), "\\1" + NBSP),
+    (re.compile(r"(?<=\d) (?=Sb\.)"), NBSP),
+    (re.compile(r"\b(\d{1,2}\.) (\d{1,2}\.) (\d{4})\b"), "\\1" + NBSP + "\\2" + NBSP + "\\3"),
+    (re.compile(r"(?<=\S) ([×=−]) (?=\S)"), NBSP + "\\1" + NBSP),               # 0,5 × 16 = 8
+]
+
+
+def typography(html: str) -> str:
+    """Czech typography: non-breaking spaces after one-letter words, inside numbers and
+    between a number and its unit, so that no line ends in the middle of such a pair."""
+    parts = _SKIP.split(html)
+    for i in range(0, len(parts), 2):                    # even items are text, odd are tags
+        for pattern, repl in _TYPO:
+            parts[i] = pattern.sub(repl, parts[i])
+    return "".join(parts)
+
+
 def render() -> str:
     """The article as one HTML page, with every ``{{JMÉNO}}`` replaced by its SVG."""
     text = SOURCE.read_text(encoding="utf-8")
@@ -41,7 +65,7 @@ def render() -> str:
             raise KeyError(f"clanek.html: no figure for {m.group(0)} in schemata.py")
         return fn()
 
-    return _MARK.sub(svg, text)
+    return typography(_MARK.sub(svg, text))
 
 
 def images() -> list[str]:

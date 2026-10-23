@@ -132,7 +132,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     <li><strong>Problém:</strong> dnešní výpočet EDC dělí výrobu podle dohodnutých klíčů po kolech. Je proto přibližný (říkáme mu <strong>přibližná statická metoda</strong>). Po posledním kole totiž může zbýt elektřina, kterou by členové spotřebovali. Ta odejde do sítě.</li>
     <li><strong>Řešení:</strong> stejný výpočet lze dotáhnout do konce jedním vzorcem. Říkáme mu <strong>přesná statická metoda</strong>. Klíče platí dál a nikdo nepřijde zkrátka.</li>
     <li><strong>Přínos:</strong> v ukázkové skupině by přesný výpočet za rok rozdělil dalších 367 kWh, tedy 8,6 % výroby, a to se stejnými klíči.</li>
-    <li><strong>Více výroben:</strong> pro skupiny, kde sdílí všichni se všemi, navrhujeme <strong>režim bazén</strong>. Výrobu všech výroben sečte a rozdělí stejným vzorcem.</li>
+    <li><strong>Více výroben:</strong> pro skupiny, kde sdílí všichni se všemi, navrhujeme <strong>režim bazén</strong>. Ten sečte výrobu všech výroben a rozdělí ji stejným vzorcem.</li>
   </ul>
 </aside>
 
@@ -188,17 +188,17 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <p>Klíče se berou jako poměry. Mohou proto dávat dohromady i méně než 100 %. Nerozdělený podíl se pak přerozdělí, stejně jako v dalších kolech dnešního výpočtu. Skupina, která chce část výroby záměrně prodávat, ji může před výpočtem odečíst jako pevnou rezervu.</p>
 
 <h3>Stejná metoda, jen dopočítaná</h3>
-<p>Přesná statická metoda nezavádí nové pravidlo. Je to dnešní statická metoda, jen dopočítaná do konce. V teorii spravedlivého dělení jde o dobře prozkoumané vážené pravidlo rovných dílů [5, 6], o kterém je rámeček níže. Každé kolo si můžeme představit jako další dávku vody. Členové s nenaplněnou nádobou přibírají v poměru svých klíčů. Po každém kole je proto v těchto nádobách stejná hladina. Ta s každým kolem roste (obr. 2). Nad H ale vystoupat nemůže, protože by se muselo rozdělit víc, než se vyrobilo.</p>
+<p>Přesná statická metoda nezavádí nové pravidlo. Je to dnešní statická metoda, jen dopočítaná do konce. V teorii spravedlivého dělení jde o dobře prozkoumané vážené pravidlo rovných dílů [5, 6] (více v rámečku níže). Každé kolo si můžeme představit jako další dávku vody. Členové s nenaplněnou nádobou přibírají v poměru svých klíčů. Po každém kole je proto v těchto nádobách stejná hladina. Ta s každým kolem roste (obr. 2). Nad H ale vystoupat nemůže, protože by se muselo rozdělit víc, než se vyrobilo.</p>
 <figure>
   <div class="svgplate">{{HLADINA}}</div>
-  <figcaption><span class="fig-no">Obr. 2</span>Hladina po jednotlivých kolech dnešního výpočtu: 12, 14, 15, 15,5, 15,75… kWh. S každým kolem se blíží k H = 16 kWh. Přesná metoda spočítá H rovnou.</figcaption>
+  <figcaption><span class="fig-no">Obr. 2</span>Hladina po jednotlivých kolech dnešního výpočtu: 12; 14; 15; 15,5; 15,75 … kWh. S každým kolem se blíží k H = 16 kWh. Přesná metoda spočítá H rovnou.</figcaption>
 </figure>
 <p>Přesná metoda tedy dává výsledek, ke kterému dnešní výpočet s každým kolem směřuje. Nikdo proto nepřijde zkrátka. Výjimkou jsou jen čtvrthodiny s velmi malou výrobou. V nich může zaokrouhlení přesunout mezi členy pár setin kWh.</p>
 
 <aside class="box">
 <p class="box-h">Odkud ta metoda pochází</p>
-<p>Rozdělit omezenou hromádku mezi více lidí je úloha stará jako lidstvo samo. Nejtěžší je, když na všechny nestačí. Řeší ji dědické právo, konkurzní řízení i přídělový systém. Matematici ji zkoumají jako úlohu o dělení nároků (anglicky <em>claims problem</em>) [5, 6]. Nárokem může být pohledávka věřitele, podíl dědice nebo u nás spotřeba člena. Pravidel je celá řada. <strong>Proporcionální pravidlo</strong> dělí v poměru nároků. <strong>Pravidlo rovných dílů</strong> (<em>constrained equal awards</em>) dává všem stejně, ale nikomu víc, než kolik požaduje. Žádné pravidlo není jediné správné. Každé jinak odpovídá na otázku, kdo má dostat víc.</p>
-<p>Statická metoda dělí podle dohodnutých klíčů, a přesná statická metoda je proto <strong>vážené pravidlo rovných dílů</strong>. Místo stejného dílu dostane každý díl podle svého klíče, nejvýš však svou spotřebu.</p>
+<p>Rozdělit omezenou hromádku mezi více lidí je úloha stará jako lidstvo samo. Nejtěžší je, když na všechny nestačí. Řeší ji dědické právo, konkurzní řízení i přídělový systém. Matematici ji zkoumají jako úlohu o dělení nároků (anglicky <em>claims problem</em>) [5, 6]. Nárokem může být pohledávka věřitele, podíl dědice nebo v našem případě spotřeba člena. Pravidel je celá řada. <strong>Proporcionální pravidlo</strong> dělí v poměru nároků. <strong>Pravidlo rovných dílů</strong> (<em>constrained equal awards</em>) dává všem stejně, ale nikomu víc, než kolik požaduje. Žádné pravidlo není jediné správné. Každé jinak odpovídá na otázku, kdo má dostat víc.</p>
+<p>Statická metoda dělí podle dohodnutých klíčů. Přesná statická metoda je proto <strong>vážené pravidlo rovných dílů</strong>: místo stejného dílu dostane každý díl podle svého klíče, nejvýš však svou spotřebu.</p>
 </aside>
 
 <h3>Co přesný výpočet přinese</h3>
@@ -260,7 +260,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 <h3>Optimalizace je pro většinu skupin zbytečně složitá</h3>
 <p>Pro obecné vazby je správným nástrojem optimalizace, například úloha maximálního toku. Počítač ji zvládne. Nemá ale jednoduchý vzorec a člen skupiny si výsledek těžko ověří. Otevírá navíc další otázku. Optimalizace zajistí, že se nasdílí co nejvíc. Často ale existuje víc rozdělení, která nasdílí stejné množství, a liší se tím, kdo kolik dostane. Mezi nimi musí rozhodnout další pravidlo, a jsme zpátky u otázky spravedlnosti.</p>
-<p>Většina skupin s více výrobnami ale nic tak složitého nepotřebuje. Chtějí prostě sdílet všichni se všemi. Pro ně je optimalizace zbytečně těžký nástroj. Má smysl jen tam, kde smí výrobna sdílet jen s některými členy.</p>
+<p>Většina skupin s více výrobnami ale nic tak složitého nepotřebuje. Členové chtějí prostě sdílet všichni se všemi. Pro ně je optimalizace zbytečně těžký nástroj. Má smysl jen tam, kde smí výrobna sdílet jen s některými členy.</p>
 
 <h3>Režim bazén</h3>
 <p>Když sdílí všichni se všemi, můžeme výrobu všech výroben sesypat na jednu hromádku. Říkáme jí bazén. Každý člen má jeden klíč pro celou skupinu. Souhrnná výroba se rozdělí přesnou statickou metodou. Výsledek se pak vrátí na jednotlivé výrobny v poměru jejich výroby. Každá výrobna tak v dané čtvrthodině sdílí stejný podíl své výroby. Žádná není zvýhodněna pořadím. Příklad ukazuje obr. 7 a tabulka 3.</p>
