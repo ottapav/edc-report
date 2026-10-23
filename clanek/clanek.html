@@ -117,12 +117,13 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </head>
 <body>
 
+
 <main>
 <header class="lead">
   <p class="kicker">Sdílení elektřiny · UCEEB ČVUT v Praze</p>
   <h1>Sdílení elektřiny do poslední kilowatthodiny</h1>
   <p class="perex">Sdílení elektřiny se v Česku rychle rozběhlo a zapojily se do něj desítky tisíc skupin. Dnešní výpočet, kolik z výroby připadne kterému členovi, je ale jen přibližný. Po jeho posledním kole může zbýt elektřina, kterou by členové ještě spotřebovali, a ta odejde do sítě. V článku ukážeme, jak by vypadal výpočet přesný. Klíče, smlouvy i zúčtování přitom zůstanou stejné.</p>
-  <p class="byline">Ing. Pavel Otta, PhD. · Řídicí systémy a optimalizace, UCEEB ČVUT v Praze · pracovní verze 7. 10. 2026</p>
+  <p class="byline">Ing. Pavel Otta, PhD. · Řídicí systémy a optimalizace, UCEEB ČVUT v Praze</p>
 </header>
 
 <aside class="inbrief" aria-label="V kostce">
@@ -130,8 +131,8 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   <ul>
     <li><strong>Problém:</strong> dnešní výpočet EDC dělí výrobu podle dohodnutých klíčů po kolech. Je proto přibližný (říkáme mu <strong>přibližná statická metoda</strong>). Po posledním kole totiž může zbýt elektřina, kterou by členové spotřebovali. Ta odejde do sítě.</li>
     <li><strong>Řešení:</strong> stejný výpočet lze dotáhnout do konce jedním vzorcem. Říkáme mu <strong>přesná statická metoda</strong>. Klíče platí dál a nikdo nepřijde zkrátka.</li>
-    <li>Výrobu více výroben lze sečíst a rozdělit stejným vzorcem. Říkáme mu <strong>režim bazén</strong>. Hodí se pro skupiny, kde sdílí všichni se všemi.</li>
-    <li>Zúčtování zůstává stejné. Zpřesní se jen spočítané objemy.</li>
+    <li><strong>Přínos:</strong> v ukázkové skupině by přesný výpočet za rok rozdělil dalších 367 kWh, tedy 8,6 % výroby, a to se stejnými klíči.</li>
+    <li><strong>Více výroben:</strong> pro skupiny, kde sdílí všichni se všemi, navrhujeme <strong>režim bazén</strong>. Výrobu všech výroben sečte a rozdělí stejným vzorcem.</li>
   </ul>
 </aside>
 
@@ -145,7 +146,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   <div><dt>EDC</dt><dd>Elektroenergetické datové centrum. Eviduje skupiny sdílení. Z naměřených dat vyhodnocuje, kolik elektřiny si členové nasdíleli.</dd></div>
 </dl>
 
-<h2>Dělení po kolech</h2>
+<h2>Dnešní výpočet: kola a zbytek, který odejde do sítě</h2>
 <p>Dnes se používá statická metoda. Výroba se dělí podle pevných klíčů a výpočet běží v kolech. V každém kole dostane člen svůj podíl z výroby, která zbývá k rozdělení. Nedostane ale víc, než ještě potřebuje. Co zbude, se rozdělí v dalším kole. Výsledky se zaokrouhlují dolů na setiny kWh. Postup je názorný a dá se dobře popsat ve vyhlášce.</p>
 <p>Ukážeme si to na malém příkladu, který nás bude provázet celým článkem. Výrobna v jedné čtvrthodině vyrobí 12 kWh. Dana má klíč 50 % a potřebuje 4 kWh. Emil má klíč 30 % a potřebuje 5 kWh. Filip má klíč 20 % a potřebuje 6 kWh. Průběh výpočtu po kolech ukazuje tabulka 1.</p>
 <div class="tbl wide"><table>
@@ -159,61 +160,23 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <tr class="hl"><td>Celkem</td><td></td><td>4,00</td><td>4,72</td><td>3,15</td><td></td></tr>
 </tbody></table></div>
 <p class="tcap">Tabulka 1: Statická metoda v pěti kolech (kWh). Dana dostane vše hned v prvním kole. Emil a Filip dostávají v dalších kolech zbytek. Ten se v každém kole zmenší na polovinu.</p>
-<p>Pravidla se průběžně vylepšují. Od srpna 2026 platí novela vyhlášky. Pět kol se nově počítá u skupin až se 100 odběrnými a výrobními místy. U větších skupin proběhne jedno kolo [2, 4]. Každé kolo rozdělí další část zbytku. Celý zbytek by ale rozdělilo až nekonečně mnoho kol.</p>
-<p>Jak rychle zbytek mizí, záleží na klíčích členů, kteří ještě něco potřebují. V příkladu mají Emil a Filip dohromady 50 %. Zbytek se proto v každém kole půlí. Kdyby měli dohromady jen 10 %, zůstaly by po pěti kolech nerozděleny dvě třetiny zbytku z prvního kola.</p>
-<p>Dnešní výpočet tedy dává přibližný výsledek, který je s každým kolem přesnější. Odtud název <span class="term">přibližná statická metoda</span>. EDC od srpna 2026 postupně přechází z počátečního, provizorního režimu do plného provozu. Ten má být dokončen nejpozději do konce roku 2027 [5]. Je to dobrá příležitost výpočet ještě zpřesnit.</p>
+<p>Každé kolo rozdělí jen část zbytku. Celý zbytek by rozdělilo až nekonečně mnoho kol. Od srpna 2026 platí novela vyhlášky: pět kol se počítá u skupin až se 100 odběrnými a výrobními místy a u větších skupin proběhne jedno kolo [2, 4]. Jak rychle zbytek mizí, záleží na klíčích členů, kteří ještě něco potřebují. V příkladu mají Emil a Filip dohromady 50 %, a zbytek se proto v každém kole půlí. Kdyby měli dohromady jen 10 %, zůstaly by po pěti kolech nerozděleny dvě třetiny zbytku z prvního kola.</p>
+<p>Dnešní výpočet tedy dává přibližný výsledek, který je s každým kolem přesnější. Odtud název <span class="term">přibližná statická metoda</span>. Nabízí se otázka, kam by výpočet došel, kdyby kol bylo nekonečně mnoho. Právě na to odpovídá přesná statická metoda.</p>
 
-<h2>Co ukazují data reálné skupiny</h2>
-<p>Z portálu EDC si lze stáhnout report sdílení se čtvrthodinovými daty. Každá skupina si tak může prohlédnout, jak u ní sdílení funguje. Vzali jsme report jedné skupiny. Má fotovoltaiku 11,44 kWp s baterií 11,6 kWh a pět odběrných míst. Klíče jsou 50 % a čtyřikrát 10 %. Za rok od září 2025 do září 2026 výrobna vyrobila 4 275 kWh. Členové spotřebovali 36 854 kWh.</p>
-<p>Report jsme zpracovali volně dostupnou aplikací edc-report, která běží na adrese <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a> [6]. Aplikace dnešní výpočet napodobuje. V 99,2 % čtvrthodin dojde k přesně stejnému výsledku jako EDC. Jejím přepočtům proto můžeme věřit.</p>
-<figure>
-  <div class="plate"><img src="img/kolac.png" alt="Koláčový graf: sdíleno 2 235 kWh (52,3 %), mohlo být sdíleno 367 kWh (8,6 %), přetok 1 673 kWh (39,1 %)" width="1520" height="1120"></div>
-  <figcaption><span class="fig-no">Obr. 1</span>Kam šla výroba skupiny za rok. <b>Zelená</b> je elektřina, kterou si členové nasdíleli. <b>Červená</b> je elektřina, kterou členové ve stejné čtvrthodině spotřebovali a přesný výpočet by ji také rozdělil. <b>Šedá</b> je přetok, který ve skupině nikdo nespotřeboval.</figcaption>
-</figure>
-<p>Kam šla výroba za celý rok, ukazuje obr. 1. Z výroby se nasdílelo 2 235 kWh (52,3 %). Přesný výpočet by se stejnými klíči rozdělil dalších <strong>367 kWh, tedy 8,6 % výroby</strong>. Zbylých 1 673 kWh (39,1 %) by ve skupině nikdo nespotřeboval. Tento přetok nerozdělí žádná metoda a odchází do sítě. Přesný výpočet by pomohl v 80 % čtvrthodin, kdy výrobna vyráběla. Jak to vypadá během jednoho dne, ukazuje obr. 2.</p>
-<figure>
-  <div class="pair">
-    <div class="plate"><img src="img/den_priblizna.png" alt="Sdílení dne 28. 6. 2026 přibližnou statickou metodou" width="1800" height="880"></div>
-    <div class="plate"><img src="img/den_presna.png" alt="Sdílení dne 28. 6. 2026 přesnou statickou metodou" width="1800" height="880"></div>
-  </div>
-  <figcaption><span class="fig-no">Obr. 2</span>Jeden den po čtvrthodinách (28. 6. 2026). Nahoře dnešní výpočet, dole přesný. Barevné plochy ukazují elektřinu nasdílenou jednotlivým členům. <b>Tmavě šedá</b> je výroba poslaná do sítě, světle šedá spotřeba ze sítě. Výrobna ten den vyrobila 30,8 kWh. Podle dnešního výpočtu šlo do sítě 8,4 kWh. Podle přesného jen 3,0 kWh, které už nikdo ve skupině nepotřeboval.</figcaption>
-</figure>
-<p>Jde o jednu skupinu, jiné skupiny budou mít jiná čísla. Rozdíl roste s počtem členů a s menšími klíči. Týká se proto hlavně bytových domů a energetických společenství. Přínos za celou republiku by šlo spočítat z dat EDC.</p>
-<p>Každá skupina si může spočítat vlastní čísla. Stačí stáhnout report sdílení z portálu EDC a nahrát ho do aplikace. Aplikace odhadne klíče, přepočítá celé období přesnou statickou metodou a ukáže obě metody vedle sebe. Nahraný soubor se nikam neukládá.</p>
-<p class="keypoint">Vyzkoušejte to na své skupině. <span><a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a></span></p>
+<h2>Přesná statická metoda: jedna hladina místo mnoha kol</h2>
+<p>Přesná statická metoda dělí výrobu podle stejných klíčů jako dnešní výpočet, jen rovnou do konce. Kola nahradí jediným číslem, které se spočítá vzorcem.</p>
 
-<h2>Skupiny s více výrobnami</h2>
-<p>Když má skupina více výroben, nastavuje se klíč pro každou dvojici výrobna–odběrné místo. Odběrné místo může čerpat až z pěti výroben. Záleží přitom i na jejich pořadí. Takové zadání je velmi pružné a umožní téměř libovolné uspořádání. Pro běžnou skupinu je ale nastavení pracné a členové mu těžko rozumějí. Vrátíme se k tomu v druhé části článku.</p>
-
-<h2>Jak spravedlivě rozdělit jednu hromádku</h2>
-<p>Rozdělit jednu hromádku mezi více lidí je úloha stará jako lidstvo samo. Nejtěžší je, když na všechny nestačí. Řeší ji dědické právo, konkurzní řízení i přídělový systém. Matematici ji zkoumají jako úlohu spravedlivého dělení, přesněji jako úlohu o dělení nároků (anglicky <em>claims problem</em>) [7, 8]. Nárokem může být pohledávka věřitele, podíl dědice nebo u nás spotřeba člena. Pravidel je celá řada. <strong>Proporcionální pravidlo</strong> dělí v poměru nároků. <strong>Pravidlo rovných dílů</strong> (<em>constrained equal awards</em>) dává všem stejně, ale nikomu víc, než kolik požaduje. Žádné pravidlo není jediné správné. Každé jinak odpovídá na otázku, kdo má dostat víc.</p>
-<p>Ve sdílení elektřiny se dnes používá <strong>statická metoda</strong>. Dělí podle dohodnutých klíčů, víc tedy dostane ten, kdo má větší podíl. Dopočítaná do konce odpovídá váženému pravidlu rovných dílů. Místo stejného dílu dostane každý díl podle svého klíče, nejvýš však svou spotřebu. Diskutuje se o dvou dalších metodách. <strong>Dynamická metoda</strong> by dělila v poměru okamžité spotřeby. Je to proporcionální pravidlo, ve kterém je nárokem spotřeba. Víc by dostal ten, kdo zrovna víc spotřebovává. <strong>Hybridní metoda</strong> by obě pravidla kombinovala. První kolo by rozdělila podle klíčů a zbytek v poměru zbývající spotřeby.</p>
-<p>O zavedení dynamické a hybridní metody zatím rozhodnuto není. Podle EDC by byly možné nejdříve od 1. 12. 2027. Legislativní návrh Unie komunitní energetiky počítá s 1. 12. 2028 [9]. Přesná podoba výpočtu zatím nebyla zveřejněna. V tabulce 2 proto vycházíme z obvyklého popisu.</p>
-<div class="tbl wide"><table>
-<thead><tr><th>Metoda</th><th>Dana (50 %)</th><th>Emil (30 %)</th><th>Filip (20 %)</th><th>Do sítě</th><th>Podle klíčů</th></tr></thead>
-<tbody>
-<tr class="ref"><td>Spotřeba</td><td>4,00</td><td>5,00</td><td>6,00</td><td></td><td></td></tr>
-<tr><td>Statická, 1 kolo</td><td>4,00</td><td>3,60</td><td>2,40</td><td class="loss">2,00</td><td>ano</td></tr>
-<tr><td>Statická, 5 kol</td><td>4,00</td><td>4,72</td><td>3,15</td><td class="loss">0,13</td><td>ano</td></tr>
-<tr><td>Dynamická</td><td>3,20</td><td>4,00</td><td>4,80</td><td>0,00</td><td>ne</td></tr>
-<tr><td>Hybridní</td><td>4,00</td><td>4,16</td><td>3,84</td><td>0,00</td><td>v 1. kole</td></tr>
-<tr class="hl"><td>Přesná statická</td><td>4,00</td><td>4,80</td><td>3,20</td><td>0,00</td><td>ano</td></tr>
-</tbody></table></div>
-<p class="tcap">Tabulka 2: Stejná výroba 12 kWh rozdělená různými pravidly (kWh). První řádek připomíná spotřebu členů. Statická metoda dělí podle klíčů, dynamická podle spotřeby, hybridní podle obojího. Poslední řádek vysvětlíme vzápětí.</p>
-<p>Které pravidlo je nejvhodnější, není otázka matematiky. Je to věc dohody členů a rozhodnutí regulace. My se v článku věnujeme statické metodě, kterou dnes používají všechny skupiny. Zajímá nás jediná otázka: jak ji spočítat přesně.</p>
-
-<h2>Spojené nádoby</h2>
+<h3>Princip: spojené nádoby</h3>
 <p>Představme si každého člena jako nádobu. Šířka nádoby odpovídá jeho klíči, objem jeho spotřebě. Výrobu nalijeme do všech nádob najednou. Nádoby jsou spojené, a tak hladina stoupá všude stejně. Plná nádoba už nic nepřijme a voda stoupá dál v ostatních. Každý člen nakonec dostane tolik, kolik vody je v jeho nádobě:</p>
 <div class="formula">nasdíleno = menší z hodnot ( spotřeba ; klíč × H )</div>
-<p>Písmeno H označuje společnou hladinu. Udává, kolik by dostal člen s klíčem 100 %, a proto ji měříme v kWh. Množství vody v nádobě je šířka × výška. U nenaplněné nádoby je to klíč × H, a to je nasdílená energie. V příkladu vyjde H = 16 kWh. Dana by při ní mohla dostat až 0,5 × 16 = 8 kWh. Potřebuje ale jen 4 kWh, a tak dostane 4 kWh. Emil dostane 0,3 × 16 = 4,8 kWh a Filip 0,2 × 16 = 3,2 kWh. Celou situaci ukazuje obr. 3.</p>
+<p>Písmeno H označuje společnou hladinu. Udává, kolik by dostal člen s klíčem 100 %, a proto ji měříme v kWh. Množství vody v nádobě je šířka × výška. U nenaplněné nádoby je to klíč × H, a to je nasdílená energie. V příkladu vyjde H = 16 kWh. Dana by při ní mohla dostat až 0,5 × 16 = 8 kWh. Potřebuje ale jen 4 kWh, a tak dostane 4 kWh. Emil dostane 0,3 × 16 = 4,8 kWh a Filip 0,2 × 16 = 3,2 kWh. Celou situaci ukazuje obr. 1.</p>
 <figure>
   <div class="svgplate">{{NADOBY}}</div>
-  <figcaption><span class="fig-no">Obr. 3</span>Nádoby pro příklad z tabulky 1. Šířka nádoby je klíč, výška se měří v kWh na 100 % klíče. Číslo ve vodě je nasdílená energie. Danina nádoba je plná. Emil a Filip mají společnou hladinu H = 16 kWh. Dostanou proto přesně v poměru svých klíčů, tedy 30 : 20. Rozděleno je všech 12 kWh.</figcaption>
+  <figcaption><span class="fig-no">Obr. 1</span>Nádoby pro příklad z tabulky 1. Šířka nádoby je klíč, výška se měří v kWh na 100 % klíče. Číslo ve vodě je nasdílená energie. Danina nádoba je plná. Emil a Filip mají společnou hladinu H = 16 kWh. Dostanou proto přesně v poměru svých klíčů, tedy 30 : 20. Rozděleno je všech 12 kWh.</figcaption>
 </figure>
 
-<h2>Jak se hladina spočítá</h2>
-<p>Hladinu není třeba hledat zkoušením. Členy seřadíme podle toho, jak brzy se jejich nádoba naplní. Pak je procházíme jednoho po druhém. U každého spočítáme, jaká by byla hladina, kdyby se všichni před ním naplnili. Stačí vydělit zbývající výrobu součtem klíčů zbývajících členů. Správná hladina je nejvyšší z takto spočtených hodnot. Postup pro náš příklad ukazuje tabulka 3. Pro zájemce vzorec:</p>
-<div class="formula">H = max<sub>j</sub> ( P − Σ<sub>i&lt;j</sub> spotřeba<sub>i</sub> ) / ( Σ<sub>i≥j</sub> klíč<sub>i</sub> ) &nbsp;<span class="c">P = výroba (kWh)</span></div>
+<h3>Jak se hladina spočítá</h3>
+<p>Hladinu není třeba hledat zkoušením. Členy seřadíme podle toho, jak brzy se jejich nádoba naplní. Pak je procházíme jednoho po druhém. U každého spočítáme, jaká by byla hladina, kdyby se všichni před ním naplnili. Stačí vydělit zbývající výrobu součtem klíčů zbývajících členů. Správná hladina je nejvyšší z takto spočtených hodnot. Postup pro náš příklad ukazuje tabulka 2. Přesný zápis vzorcem je v rámečku na konci této části.</p>
 <div class="tbl"><table>
 <thead><tr><th>Pořadí</th><th>Člen</th><th>Naplní se při (kWh)</th><th>Výpočet</th><th>Hladina (kWh)</th></tr></thead>
 <tbody>
@@ -221,31 +184,36 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <tr class="hl"><td>2</td><td>Emil</td><td>5 / 0,3 = 16,7</td><td>(12 − 4) / (0,3 + 0,2)</td><td>16 ← max</td></tr>
 <tr><td>3</td><td>Filip</td><td>6 / 0,2 = 30</td><td>(12 − 4 − 5) / 0,2</td><td>15</td></tr>
 </tbody></table></div>
-<p class="tcap">Tabulka 3: Výpočet hladiny pro příklad. Výpočet může skončit u prvního člena, který se nenaplní. Tady je to Emil. Jeho nádoba by se naplnila až při hladině 16,7 kWh. Hladina se udává v kWh na 100 % klíče.</p>
+<p class="tcap">Tabulka 2: Výpočet hladiny pro příklad. Výpočet může skončit u prvního člena, který se nenaplní. Tady je to Emil. Jeho nádoba by se naplnila až při hladině 16,7 kWh. Hladina se udává v kWh na 100 % klíče.</p>
 <p>Klíče se berou jako poměry. Mohou proto dávat dohromady i méně než 100 %. Nerozdělený podíl se pak přerozdělí, stejně jako v dalších kolech dnešního výpočtu. Skupina, která chce část výroby záměrně prodávat, ji může před výpočtem odečíst jako pevnou rezervu.</p>
 
-<h2>Stejná metoda, jen dopočítaná</h2>
-<p>Přesná statická metoda nezavádí nové pravidlo. Je to dnešní statická metoda, jen dopočítaná do konce. V teorii spravedlivého dělení jde o dobře prozkoumané vážené pravidlo rovných dílů [8]. Každé kolo si můžeme představit jako další dávku vody. Členové s nenaplněnou nádobou přibírají v poměru svých klíčů. Po každém kole je proto v těchto nádobách stejná hladina. Ta s každým kolem roste (obr. 4). Nad H ale vystoupat nemůže, protože by se muselo rozdělit víc, než se vyrobilo.</p>
+<h3>Stejná metoda, jen dopočítaná</h3>
+<p>Přesná statická metoda nezavádí nové pravidlo. Je to dnešní statická metoda, jen dopočítaná do konce. V teorii spravedlivého dělení jde o dobře prozkoumané vážené pravidlo rovných dílů [5, 6], o kterém je rámeček níže. Každé kolo si můžeme představit jako další dávku vody. Členové s nenaplněnou nádobou přibírají v poměru svých klíčů. Po každém kole je proto v těchto nádobách stejná hladina. Ta s každým kolem roste (obr. 2). Nad H ale vystoupat nemůže, protože by se muselo rozdělit víc, než se vyrobilo.</p>
 <figure>
   <div class="svgplate">{{HLADINA}}</div>
-  <figcaption><span class="fig-no">Obr. 4</span>Hladina po jednotlivých kolech dnešního výpočtu: 12, 14, 15, 15,5, 15,75… kWh. S každým kolem se blíží k H = 16 kWh. Přesná metoda spočítá H rovnou.</figcaption>
+  <figcaption><span class="fig-no">Obr. 2</span>Hladina po jednotlivých kolech dnešního výpočtu: 12, 14, 15, 15,5, 15,75… kWh. S každým kolem se blíží k H = 16 kWh. Přesná metoda spočítá H rovnou.</figcaption>
 </figure>
-<p>Přesná metoda tedy dává výsledek, ke kterému dnešní výpočet s každým kolem směřuje. Nikdo proto nepřijde zkrátka. Výjimkou jsou jen čtvrthodiny s velmi malou výrobou. V nich může zaokrouhlení přesunout mezi členy pár setin kWh. Za celý rok si v ukázkové skupině polepšil každý z pěti členů, a to o 30 až 142 kWh.</p>
+<p>Přesná metoda tedy dává výsledek, ke kterému dnešní výpočet s každým kolem směřuje. Nikdo proto nepřijde zkrátka. Výjimkou jsou jen čtvrthodiny s velmi malou výrobou. V nich může zaokrouhlení přesunout mezi členy pár setin kWh.</p>
 
-<h2>Co přesný výpočet přinese</h2>
+<aside class="box">
+<p class="box-h">Odkud ta metoda pochází</p>
+<p>Rozdělit omezenou hromádku mezi více lidí je úloha stará jako lidstvo samo. Nejtěžší je, když na všechny nestačí. Řeší ji dědické právo, konkurzní řízení i přídělový systém. Matematici ji zkoumají jako úlohu o dělení nároků (anglicky <em>claims problem</em>) [5, 6]. Nárokem může být pohledávka věřitele, podíl dědice nebo u nás spotřeba člena. Pravidel je celá řada. <strong>Proporcionální pravidlo</strong> dělí v poměru nároků. <strong>Pravidlo rovných dílů</strong> (<em>constrained equal awards</em>) dává všem stejně, ale nikomu víc, než kolik požaduje. Žádné pravidlo není jediné správné. Každé jinak odpovídá na otázku, kdo má dostat víc.</p>
+<p>Statická metoda dělí podle dohodnutých klíčů, a přesná statická metoda je proto <strong>vážené pravidlo rovných dílů</strong>. Místo stejného dílu dostane každý díl podle svého klíče, nejvýš však svou spotřebu.</p>
+</aside>
+
+<h3>Co přesný výpočet přinese</h3>
 <ul class="plain">
 <li><strong>Členové si rozdělí vše, co mohou spotřebovat,</strong> a to se stejnými klíči.</li>
 <li><strong>Výpočet nezávisí na počtu kol ani na velikosti skupiny.</strong> Stejně přesný je pro rodinný dům i pro velké společenství.</li>
-<li><strong>Je rychlý.</strong> Přepočet celého roku ukázkové skupiny (35 040 čtvrthodin) trval 0,18 s. U skupiny s 1 000 odběrnými místy trvá výpočet jedné čtvrthodiny asi půl milisekundy. Srovnání s dnešním výpočtem ukazuje obr. 5.</li>
+<li><strong>Je rychlý.</strong> Přepočet celého roku ukázkové skupiny (35 040 čtvrthodin) trval 0,18 s. Srovnání s dnešním výpočtem pro různě velké skupiny ukazuje obr. 3 v rámečku níže.</li>
 <li><strong>Je snadno ověřitelný.</strong> Stačí znát klíč a hladinu H. Každý si pak svůj podíl spočítá sám jako menší z hodnot spotřeba a klíč × H.</li>
 </ul>
-<figure class="wide">
-  <div class="plate"><img src="img/srovnani-vypoctu.png" alt="Graf: doba výpočtu a podíl rozdělené elektřiny podle velikosti skupiny" width="2330" height="1018"></div>
-  <figcaption><span class="fig-no">Obr. 5</span>Vlevo doba výpočtu jedné čtvrthodiny podle velikosti skupiny, vpravo podíl rozdělené elektřiny. Srovnáváme dnešní výpočet podle platných pravidel s přesnou metodou. Dnes se počítá 5 kol do 100 odběrných a výrobních míst, nad 100 jedno kolo. Jde o simulaci s náhodnými klíči a spotřebou.</figcaption>
-</figure>
+
 <aside class="box">
-<p class="box-h">Pro programátory</p>
-<p>Jádro přesné statické metody v Pythonu. Nejnáročnější krok je seřazení členů, zbytek je jediný průchod. Plná referenční implementace je volně dostupná [6]. Obsahuje celočíselnou aritmetiku, zaokrouhlení a testy.</p>
+<p class="box-h">Pro zájemce a programátory</p>
+<p>Hladina jako vzorec. Členy očíslujeme podle toho, jak brzy se jejich nádoba naplní, a vezmeme největší z hodnot:</p>
+<div class="formula">H = max<sub>j</sub> ( P − Σ<sub>i&lt;j</sub> spotřeba<sub>i</sub> ) / ( Σ<sub>i≥j</sub> klíč<sub>i</sub> ) &nbsp;<span class="c">P = výroba (kWh)</span></div>
+<p>Jádro přesné statické metody v Pythonu. Nejnáročnější krok je seřazení členů, zbytek je jediný průchod. Pro skupinu s 1 000 odběrnými místy trvá výpočet jedné čtvrthodiny asi půl milisekundy. Plná referenční implementace je volně dostupná [7]. Obsahuje celočíselnou aritmetiku, zaokrouhlení a testy.</p>
 <pre><code>def presna_staticka(P, D, k):
     """P výroba, D spotřeby, k klíče (jako poměry). Vrací nasdílená množství."""
     idx = sorted(range(len(D)), key=lambda i: D[i] / k[i])   # seřazení: O(n log n)
@@ -257,22 +225,45 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         zbyva_P -= D[i]
         zbyva_k -= k[i]
     return [min(D[i], k[i] * H) for i in range(len(D))]</code></pre>
+<figure>
+  <div class="plate"><img src="img/srovnani-vypoctu.png" alt="Graf: doba výpočtu a podíl rozdělené elektřiny podle velikosti skupiny" width="2330" height="1018"></div>
+  <figcaption><span class="fig-no">Obr. 3</span>Vlevo doba výpočtu jedné čtvrthodiny podle velikosti skupiny, vpravo podíl rozdělené elektřiny. Srovnáváme dnešní výpočet podle platných pravidel s přesnou metodou. Dnes se počítá 5 kol do 100 odběrných a výrobních míst, nad 100 jedno kolo. Jde o simulaci s náhodnými klíči a spotřebou.</figcaption>
+</figure>
 </aside>
 
-<h2>Když je výroben víc</h2>
-<p>U jedné výrobny se dělí jedna hromádka a vše je jednoduché. Pro více výroben je ale dnešní zadání obecnější. Klíč patří dvojici výrobna–odběrné místo. Rozhodnutí na jedné vazbě pak mění možnosti na ostatních. Z dělení jedné hromádky se tak stává síťová úloha. Ukazuje to jednoduchý příklad na obr. 6.</p>
+<h2>Co přesný výpočet změní u skutečné skupiny</h2>
+<p>Z portálu EDC si lze stáhnout report sdílení se čtvrthodinovými daty. Každá skupina si tak může prohlédnout, jak u ní sdílení funguje. Vzali jsme report jedné skupiny. Má fotovoltaiku 11,44 kWp s baterií 11,6 kWh a pět odběrných míst. Klíče jsou 50 % a čtyřikrát 10 %. Za rok od září 2025 do září 2026 výrobna vyrobila 4 275 kWh. Členové spotřebovali 36 854 kWh.</p>
+<p>Report jsme zpracovali volně dostupnou aplikací edc-report, která běží na adrese <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a> [7]. Aplikace dnešní výpočet napodobuje. V 99,2 % čtvrthodin dojde k přesně stejnému výsledku jako EDC. Jejím přepočtům proto můžeme věřit.</p>
+<figure>
+  <div class="plate"><img src="img/kolac.png" alt="Koláčový graf: sdíleno 2 235 kWh (52,3 %), mohlo být sdíleno 367 kWh (8,6 %), přetok 1 673 kWh (39,1 %)" width="1520" height="1120"></div>
+  <figcaption><span class="fig-no">Obr. 4</span>Kam šla výroba skupiny za rok. <b>Zelená</b> je elektřina, kterou si členové nasdíleli. <b>Červená</b> je elektřina, kterou členové ve stejné čtvrthodině spotřebovali a přesný výpočet by ji také rozdělil. <b>Šedá</b> je přetok, který ve skupině nikdo nespotřeboval.</figcaption>
+</figure>
+<p>Kam šla výroba za celý rok, ukazuje obr. 4. Z výroby se nasdílelo 2 235 kWh (52,3 %). Přesný výpočet by se stejnými klíči rozdělil dalších <strong>367 kWh, tedy 8,6 % výroby</strong>. Zbylých 1 673 kWh (39,1 %) by ve skupině nikdo nespotřeboval. Tento přetok nerozdělí žádná metoda a odchází do sítě. Přesný výpočet by pomohl v 80 % čtvrthodin, kdy výrobna vyráběla. Za celý rok si polepšil každý z pěti členů, a to o 30 až 142 kWh. Jak to vypadá během jednoho dne, ukazuje obr. 5.</p>
+<figure>
+  <div class="pair">
+    <div class="plate"><img src="img/den_priblizna.png" alt="Sdílení dne 28. 6. 2026 přibližnou statickou metodou" width="1800" height="880"></div>
+    <div class="plate"><img src="img/den_presna.png" alt="Sdílení dne 28. 6. 2026 přesnou statickou metodou" width="1800" height="880"></div>
+  </div>
+  <figcaption><span class="fig-no">Obr. 5</span>Jeden den po čtvrthodinách (28. 6. 2026). Nahoře dnešní výpočet, dole přesný. Barevné plochy ukazují elektřinu nasdílenou jednotlivým členům. <b>Tmavě šedá</b> je výroba poslaná do sítě, světle šedá spotřeba ze sítě. Výrobna ten den vyrobila 30,8 kWh. Podle dnešního výpočtu šlo do sítě 8,4 kWh. Podle přesného jen 3,0 kWh, které už nikdo ve skupině nepotřeboval.</figcaption>
+</figure>
+<p>Jde o jednu skupinu, jiné skupiny budou mít jiná čísla. Rozdíl roste s počtem členů a s menšími klíči. Týká se proto hlavně bytových domů a energetických společenství. Přínos za celou republiku by šlo spočítat z dat EDC.</p>
+<p>Každá skupina si může spočítat vlastní čísla. Stačí stáhnout report sdílení z portálu EDC a nahrát ho do aplikace. Aplikace odhadne klíče, přepočítá celé období přesnou statickou metodou a ukáže obě metody vedle sebe. Nahraný soubor se nikam neukládá.</p>
+<p class="keypoint">Vyzkoušejte to na své skupině. <span><a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a></span></p>
+
+<h2>Skupiny s více výrobnami: režim bazén</h2>
+<p>Když má skupina více výroben, nastavuje se klíč pro každou dvojici výrobna–odběrné místo. Odběrné místo může čerpat až z pěti výroben a záleží přitom i na jejich pořadí. Takové zadání je velmi pružné a umožní téměř libovolné uspořádání. Pro běžnou skupinu je ale nastavení pracné a členové mu těžko rozumějí. Navíc se z dělení jedné hromádky stává síťová úloha, protože rozhodnutí na jedné vazbě mění možnosti na ostatních. Ukazuje to jednoduchý příklad na obr. 6.</p>
 <figure>
   <div class="svgplate">{{SIT}}</div>
   <figcaption><span class="fig-no">Obr. 6</span>Výrobna A dělí svých 10 kWh mezi O1 a O2 po 50 %. Výrobna B smí sdílet jen do O1. Obě odběrná místa potřebují 10 kWh.</figcaption>
 </figure>
 <p>Statická metoda dá O1 10 kWh, z toho 5 z A a 5 z B. O2 dostane 5 kWh z A. Nasdílí se 15 kWh a 5 kWh z výrobny B zůstane nevyužito. Přitom by šlo nasdílet všech 20 kWh: výrobna A by poslala vše do O2 a výrobna B do O1. Pravidlo, které dělí každou výrobnu zvlášť, takové řešení nenajde. Nejde o slabinu konkrétní metody, ale o vlastnost úlohy. Stejně by dopadla i dynamická nebo hybridní metoda, pokud by dělila každou výrobnu zvlášť.</p>
 
-<h2>Optimalizace, nebo bazén?</h2>
-<p>Pro obecné vazby je správným nástrojem optimalizace, například úloha maximálního toku. Počítač ji zvládne. Nemá ale jednoduchý vzorec a člen skupiny si výsledek těžko ověří. Otevírá navíc další otázku. Optimalizace zajistí, že se nasdílí co nejvíc. Často ale existuje víc rozdělení, která nasdílí stejné množství, a liší se tím, kdo kolik dostane. Mezi nimi musí rozhodnout další pravidlo, a jsme zpátky u politické otázky spravedlnosti.</p>
-<p>Většina skupin s více výrobnami ale nic tak složitého nepotřebuje. Chtějí prostě sdílet všichni se všemi. Použít na ně optimalizaci by bylo jako střílet kanónem na vrabce. Má smysl jen tam, kde smí výrobna sdílet jen s některými členy.</p>
+<h3>Optimalizace je pro většinu skupin zbytečně složitá</h3>
+<p>Pro obecné vazby je správným nástrojem optimalizace, například úloha maximálního toku. Počítač ji zvládne. Nemá ale jednoduchý vzorec a člen skupiny si výsledek těžko ověří. Otevírá navíc další otázku. Optimalizace zajistí, že se nasdílí co nejvíc. Často ale existuje víc rozdělení, která nasdílí stejné množství, a liší se tím, kdo kolik dostane. Mezi nimi musí rozhodnout další pravidlo, a jsme zpátky u otázky spravedlnosti.</p>
+<p>Většina skupin s více výrobnami ale nic tak složitého nepotřebuje. Chtějí prostě sdílet všichni se všemi. Pro ně je optimalizace zbytečně těžký nástroj. Má smysl jen tam, kde smí výrobna sdílet jen s některými členy.</p>
 
-<h2>Režim bazén</h2>
-<p>Když sdílí všichni se všemi, můžeme výrobu všech výroben sesypat na jednu hromádku. Říkáme jí bazén. Každý člen má jeden klíč pro celou skupinu. Souhrnná výroba se rozdělí přesnou statickou metodou. Výsledek se pak vrátí na jednotlivé výrobny v poměru jejich výroby. Každá výrobna tak v dané čtvrthodině sdílí stejný podíl své výroby. Žádná není zvýhodněna pořadím. Příklad ukazuje obr. 7 a tabulka 4.</p>
+<h3>Režim bazén</h3>
+<p>Když sdílí všichni se všemi, můžeme výrobu všech výroben sesypat na jednu hromádku. Říkáme jí bazén. Každý člen má jeden klíč pro celou skupinu. Souhrnná výroba se rozdělí přesnou statickou metodou. Výsledek se pak vrátí na jednotlivé výrobny v poměru jejich výroby. Každá výrobna tak v dané čtvrthodině sdílí stejný podíl své výroby. Žádná není zvýhodněna pořadím. Příklad ukazuje obr. 7 a tabulka 3.</p>
 <figure>
   <div class="svgplate">{{BAZEN}}</div>
   <figcaption><span class="fig-no">Obr. 7</span>Výrobny A (10 kWh) a B (6 kWh), klíče 50/50. O1 potřebuje 2 kWh, O2 20 kWh. Hladina vyjde 28 kWh. O1 dostane celé 2 kWh, O2 dostane 0,5 × 28 = 14 kWh. Rozdělí se všech 16 kWh.</figcaption>
@@ -284,20 +275,34 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <tr><td>Z výrobny B (37,5 %)</td><td>0,75</td><td>5,25</td><td>6,00</td></tr>
 <tr class="hl"><td>Celkem</td><td>2,00</td><td>14,00</td><td>16,00</td></tr>
 </tbody></table></div>
-<p class="tcap">Tabulka 4: Rozdělení bazénu zpět na výrobny (kWh).</p>
+<p class="tcap">Tabulka 3: Rozdělení bazénu zpět na výrobny (kWh).</p>
 <p>Bazén by byl nový, volitelný režim. Dnešní zadání by nenahradil, stál by vedle něj. Skupiny se zvláštními vazbami mohou dál používat klíče po dvojicích. Ostatním by bazén přinesl jednodušší nastavení s jedním klíčem na člena. A rozdělilo by se vše, co lze spotřebovat.</p>
 
-<h2>A co zúčtování?</h2>
-<p>Výsledek výpočtu má stejnou podobu jako dnes. Je to objem sdílené elektřiny pro každou dvojici výrobna–odběrné místo v každé čtvrthodině. Měsíční objem je součtem čtvrthodinových. U jedné výrobny se mění jen hodnoty, které budou přesnější. U bazénu je navíc jiné pravidlo, jak se objem odběrného místa rozdělí mezi výrobny. Ceny a finanční vypořádání mezi členy se řídí jejich smlouvami. Výpočet do nich nezasahuje.</p>
-<p class="keypoint">Zúčtování zůstává beze změny. <span>Zpřesní se jen spočítané objemy sdílené elektřiny.</span></p>
+<aside class="box">
+<p class="box-h">Dynamická a hybridní metoda</p>
+<p>Kromě statické se diskutuje o dvou dalších metodách. <strong>Dynamická metoda</strong> by dělila v poměru okamžité spotřeby. Je to proporcionální pravidlo, ve kterém je nárokem spotřeba. Víc by dostal ten, kdo zrovna víc spotřebovává. <strong>Hybridní metoda</strong> by obě pravidla kombinovala. První kolo by rozdělila podle klíčů a zbytek v poměru zbývající spotřeby.</p>
+<p>O jejich zavedení zatím rozhodnuto není. Podle EDC by byly možné nejdříve od 1. 12. 2027. Legislativní návrh Unie komunitní energetiky počítá s 1. 12. 2028 [8]. Přesná podoba výpočtu zatím nebyla zveřejněna, a v tabulce 4 proto vycházíme z obvyklého popisu. Které pravidlo je nejvhodnější, není otázka matematiky. Je to věc dohody členů a rozhodnutí regulace. Přesná statická metoda s nimi nesoutěží. Zpřesňuje dnešní statickou metodu, kterou používají všechny skupiny.</p>
+<div class="tbl wide"><table>
+<thead><tr><th>Metoda</th><th>Dana (50 %)</th><th>Emil (30 %)</th><th>Filip (20 %)</th><th>Do sítě</th><th>Podle klíčů</th></tr></thead>
+<tbody>
+<tr class="ref"><td>Spotřeba</td><td>4,00</td><td>5,00</td><td>6,00</td><td></td><td></td></tr>
+<tr><td>Statická, 1 kolo</td><td>4,00</td><td>3,60</td><td>2,40</td><td class="loss">2,00</td><td>ano</td></tr>
+<tr><td>Statická, 5 kol</td><td>4,00</td><td>4,72</td><td>3,15</td><td class="loss">0,13</td><td>ano</td></tr>
+<tr><td>Dynamická</td><td>3,20</td><td>4,00</td><td>4,80</td><td>0,00</td><td>ne</td></tr>
+<tr><td>Hybridní</td><td>4,00</td><td>4,16</td><td>3,84</td><td>0,00</td><td>v 1. kole</td></tr>
+<tr class="hl"><td>Přesná statická</td><td>4,00</td><td>4,80</td><td>3,20</td><td>0,00</td><td>ano</td></tr>
+</tbody></table></div>
+<p class="tcap">Tabulka 4: Stejná výroba 12 kWh rozdělená různými pravidly (kWh). První řádek připomíná spotřebu členů. Statická metoda dělí podle klíčů, dynamická podle spotřeby, hybridní podle obojího. Poslední řádek je přesná statická metoda z tohoto článku.</p>
+</aside>
 
-<h2>Další kroky</h2>
-<p>Sdílení elektřiny funguje v Česku od srpna 2024. Za krátkou dobu se ušel velký kus cesty. Vznikl systém, který každou čtvrthodinu rozděluje výrobu desítek tisíc skupin. Pravidla se navíc průběžně vylepšují. Náš návrh na tuto práci navazuje dvěma malými úpravami přílohy č. 25:</p>
+<h2>Co dál: dvě úpravy přílohy č. 25</h2>
+<p>Sdílení elektřiny funguje v Česku od srpna 2024. Za krátkou dobu se ušel velký kus cesty. Vznikl systém, který každou čtvrthodinu rozděluje výrobu desítek tisíc skupin. Pravidla se navíc průběžně vylepšují. EDC od srpna 2026 postupně přechází z počátečního, provizorního režimu do plného provozu, který má být dokončen nejpozději do konce roku 2027 [9]. Je to dobrá příležitost výpočet ještě zpřesnit. Náš návrh navazuje na dosavadní práci dvěma malými úpravami přílohy č. 25:</p>
 <ul class="plain">
 <li><strong>Přesná statická metoda</strong> pro skupiny s jednou výrobnou. Dnešní výpočet se dotáhne do konce jedním vzorcem.</li>
 <li><strong>Režim bazén</strong> pro skupiny s více výrobnami, kde sdílí všichni se všemi. Výroba se sečte a rozdělí stejným vzorcem.</li>
 </ul>
-<p>Obě úpravy zachovávají klíče i smlouvy a nemění zúčtování. Nezávisejí ani na tom, zda a kdy přibudou další metody sdílení. Návrh jsme v UCEEB připravili jako podklad pro diskusi s ERÚ a EDC. Referenční implementace je volně dostupná [6]. Volně dostupná je i aplikace <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a>. Každá skupina v ní uvidí, jak by přesná statická metoda rozdělila její elektřinu.</p>
+<p>Obě úpravy zachovávají klíče i smlouvy. Nemění ani zúčtování. Výsledek výpočtu má stejnou podobu jako dnes: objem sdílené elektřiny pro každou dvojici výrobna–odběrné místo v každé čtvrthodině. Měsíční objem je součtem čtvrthodinových. U jedné výrobny se mění jen hodnoty, které budou přesnější. U bazénu je navíc jiné pravidlo, jak se objem odběrného místa rozdělí mezi výrobny. Ceny a finanční vypořádání mezi členy se řídí jejich smlouvami a výpočet do nich nezasahuje. Zpřesní se jen spočítané objemy sdílené elektřiny.</p>
+<p>Úpravy nezávisejí na tom, zda a kdy přibudou další metody sdílení. Návrh jsme v UCEEB připravili jako podklad pro diskusi s ERÚ a EDC. Referenční implementace je volně dostupná [7]. Volně dostupná je i aplikace <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a>. Každá skupina v ní uvidí, jak by přesná statická metoda rozdělila její elektřinu.</p>
 
 <aside class="about">
 <p><strong>Univerzitní centrum energeticky efektivních budov ČVUT v Praze (UCEEB)</strong> se věnuje výzkumu energetiky budov. Tým Řídicí systémy a optimalizace se zabývá řízením a optimalizací energetických systémů. Kontakt: pavel.otta@cvut.cz</p>
@@ -310,11 +315,11 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <li>Vyhláška č. 408/2015 Sb., o Pravidlech trhu s elektřinou, ve znění pozdějších předpisů, zejména vyhlášky č. 132/2026 Sb.</li>
 <li>Rozvoj EDC pokračuje: nový web usnadní přístup ke službám moderní energetiky. Feedit, 19. 8. 2026 (tisková zpráva EDC), <a href="https://feedit.cz/2026/08/19/rozvoj-edc-pokracuje-novy-web-usnadni-pristup-ke-sluzbam-moderni-energetiky/">feedit.cz</a>.</li>
 <li>ERÚ usnadnil sdílení elektřiny. Další změny ale budou potřeba. TZB-info, 13. 7. 2026, <a href="https://energetika.tzb-info.cz/energeticka-politika/30083-eru-usnadnil-sdileni-elektriny-dalsi-zmeny-ale-budou-potreba">energetika.tzb-info.cz</a>.</li>
-<li>Elektroenergetické datové centrum vstupuje do plného provozu. Co to přinese domácnostem? Naše střecha, 2. 8. 2026, <a href="https://www.nasestrecha.cz/clanky/elektroenergeticke-datove-centrum-vstupuje-do-plneho-provozu-co-to-prinese-domacnostem/">nasestrecha.cz</a>.</li>
-<li>P. Otta: edc-report. Aplikace pro rozbor reportu sdílení a referenční implementace přesné statické metody, aplikace <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a>, zdrojový kód <a href="https://github.com/ottapav/edc-report">github.com/ottapav/edc-report</a>.</li>
 <li>B. O'Neill: A problem of rights arbitration from the Talmud. Mathematical Social Sciences 2(4), 1982.</li>
 <li>W. Thomson: Axiomatic and game-theoretic analysis of bankruptcy and taxation problems. Mathematical Social Sciences 45(3), 2003. W. Thomson: How to Divide When There Isn't Enough. Cambridge University Press, 2019.</li>
+<li>P. Otta: edc-report. Aplikace pro rozbor reportu sdílení a referenční implementace přesné statické metody, aplikace <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a>, zdrojový kód <a href="https://github.com/ottapav/edc-report">github.com/ottapav/edc-report</a>.</li>
 <li>Komunitní energetika vyhlíží dynamické sdílení a chystá se na chytré řízení toků energie. Hospodářské noviny, 19. 5. 2026, <a href="https://archiv.hn.cz/c1-67878010-komunitni-energetika-vyhlizi-dynamicke-sdileni-a-chysta-se-na-chytre-rizeni-toku-energie">hn.cz</a>.</li>
+<li>Elektroenergetické datové centrum vstupuje do plného provozu. Co to přinese domácnostem? Naše střecha, 2. 8. 2026, <a href="https://www.nasestrecha.cz/clanky/elektroenergeticke-datove-centrum-vstupuje-do-plneho-provozu-co-to-prinese-domacnostem/">nasestrecha.cz</a>.</li>
 </ol>
 </section>
 </main>
