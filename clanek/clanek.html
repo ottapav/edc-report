@@ -121,15 +121,15 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <header class="lead">
   <p class="kicker">Sdílení elektřiny · UCEEB ČVUT v Praze</p>
   <h1>Sdílení elektřiny do poslední kilowatthodiny</h1>
-  <p class="perex">Sdílení elektřiny se v Česku rychle rozběhlo. Zapojily se do něj desítky tisíc domácností, bytových domů a firem. Ukážeme, jak výpočet sdílení funguje a kde má ještě rezervy. Navrhneme také, jak ho jednoduše zpřesnit. Klíče, smlouvy i zúčtování přitom zůstanou stejné.</p>
+  <p class="perex">Sdílení elektřiny se v Česku rychle rozběhlo a zapojily se do něj desítky tisíc skupin. Dnešní výpočet, kolik z výroby připadne kterému členovi, je ale jen přibližný. Po jeho posledním kole může zbýt elektřina, kterou by členové ještě spotřebovali, a ta odejde do sítě. V článku ukážeme, jak by vypadal výpočet přesný. Klíče, smlouvy i zúčtování přitom zůstanou stejné.</p>
   <p class="byline">Ing. Pavel Otta, PhD. · Řídicí systémy a optimalizace, UCEEB ČVUT v Praze · pracovní verze 7. 10. 2026</p>
 </header>
 
 <aside class="inbrief" aria-label="V kostce">
   <p class="inbrief-h">V kostce</p>
   <ul>
-    <li>Dnešní výpočet EDC dělí výrobu podle dohodnutých klíčů po kolech. Říkáme mu <strong>přibližná statická metoda</strong>. Po posledním kole totiž může zbýt elektřina, kterou by členové spotřebovali. Ta odejde do sítě.</li>
-    <li>Stejný výpočet lze dotáhnout do konce jedním vzorcem. Říkáme mu <strong>přesná statická metoda</strong>. Klíče platí dál a nikdo nepřijde zkrátka.</li>
+    <li><strong>Problém:</strong> dnešní výpočet EDC dělí výrobu podle dohodnutých klíčů po kolech. Je proto přibližný (říkáme mu <strong>přibližná statická metoda</strong>). Po posledním kole totiž může zbýt elektřina, kterou by členové spotřebovali. Ta odejde do sítě.</li>
+    <li><strong>Řešení:</strong> stejný výpočet lze dotáhnout do konce jedním vzorcem. Říkáme mu <strong>přesná statická metoda</strong>. Klíče platí dál a nikdo nepřijde zkrátka.</li>
     <li>Výrobu více výroben lze sečíst a rozdělit stejným vzorcem. Říkáme mu <strong>režim bazén</strong>. Hodí se pro skupiny, kde sdílí všichni se všemi.</li>
     <li>Zúčtování zůstává stejné. Zpřesní se jen spočítané objemy.</li>
   </ul>
