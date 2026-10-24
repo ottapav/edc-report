@@ -263,6 +263,23 @@ def test_billing_in_the_right_column(entry_key):
     assert views.bill_tiles(bill, data, enabled, "cs")
 
 
+def test_german_interface(entry_key):
+    """The German strings drive the same figures, tiles and member grid as the others."""
+    entry, _rows, _job = _billed(entry_key, "de")
+    data, bill = entry.data, entry.bill.settlement
+    enabled = set(data.dest_eans[:3])
+    names = members.default_names(data, "de")
+    assert names[data.dest_eans[0]].startswith("Verbrauch")
+    th = figures.theme("light")
+    assert figures.fig_bill_split(bill, data, names, enabled, lang="de", th=th).data
+    assert figures.fig_bill_pie(bill, data, enabled, "de", th).data
+    assert views.bill_tiles(bill, data, enabled, "de")
+    assert views.bill_table(bill, data, names, "de")
+    rows = members.rows(data)
+    assert all(r["default_de"] and r["default_cs"] and r["default_en"] for r in rows)
+    assert [c["field"] for c in members.columns("de", True)] == ["name", "tail", "key", "price"]
+
+
 def test_paired_figures_line_up(entry_key):
     """Right-column figures take the left one's member order, height and legend rows."""
     entry, _rows, _job = _billed(entry_key)

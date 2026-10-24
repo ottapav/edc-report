@@ -13,7 +13,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from edc_data import SharingData, key_dest, key_kind, key_source, memoized, shared_cols
-from i18n import month_label, plotly_separators, t
+from i18n import date_format, month_label, plotly_separators, t
 
 TAB10 = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
          "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
@@ -334,7 +334,7 @@ def daily_layout(fig: go.Figure, index: pd.DatetimeIndex, ylabel: str, sel_day: 
     tickvals, ticktext = month_ticks(index, lang)
     fig.update_layout(
         xaxis=dict(tickvals=tickvals, ticktext=ticktext, tickangle=-30, showgrid=True,
-                   hoverformat="%d.%m.%Y" if lang == "cs" else "%Y-%m-%d"),
+                   hoverformat=date_format(lang)),
         yaxis=dict(title=ylabel, showgrid=True, zeroline=False),
         hovermode="x unified", legend=_legend_below(-0.18),
         shapes=day_marker(sel_day, th), clickmode="event",
@@ -350,7 +350,7 @@ def day_slice(frame: pd.DataFrame, day: str | None) -> tuple[pd.Timestamp, pd.Da
 
 
 def date_text(ts: pd.Timestamp, lang: str) -> str:
-    return ts.strftime("%d.%m.%Y" if lang == "cs" else "%Y-%m-%d")
+    return ts.strftime(date_format(lang))
 
 
 def intraday_layout(fig: go.Figure, day_ts: pd.Timestamp, ylabel: str, y_max: float) -> None:

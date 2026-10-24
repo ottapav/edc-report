@@ -11,7 +11,7 @@ from __future__ import annotations
 import dash_ag_grid as dag
 from dash import dcc, html
 
-from i18n import t
+from i18n import LANG_LABELS, t
 
 from . import members
 
@@ -203,8 +203,8 @@ def layout() -> html.Div:
                 html.Button("☾", id="theme-btn", n_clicks=0, className="icon-btn",
                             title="Tmavý režim"),
                 dcc.RadioItems(id="lang", value="cs", inline=True, className="seg",
-                               options=[{"label": "CZ", "value": "cs"},
-                                        {"label": "EN", "value": "en"}]),
+                               options=[{"label": label, "value": code}
+                                        for code, label in LANG_LABELS.items()]),
             ]),
         ]),
         dcc.Upload(

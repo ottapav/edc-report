@@ -1,10 +1,18 @@
-"""UI strings (cs / en) and number formatting."""
+"""UI strings (cs / en / de) and number and date formatting."""
 
 from __future__ import annotations
 
 import math
 
 import pandas as pd
+
+from i18n_de import STRINGS as _STRINGS_DE
+
+#: languages of the UI, with the label of the switch in the top bar
+LANGS = ("cs", "en", "de")
+LANG_LABELS = {"cs": "CZ", "en": "EN", "de": "DE"}
+#: decimal comma (cs: thousands separated by a space, de: by a point); English uses the point
+DECIMAL_COMMA = ("cs", "de")
 
 STRINGS: dict[str, dict[str, str]] = {
     "en": {
@@ -533,8 +541,28 @@ STRINGS: dict[str, dict[str, str]] = {
     },
 }
 
+STRINGS["de"] = _STRINGS_DE
+
 CS_MONTH_ABBR = ("led", "úno", "bře", "dub", "kvě", "čvn",
                  "čvc", "srp", "zář", "říj", "lis", "pro")
+
+
+DE_MONTH_ABBR = ("Jan", "Feb", "Mär", "Apr", "Mai", "Jun",
+                 "Jul", "Aug", "Sep", "Okt", "Nov", "Dez")
+
+
+def decimal_char(lang: str) -> str:
+    return "," if lang in DECIMAL_COMMA else "."
+
+
+def date_format(lang: str) -> str:
+    """strftime / Plotly format of a date: day.month.year for cs and de, ISO for en."""
+    return "%d.%m.%Y" if lang in ("cs", "de") else "%Y-%m-%d"
+
+
+def date_picker_format(lang: str) -> str:
+    """The same date format in the notation of the date picker (moment.js)."""
+    return "DD.MM.YYYY" if lang in ("cs", "de") else "YYYY-MM-DD"
 
 
 def t(key: str, lang: str) -> str:
@@ -552,16 +580,21 @@ def tn(key: str, lang: str, n: int) -> str:
 def month_label(ts: pd.Timestamp, lang: str) -> str:
     if lang == "cs":
         return f"{CS_MONTH_ABBR[ts.month - 1]} {ts.year}"
+    if lang == "de":
+        return f"{DE_MONTH_ABBR[ts.month - 1]} {ts.year}"
     return ts.strftime("%b %Y")
 
 
 def fmt_num(x: float | None, lang: str, decimals: int = 0) -> str:
-    """Thousands-separated number; Czech uses a thin space and decimal comma."""
+    """Thousands-separated number; Czech uses a thin space and a decimal comma, German a
+    point and a decimal comma."""
     if x is None or (isinstance(x, float) and math.isnan(x)):
         return "—"
     s = f"{x:,.{decimals}f}"
     if lang == "cs":
         s = s.replace(",", " ").replace(".", ",")
+    elif lang == "de":
+        s = s.replace(",", "\0").replace(".", ",").replace("\0", ".")
     return s
 
 
@@ -574,12 +607,12 @@ def fmt_pct(x: float | None, lang: str, decimals: int = 1) -> str:
 def fmt_date(ts: pd.Timestamp | None, lang: str) -> str:
     if ts is None or pd.isna(ts):
         return "—"
-    return ts.strftime("%d.%m.%Y" if lang == "cs" else "%Y-%m-%d")
+    return ts.strftime(date_format(lang))
 
 
 def plotly_separators(lang: str) -> str:
     """Plotly ``layout.separators``: decimal char then thousands char."""
-    return ", " if lang == "cs" else ".,"
+    return {"cs": ", ", "de": ",."}.get(lang, ".,")
 
 
 def fmt_duration(seconds: float, lang: str) -> str:

@@ -7,6 +7,8 @@ sharing at a glance. The app also recomputes the whole period with the proposed 
 static method** (`presna_staticka.py`) and shows the result of the approximate static method (EDC's current implementation) and the exact one side by side,
 with the computation timed per 15-min interval.
 
+The interface is available in Czech, English and German (switch in the top bar; the explanatory article is Czech only).
+
 **Live:** <https://edc-report.uceeb.cvut.cz/> · explanatory article (Czech):
 <https://edc-report.uceeb.cvut.cz/clanek/>
 
@@ -352,7 +354,7 @@ callbacks from both.
 | | `billing.py` | Shapley values of the billing (exact, price layers), the settlement in Kč, values per 15 min |
 | | `procjob.py` | Runs a function in a forked child with progress, cancellation and a time limit |
 | | `figures/` | Plotly figures: `base.py` themes, member colours and the shared chart shapes (stacked bars, pie, stacked areas by day and within a day, heatmap, pairing of the two columns); `energy.py` the report in kWh; `money.py` the billing in Kč |
-| | `i18n.py` | CZ/EN strings and number formatting |
+| | `i18n.py`, `i18n_de.py` | CZ/EN/DE strings, number and date formatting |
 | Server state | `config.py` | Settings from environment variables |
 | | `store.py` | Uploaded reports and their results (key estimate, recompute, billing), newest `EDC_CACHE_MAX` kept |
 | | `jobs.py` | Background computations: queue, child process, cancellation, progress |

@@ -13,7 +13,7 @@ import jobs
 import store
 from edc_data import load_report
 from figures import heat_metrics
-from i18n import t, tn
+from i18n import date_picker_format, t, tn
 
 from . import members
 from .layout import job_ids, upload_content
@@ -84,7 +84,7 @@ def _report_labels(lang, key, heat):
     multi = data is not None and len(data.source_eans) > 1
     return dict(
         upload=upload_content(lang, entry is not None),
-        day_format="DD.MM.YYYY" if lang == "cs" else "YYYY-MM-DD",
+        day_format=date_picker_format(lang),
         heat_options=[{"label": t(f"heat_{m}", lang), "value": m} for m in metrics],
         heat_value=heat if heat in metrics else metrics[0],
         heat_box={"display": "none"} if len(metrics) < 2 else {},   # part report: no choice

@@ -15,7 +15,7 @@ from dash import ctx
 
 from edc_data import POOL, SharingData
 from figures import colour_map, top_dests
-from i18n import t
+from i18n import LANGS, decimal_char, t
 
 from .widgets import tail
 
@@ -156,7 +156,7 @@ _TAIL_COLUMN = {"field": "tail", "headerName": "EAN", "width": 48, "cellClass": 
 
 def _number_column(field: str, header: str, editable: bool, width: int, lang: str,
                    negative: bool = False, **extra) -> dict:
-    dec = "," if lang == "cs" else "."
+    dec = decimal_char(lang)
     # typed as text, so a decimal comma works in every browser locale (the number editor
     # drops it: "1,1" became 11); anything that is not a number keeps the old value, and
     # so does a negative one unless ``negative`` (keys: kept and reported as an error).
@@ -190,9 +190,9 @@ def columns(lang: str, editable: bool) -> list[dict]:
 
 def rows(data: SharingData) -> list[dict]:
     cmap = colour_map(data, top_dests(data.frame, data))
-    default = {lg: default_names(data, lg) for lg in ("cs", "en")}
+    default = {lg: default_names(data, lg) for lg in LANGS}
     return [{"ean": e, "tail": tail(e), "name": "",
-             "default_cs": default["cs"][e], "default_en": default["en"][e],
+             **{f"default_{lg}": default[lg][e] for lg in LANGS},
              "colour": cmap[e], "key": None, "range": "", "warn": False, "price": None}
             for e in data.dest_eans]
 
@@ -208,9 +208,10 @@ def producer_columns(lang: str) -> list[dict]:
 
 
 def producer_rows(data: SharingData) -> list[dict]:
-    default = {lg: default_names(data, lg) for lg in ("cs", "en")}
-    return [{"ean": e, "tail": tail(e), "name": "", "default_cs": default["cs"][e],
-             "default_en": default["en"][e], "colour": "#339933", "price": None}
+    default = {lg: default_names(data, lg) for lg in LANGS}
+    return [{"ean": e, "tail": tail(e), "name": "",
+             **{f"default_{lg}": default[lg][e] for lg in LANGS},
+             "colour": "#339933", "price": None}
             for e in data.source_eans]
 
 
