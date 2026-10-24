@@ -139,7 +139,7 @@ STRINGS: dict[str, str] = {
                       "s_i = min(D_i, k_i · H), mit dem Pegel H bis zum Ende berechnet. "
                       "Das Ergebnis erscheint neben der näherungsweise statischen Methode: dem "
                       "EDC-Report oder, bei geänderten Schlüsseln, deren Simulation mit denselben Schlüsseln.",
-    "recompute_article": "Wie die exakte statische Methode funktioniert: erklärender Artikel (auf Tschechisch) ↗",
+    "recompute_article": "Wie die exakte statische Methode funktioniert: erklärender Artikel ↗",
     "recompute_btn": "Teilung mit der exakten statischen Methode neu berechnen",
     "part_no_recompute": "Die Neuberechnung braucht einen Gesamtreport (Verbrauch der Mitglieder).",
     "phase_fit": "Schlüssel aus dem Report schätzen",

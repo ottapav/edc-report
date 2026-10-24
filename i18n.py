@@ -152,7 +152,7 @@ STRINGS: dict[str, dict[str, str]] = {
                           "s_i = min(D_i, k_i · H), with the level H computed to the end. "
                           "The result is shown side by side with the approximate static method: the EDC "
                           "report, or with changed keys its replay with the same keys.",
-        "recompute_article": "How the exact static method works: explanatory article (in Czech) ↗",
+        "recompute_article": "How the exact static method works: explanatory article ↗",
         "recompute_btn": "Recompute sharing with the exact static method",
         "part_no_recompute": "Recompute needs an all report (members' consumption is required).",
         "phase_fit": "Estimating keys from the report",
