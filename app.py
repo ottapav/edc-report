@@ -43,15 +43,17 @@ app.index_string = INDEX_STRING
 app.layout = layout()
 
 
-@server.route("/clanek/")
-def _article():
-    """The explanatory article, assembled from clanek/ on every request."""
-    return Response(clanek.render(), mimetype="text/html")
+@server.route("/clanek/", defaults={"lang": "cs"})
+@server.route("/clanek/<any(en,de):lang>/")
+def _article(lang: str):
+    """The explanatory article in ``lang``, assembled from clanek/ on every request."""
+    return Response(clanek.render(lang), mimetype="text/html")
 
 
-@server.route("/clanek/img/<path:name>")
-def _article_img(name: str):
-    return send_from_directory(clanek.IMG, name)
+@server.route("/clanek/img/<path:name>", defaults={"lang": "cs"})
+@server.route("/clanek/<any(en,de):lang>/img/<path:name>")
+def _article_img(lang: str, name: str):
+    return send_from_directory(clanek.img_dir(lang), name)
 
 
 @server.route("/healthz")

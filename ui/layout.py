@@ -28,7 +28,7 @@ JOB_KINDS = ("exact", "bill")
 PAIRED_FIGURES = ("overview", "pie", "daily", "hourly", "heat")
 
 
-# explanatory article on the exact static method and the pool mode (Czech), see clanek/
+# explanatory article on the exact static method and the pool mode (cs/en/de), see clanek/
 ARTICLE_URL = "/clanek/"
 
 

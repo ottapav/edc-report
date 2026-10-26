@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- English version of clanek.html; keep the structure in sync. See clanek/README.md. -->
+<title>Electricity sharing down to the last kilowatt-hour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+{{STYL}}
+</style>
+</head>
+<body>
+
+
+<main>
+<header class="lead">
+  {{JAZYKY}}
+  <p class="kicker">Electricity sharing · UCEEB, CTU in Prague</p>
+  <h1>Electricity sharing down to the last kilowatt-hour</h1>
+  <p class="perex">Electricity sharing has taken off quickly in Czechia, and tens of thousands of groups have joined. The current calculation of how much of the production goes to which member, however, is only approximate. After its last round, electricity may be left over that the members could still have consumed, and it flows into the grid. In this article we show what an exact calculation would look like. Keys, contracts and settlement stay the same.</p>
+  <p class="byline">Ing. Pavel Otta, PhD. · Control Systems and Optimization team, UCEEB, CTU in Prague</p>
+</header>
+
+<aside class="inbrief" aria-label="In brief">
+  <p class="inbrief-h">In brief</p>
+  <ul>
+    <li><strong>The problem:</strong> today's EDC calculation divides the production by the agreed keys in rounds. It is therefore approximate (we call it the <strong>approximate static method</strong>). After the last round, electricity may be left over that the members would have consumed. It goes to the grid.</li>
+    <li><strong>The solution:</strong> the same calculation can be carried to the end with a single formula. We call it the <strong>exact static method</strong>. The keys still apply and nobody loses out.</li>
+    <li><strong>The benefit:</strong> in the sample group, the exact calculation would have shared another 367 kWh over the year, that is 8.6 % of the production, with the same keys.</li>
+    <li><strong>More plants:</strong> for groups where everyone shares with everyone, we propose the <strong>pool mode</strong>. It adds up the production of all plants and divides it with the same formula.</li>
+  </ul>
+</aside>
+
+<h2>How sharing works</h2>
+<p>A sharing group connects the plants and metering points of its members. The plant is most often a photovoltaic system on a roof. The electricity does not flow along a special wire; it is shared only on paper. The Czech electricity data centre (EDC) takes the measured production and consumption in every quarter-hour. It then calculates how much of the production goes to which member. For this electricity the member does not pay the supplier the price of the electricity itself. Distribution charges, however, are still paid [1]. The rules of the calculation are set by the Energy Regulatory Office (ERÚ) in Decree No. 408/2015 Coll., on the Rules of the Electricity Market. The calculation of sharing is described in its Annex 25 [2].</p>
+<p>Sharing has been possible since August 2024 and interest is high. In August 2026 the EDC registered almost 30,000 sharing groups, including 1,171 apartment buildings and 228 energy communities [3].</p>
+<dl class="glossary">
+  <div><dt>Metering point</dt><dd>A place with an electricity meter, for example a flat, a house or business premises. The EDC identifies it by an EANo code. A plant has its own code, EANd.</dd></div>
+  <div><dt>Allocation key</dt><dd>The agreed share of a member in the production, for example 50 %. It may correspond, say, to how much the member invested in the plant.</dd></div>
+  <div><dt>Quarter-hour</dt><dd>Only electricity produced and consumed in the same quarter-hour can be shared. The calculation therefore runs for each quarter-hour separately, 96 times a day.</dd></div>
+  <div><dt>EDC</dt><dd>The electricity data centre. It records the sharing groups and evaluates from the measured data how much electricity the members have shared.</dd></div>
+</dl>
+
+<h2>Today's calculation: rounds and a remainder that goes to the grid</h2>
+<p>Today the static method is used. The production is divided by fixed keys and the calculation runs in rounds. In each round a member gets its share of the production that is still left to distribute. It does not get more than it still needs, though. What remains is distributed in the next round. The results are rounded down to hundredths of a kWh. The procedure is easy to follow and easy to describe in a decree.</p>
+<p>We will illustrate it with a small example that accompanies us throughout the article. In one quarter-hour a plant produces 12 kWh. Dana has a key of 50 % and needs 4 kWh. Emil has a key of 30 % and needs 5 kWh. Filip has a key of 20 % and needs 6 kWh. Table 1 shows the calculation round by round.</p>
+<div class="tbl wide"><table>
+<thead><tr><th>Round</th><th>To distribute</th><th>Dana (50 %)</th><th>Emil (30 %)</th><th>Filip (20 %)</th><th>Left over</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>12.00</td><td>4.00</td><td>3.60</td><td>2.40</td><td>2.00</td></tr>
+<tr><td>2</td><td>2.00</td><td>–</td><td>0.60</td><td>0.40</td><td>1.00</td></tr>
+<tr><td>3</td><td>1.00</td><td>–</td><td>0.30</td><td>0.20</td><td>0.50</td></tr>
+<tr><td>4</td><td>0.50</td><td>–</td><td>0.15</td><td>0.10</td><td>0.25</td></tr>
+<tr><td>5</td><td>0.25</td><td>–</td><td>0.07</td><td>0.05</td><td class="loss">0.13 → grid</td></tr>
+<tr class="hl"><td>Total</td><td></td><td>4.00</td><td>4.72</td><td>3.15</td><td></td></tr>
+</tbody></table></div>
+<p class="tcap">Table 1: The static method in five rounds (kWh). Dana gets everything in the first round. Emil and Filip get the remainder in the following rounds. It is halved in every round.</p>
+<p>Each round distributes only part of the remainder. Distributing all of it would take infinitely many rounds. Since August 2026 an amendment to the decree has been in force: five rounds are calculated for groups of up to 100 metering and production points, and one round for larger groups [2, 4]. How fast the remainder disappears depends on the keys of the members who still need something. In the example Emil and Filip together have 50 %, so the remainder is halved in every round. If together they had only 10 %, two thirds of the remainder from the first round would still be undistributed after five rounds.</p>
+<p>Today's calculation therefore gives an approximate result that gets closer to the exact one with every round. Hence the name <span class="term">approximate static method</span>. This raises the question of where the calculation would end up if there were infinitely many rounds. That is exactly what the exact static method answers.</p>
+
+<h2>The exact static method: one level instead of many rounds</h2>
+<p>The exact static method divides the production by the same keys as today's calculation, only straight to the end. It replaces the rounds with a single number that is calculated by a formula.</p>
+
+<h3>The principle: communicating vessels</h3>
+<p>Imagine each member as a vessel. The width of the vessel corresponds to its key, its volume to its consumption. We pour the production into all the vessels at once. The vessels are connected, so the level rises equally everywhere. A full vessel takes in nothing more, and the water keeps rising in the others. In the end each member gets as much as there is water in its vessel:</p>
+<div class="formula">shared = smaller of ( consumption ; key × H )</div>
+<p>The letter H denotes the common level. It states how much a member with a key of 100 % would get, which is why we measure it in kWh. The amount of water in a vessel is width × height. For a vessel that is not full it is key × H, and that is the shared energy. In the example H = 16 kWh. At that level Dana could get up to 0.5 × 16 = 8 kWh. She needs only 4 kWh, so she gets 4 kWh. Emil gets 0.3 × 16 = 4.8 kWh and Filip 0.2 × 16 = 3.2 kWh. Fig. 1 shows the whole situation.</p>
+<figure>
+  <div class="svgplate">{{NADOBY}}</div>
+  <figcaption><span class="fig-no">Fig. 1</span>The vessels for the example from Table 1. The width of a vessel is the key, the height is measured in kWh per 100 % of the key. The number in the water is the shared energy. Dana's vessel is full. Emil and Filip have a common level H = 16 kWh. They therefore get exactly in the ratio of their keys, that is 30 : 20. All 12 kWh are distributed.</figcaption>
+</figure>
+
+<h3>How the level is calculated</h3>
+<p>There is no need to find the level by trial and error. We sort the members by how soon their vessel fills up. Then we go through them one by one. For each we calculate what the level would be if everyone before them had filled up. It is enough to divide the remaining production by the sum of the keys of the remaining members. The correct level is the highest of the values calculated this way. Table 2 shows the procedure for our example. The exact formula is in the box at the end of this section.</p>
+<div class="tbl"><table>
+<thead><tr><th>Rank</th><th>Member</th><th>Fills up at (kWh)</th><th>Calculation</th><th>Level (kWh)</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Dana</td><td>4 / 0.5 = 8</td><td>12 / (0.5 + 0.3 + 0.2)</td><td>12</td></tr>
+<tr class="hl"><td>2</td><td>Emil</td><td>5 / 0.3 = 16.7</td><td>(12 − 4) / (0.3 + 0.2)</td><td>16 ← max</td></tr>
+<tr><td>3</td><td>Filip</td><td>6 / 0.2 = 30</td><td>(12 − 4 − 5) / 0.2</td><td>15</td></tr>
+</tbody></table></div>
+<p class="tcap">Table 2: Calculation of the level for the example. The calculation can stop at the first member who does not fill up. Here that is Emil. His vessel would fill up only at a level of 16.7 kWh. The level is stated in kWh per 100 % of the key.</p>
+<p>The keys are taken as ratios. They may therefore add up to less than 100 %. The undistributed share is then redistributed, just as in the later rounds of today's calculation. A group that wants to deliberately sell part of the production can subtract it as a fixed reserve before the calculation.</p>
+
+<h3>The same method, calculated to the end</h3>
+<p>The exact static method does not introduce a new rule. It is today's static method, just calculated to the end. In the theory of fair division it is the well-studied weighted constrained equal awards rule [5, 6] (more in the box below). Each round can be imagined as another dose of water. Members with a vessel that is not yet full take in water in proportion to their keys. After every round the water in these vessels is therefore at the same level. It rises with every round (Fig. 2). It cannot rise above H, however, because more would have to be distributed than was produced.</p>
+<figure>
+  <div class="svgplate">{{HLADINA}}</div>
+  <figcaption><span class="fig-no">Fig. 2</span>The level after the individual rounds of today's calculation: 12; 14; 15; 15.5; 15.75 … kWh. With every round it approaches H = 16 kWh. The exact method calculates H straight away.</figcaption>
+</figure>
+<p>The exact method thus gives the result to which today's calculation tends with every round. Nobody therefore loses out. The only exceptions are quarter-hours with very small production. In them rounding may shift a few hundredths of a kWh between members.</p>
+
+<aside class="box">
+<p class="box-h">Where the method comes from</p>
+<p>Dividing a limited pile among several people is a problem as old as humankind. It is hardest when there is not enough for everyone. It is dealt with by inheritance law, bankruptcy proceedings and rationing systems. Mathematicians study it as the claims problem [5, 6]. A claim can be a creditor's receivable, an heir's share or, in our case, a member's consumption. There are many rules. The <strong>proportional rule</strong> divides in proportion to the claims. The <strong>constrained equal awards rule</strong> gives everyone the same, but nobody more than they claim. No rule is the only correct one. Each answers the question of who should get more differently.</p>
+<p>The static method divides by the agreed keys, and the exact static method is therefore the <strong>weighted constrained equal awards rule</strong>: instead of an equal share, everyone gets a share according to their key, but at most their consumption.</p>
+</aside>
+
+<h3>What the exact calculation brings</h3>
+<ul class="plain">
+<li><strong>Members share everything they can consume,</strong> with the same keys.</li>
+<li><strong>The calculation does not depend on the number of rounds or on the size of the group.</strong> It is equally exact for a family house and for a large community.</li>
+<li><strong>It is fast.</strong> Recalculating a whole year of the sample group (35,040 quarter-hours) took 0.18 s. A comparison with today's calculation for groups of different sizes is shown in Fig. 3 in the box below.</li>
+<li><strong>It is easy to verify.</strong> It is enough to know the key and the level H. Everyone can then calculate their own share as the smaller of consumption and key × H.</li>
+</ul>
+
+<aside class="box">
+<p class="box-h">For the curious and for programmers</p>
+<p>The level as a formula. We number the members by how soon their vessel fills up and take the largest of the values:</p>
+<div class="formula">H = max<sub>j</sub> ( P − Σ<sub>i&lt;j</sub> consumption<sub>i</sub> ) / ( Σ<sub>i≥j</sub> key<sub>i</sub> ) &nbsp;<span class="c">P = production (kWh)</span></div>
+<p>The core of the exact static method in Python. The most demanding step is sorting the members, the rest is a single pass. For a group with 1,000 metering points the calculation of one quarter-hour takes about half a millisecond. The full reference implementation is freely available [7]. It contains integer arithmetic, rounding and tests.</p>
+<pre><code>def exact_static(P, D, k):
+    """P production, D consumption, k keys (as ratios). Returns the shared amounts."""
+    idx = sorted(range(len(D)), key=lambda i: D[i] / k[i])   # sorting: O(n log n)
+    H, left_P, left_k = 0.0, P, sum(k)                       # one pass: O(n)
+    for i in idx:
+        H = max(H, left_P / left_k)
+        if D[i] / k[i] &gt;= H:          # the next member does not fill up, the level is final
+            break
+        left_P -= D[i]
+        left_k -= k[i]
+    return [min(D[i], k[i] * H) for i in range(len(D))]</code></pre>
+<figure>
+  <div class="plate"><img src="img/srovnani-vypoctu.png" alt="Chart: computation time and share of electricity distributed by group size" width="2330" height="1018"></div>
+  <figcaption><span class="fig-no">Fig. 3</span>Left: computation time of one quarter-hour by group size, right: share of the electricity distributed. We compare today's calculation under the valid rules with the exact method. Today 5 rounds are calculated for up to 100 metering and production points, and one round above 100. This is a simulation with random keys and consumption.</figcaption>
+</figure>
+</aside>
+
+<h2>What the exact calculation changes in a real group</h2>
+<p>A sharing report with quarter-hour data can be downloaded from the EDC portal. Each group can thus see how sharing works for it. We took the report of one group. It has a photovoltaic system of 11.44 kWp with a 11.6 kWh battery and five metering points. The keys are 50 % and four times 10 %. In the year from September 2025 to September 2026 the plant produced 4,275 kWh. The members consumed 36,854 kWh.</p>
+<p>We processed the report with the freely available application edc-report, which runs at <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a> [7]. The application imitates today's calculation. In 99.2 % of quarter-hours it arrives at exactly the same result as the EDC. We can therefore trust its recalculations.</p>
+<figure>
+  <div class="plate"><img src="img/kolac.png" alt="Pie chart: shared 2,235 kWh (52.3 %), could have been shared 367 kWh (8.6 %), surplus 1,673 kWh (39.1 %)" width="1520" height="1120"></div>
+  <figcaption><span class="fig-no">Fig. 4</span>Where the group's production went over the year. <b>Green</b> is the electricity the members shared. <b>Red</b> is electricity that the members consumed in the same quarter-hour and that the exact calculation would also have distributed. <b>Grey</b> is the surplus that nobody in the group consumed.</figcaption>
+</figure>
+<p>Fig. 4 shows where the production went over the whole year. Of the production, 2,235 kWh (52.3 %) were shared. With the same keys the exact calculation would have distributed another <strong>367 kWh, that is 8.6 % of the production</strong>. The remaining 1,673 kWh (39.1 %) would not have been consumed by anyone in the group. No method can distribute this surplus, and it goes to the grid. The exact calculation would have helped in 80 % of the quarter-hours in which the plant was producing. Over the year each of the five members would have gained, by 30 to 142 kWh. Fig. 5 shows what it looks like during a single day.</p>
+<figure>
+  <div class="pair">
+    <div class="plate"><img src="img/den_priblizna.png" alt="Sharing on 28 June 2026 with the approximate static method" width="1800" height="880"></div>
+    <div class="plate"><img src="img/den_presna.png" alt="Sharing on 28 June 2026 with the exact static method" width="1800" height="880"></div>
+  </div>
+  <figcaption><span class="fig-no">Fig. 5</span>One day by quarter-hours (28 June 2026). Top: today's calculation, bottom: the exact one. The coloured areas show the electricity shared with the individual members. <b>Dark grey</b> is production sent to the grid, light grey is consumption from the grid. The plant produced 30.8 kWh that day. By today's calculation 8.4 kWh went to the grid. By the exact one only 3.0 kWh, which nobody in the group needed any more.</figcaption>
+</figure>
+<p>This is one group; other groups will have different numbers. The difference grows with the number of members and with smaller keys. It therefore concerns mainly apartment buildings and energy communities. The benefit for the whole country could be calculated from EDC data.</p>
+<p>Every group can calculate its own numbers. It is enough to download the sharing report from the EDC portal and upload it to the application. The application estimates the keys, recalculates the whole period with the exact static method and shows both methods side by side. The uploaded file is not stored anywhere.</p>
+<p class="keypoint">Try it on your own group. <span><a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a></span></p>
+
+<h2>Groups with several plants: pool mode</h2>
+<p>When a group has several plants, a key is set for each plant–metering point pair. A metering point can draw from up to five plants, and their order matters too. Such a setup is very flexible and allows almost any arrangement. For an ordinary group, however, the setup is laborious and members find it hard to understand. In addition, dividing a single pile becomes a network problem, because a decision on one link changes the options on the others. A simple example is shown in Fig. 6.</p>
+<figure>
+  <div class="svgplate">{{SIT}}</div>
+  <figcaption><span class="fig-no">Fig. 6</span>Plant A divides its 10 kWh between O1 and O2, 50 % each. Plant B may share only with O1. Both metering points need 10 kWh.</figcaption>
+</figure>
+<p>The static method gives O1 10 kWh, of which 5 from A and 5 from B. O2 gets 5 kWh from A. 15 kWh are shared and 5 kWh from plant B remain unused. Yet all 20 kWh could be shared: plant A would send everything to O2 and plant B to O1. A rule that divides each plant separately will not find such a solution. This is not a weakness of a particular method but a property of the problem. The dynamic or hybrid method would end up the same way if it divided each plant separately.</p>
+
+<h3>Optimization is needlessly complicated for most groups</h3>
+<p>For general links the right tool is optimization, for example the maximum-flow problem. A computer can handle it. It has no simple formula, however, and a group member can hardly verify the result. It also opens another question. Optimization ensures that as much as possible is shared. Often, however, there are several distributions that share the same amount and differ in who gets how much. Another rule must decide between them, and we are back at the question of fairness.</p>
+<p>Most groups with several plants do not need anything so complicated, though. The members simply want everyone to share with everyone. For them optimization is an unnecessarily heavy tool. It makes sense only where a plant may share with only some of the members.</p>
+
+<h3>Pool mode</h3>
+<p>When everyone shares with everyone, we can pour the production of all plants onto one pile. We call it the pool. Each member has one key for the whole group. The total production is divided by the exact static method. The result is then returned to the individual plants in proportion to their production. Each plant thus shares the same fraction of its production in a given quarter-hour. None is favoured by order. An example is shown in Fig. 7 and Table 3.</p>
+<figure>
+  <div class="svgplate">{{BAZEN}}</div>
+  <figcaption><span class="fig-no">Fig. 7</span>Plants A (10 kWh) and B (6 kWh), keys 50/50. O1 needs 2 kWh, O2 20 kWh. The level comes out at 28 kWh. O1 gets the whole 2 kWh, O2 gets 0.5 × 28 = 14 kWh. All 16 kWh are distributed.</figcaption>
+</figure>
+<div class="tbl"><table>
+<thead><tr><th></th><th>O1</th><th>O2</th><th>Total</th></tr></thead>
+<tbody>
+<tr><td>From plant A (62.5 %)</td><td>1.25</td><td>8.75</td><td>10.00</td></tr>
+<tr><td>From plant B (37.5 %)</td><td>0.75</td><td>5.25</td><td>6.00</td></tr>
+<tr class="hl"><td>Total</td><td>2.00</td><td>14.00</td><td>16.00</td></tr>
+</tbody></table></div>
+<p class="tcap">Table 3: Division of the pool back to the plants (kWh).</p>
+<p>The pool would be a new, optional mode. It would not replace today's setup but stand beside it. Groups with special links can keep using keys by pairs. For the others the pool would bring a simpler setup with one key per member. And everything that can be consumed would be shared.</p>
+
+<aside class="box">
+<p class="box-h">Dynamic and hybrid method</p>
+<p>Besides the static method, two other methods are being discussed. The <strong>dynamic method</strong> would divide in proportion to the instantaneous consumption. It is the proportional rule in which the claim is the consumption. Whoever is consuming more at the moment would get more. The <strong>hybrid method</strong> would combine both rules. It would divide the first round by keys and the remainder in proportion to the remaining consumption.</p>
+<p>No decision has been made yet on introducing them. According to the EDC they would be possible from 1 December 2027 at the earliest. The legislative proposal of the Community Energy Union assumes 1 December 2028 [8]. The exact form of the calculation has not been published yet, so in Table 4 we rely on the usual description. Which rule is most suitable is not a question of mathematics. It is a matter of agreement among the members and of a decision by the regulator. The exact static method does not compete with them. It refines today's static method, which all groups use.</p>
+<div class="tbl wide"><table>
+<thead><tr><th>Method</th><th>Dana (50 %)</th><th>Emil (30 %)</th><th>Filip (20 %)</th><th>To grid</th><th>By keys</th></tr></thead>
+<tbody>
+<tr class="ref"><td>Consumption</td><td>4.00</td><td>5.00</td><td>6.00</td><td></td><td></td></tr>
+<tr><td>Static, 1 round</td><td>4.00</td><td>3.60</td><td>2.40</td><td class="loss">2.00</td><td>yes</td></tr>
+<tr><td>Static, 5 rounds</td><td>4.00</td><td>4.72</td><td>3.15</td><td class="loss">0.13</td><td>yes</td></tr>
+<tr><td>Dynamic</td><td>3.20</td><td>4.00</td><td>4.80</td><td>0.00</td><td>no</td></tr>
+<tr><td>Hybrid</td><td>4.00</td><td>4.16</td><td>3.84</td><td>0.00</td><td>in round 1</td></tr>
+<tr class="hl"><td>Exact static</td><td>4.00</td><td>4.80</td><td>3.20</td><td>0.00</td><td>yes</td></tr>
+</tbody></table></div>
+<p class="tcap">Table 4: The same production of 12 kWh divided by different rules (kWh). The first row recalls the members' consumption. The static method divides by keys, the dynamic one by consumption, the hybrid one by both. The last row is the exact static method from this article.</p>
+</aside>
+
+<h2>What next: two changes to the calculation</h2>
+<p>Electricity sharing has been running in Czechia since August 2024. A long way has been covered in a short time. A system has been built that distributes the production of tens of thousands of groups every quarter-hour. The rules are also being improved continuously. From August 2026 the EDC is gradually moving from its initial, provisional mode to full operation, which is to be completed by the end of 2027 at the latest [9]. It is a good opportunity to refine the calculation as well. Our proposal builds on the work done so far with two small changes to the description of the calculation in the decree:</p>
+<ul class="plain">
+<li><strong>The exact static method</strong> for groups with a single plant. Today's calculation is carried to the end with one formula.</li>
+<li><strong>The pool mode</strong> for groups with several plants where everyone shares with everyone. The production is added up and divided with the same formula.</li>
+</ul>
+<p>Both changes preserve the keys and the contracts. They do not change the settlement either. The result of the calculation has the same form as today: the volume of shared electricity for each plant–metering point pair in every quarter-hour. The monthly volume is the sum of the quarter-hourly ones. With a single plant only the values change, and they will be more accurate. With the pool there is in addition a different rule for how the volume of a metering point is divided among the plants. Prices and financial settlement among members are governed by their contracts, and the calculation does not interfere with them. Only the calculated volumes of shared electricity become more accurate.</p>
+<p>The changes do not depend on whether and when further sharing methods are added. We at UCEEB prepared the proposal as a basis for discussion with ERÚ and the EDC. The reference implementation is freely available [7]. So is the application <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a>. In it every group can see how the exact static method would divide its electricity.</p>
+
+<aside class="about">
+<p><strong>The University Centre for Energy Efficient Buildings of CTU in Prague (UCEEB)</strong> conducts research on the energy performance of buildings. The Control Systems and Optimization team deals with the control and optimization of energy systems. Contact: pavel.otta@cvut.cz</p>
+</aside>
+
+<section class="sources">
+<h2>Sources</h2>
+<ol>
+<li>L. Šimšová: Jak funguje komunitní sdílení elektřiny a jaké změny lze očekávat od 1. srpna letošního roku (How community electricity sharing works and what changes to expect from 1 August; in Czech). TZB-info, 29 July 2026, <a href="https://energetika.tzb-info.cz/30134-jak-funguje-komunitni-sdileni-elektriny-a-jake-zmeny-lze-ocekavat-od-1-srpna-letosniho-roku">energetika.tzb-info.cz</a>.</li>
+<li>Decree No. 408/2015 Coll., on the Rules of the Electricity Market, as amended, in particular by Decree No. 132/2026 Coll. (in Czech).</li>
+<li>Rozvoj EDC pokračuje: nový web usnadní přístup ke službám moderní energetiky (EDC development continues: a new website; in Czech). Feedit, 19 August 2026 (EDC press release), <a href="https://feedit.cz/2026/08/19/rozvoj-edc-pokracuje-novy-web-usnadni-pristup-ke-sluzbam-moderni-energetiky/">feedit.cz</a>.</li>
+<li>ERÚ usnadnil sdílení elektřiny. Další změny ale budou potřeba (ERÚ has made electricity sharing easier. More changes will be needed; in Czech). TZB-info, 13 July 2026, <a href="https://energetika.tzb-info.cz/energeticka-politika/30083-eru-usnadnil-sdileni-elektriny-dalsi-zmeny-ale-budou-potreba">energetika.tzb-info.cz</a>.</li>
+<li>B. O'Neill: A problem of rights arbitration from the Talmud. Mathematical Social Sciences 2(4), 1982.</li>
+<li>W. Thomson: Axiomatic and game-theoretic analysis of bankruptcy and taxation problems. Mathematical Social Sciences 45(3), 2003. W. Thomson: How to Divide When There Isn't Enough. Cambridge University Press, 2019.</li>
+<li>P. Otta: edc-report. Application for analysing the sharing report and reference implementation of the exact static method, application <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a>, source code <a href="https://github.com/ottapav/edc-report">github.com/ottapav/edc-report</a>.</li>
+<li>Komunitní energetika vyhlíží dynamické sdílení a chystá se na chytré řízení toků energie (Community energy looks forward to dynamic sharing; in Czech). Hospodářské noviny, 19 May 2026, <a href="https://archiv.hn.cz/c1-67878010-komunitni-energetika-vyhlizi-dynamicke-sdileni-a-chysta-se-na-chytre-rizeni-toku-energie">hn.cz</a>.</li>
+<li>Elektroenergetické datové centrum vstupuje do plného provozu. Co to přinese domácnostem? (The electricity data centre enters full operation. What will it bring to households?; in Czech). Naše střecha, 2 August 2026, <a href="https://www.nasestrecha.cz/clanky/elektroenergeticke-datove-centrum-vstupuje-do-plneho-provozu-co-to-prinese-domacnostem/">nasestrecha.cz</a>.</li>
+</ol>
+</section>
+</main>
+</body>
+</html>

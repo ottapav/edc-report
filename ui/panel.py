@@ -13,6 +13,7 @@ import jobs
 import store
 from edc_data import load_report
 from figures import heat_metrics
+import clanek
 from i18n import date_picker_format, t, tn
 
 from . import members
@@ -70,6 +71,7 @@ def _labels(lang):
         source_title=Output("lbl-source", "children"),
         producer_columns=Output("producers", "columnDefs"),
         exact_title=Output("exact-btn", "title"),
+        article_href=Output("exact-article", "href"),
         bill_title=Output("bill-btn", "title"),
     ),
     inputs=dict(lang=Input("lang", "value"), key=Input("data-key", "data")),
@@ -85,6 +87,7 @@ def _report_labels(lang, key, heat):
     return dict(
         upload=upload_content(lang, entry is not None),
         day_format=date_picker_format(lang),
+        article_href=clanek.url(lang),
         heat_options=[{"label": t(f"heat_{m}", lang), "value": m} for m in metrics],
         heat_value=heat if heat in metrics else metrics[0],
         heat_box={"display": "none"} if len(metrics) < 2 else {},   # part report: no choice

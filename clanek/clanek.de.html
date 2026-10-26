@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- German version of clanek.html; keep the structure in sync. See clanek/README.md. -->
+<title>Stromteilung bis zur letzten Kilowattstunde</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+{{STYL}}
+</style>
+</head>
+<body>
+
+
+<main>
+<header class="lead">
+  {{JAZYKY}}
+  <p class="kicker">Stromteilung · UCEEB, ČVUT Prag</p>
+  <h1>Stromteilung bis zur letzten Kilowattstunde</h1>
+  <p class="perex">Die Stromteilung ist in Tschechien rasch angelaufen, Zehntausende Gruppen haben sich angeschlossen. Die heutige Berechnung, wie viel der Erzeugung an welches Mitglied geht, ist jedoch nur näherungsweise. Nach ihrer letzten Runde kann Strom übrig bleiben, den die Mitglieder noch hätten verbrauchen können, und er fließt ins Netz. In diesem Artikel zeigen wir, wie eine exakte Berechnung aussehen würde. Schlüssel, Verträge und Abrechnung bleiben unverändert.</p>
+  <p class="byline">Ing. Pavel Otta, PhD. · Team Regelungssysteme und Optimierung, UCEEB, ČVUT Prag</p>
+</header>
+
+<aside class="inbrief" aria-label="Kurz gefasst">
+  <p class="inbrief-h">Kurz gefasst</p>
+  <ul>
+    <li><strong>Das Problem:</strong> Die heutige Berechnung des EDC verteilt die Erzeugung in Runden nach den vereinbarten Schlüsseln. Sie ist daher näherungsweise (wir nennen sie die <strong>näherungsweise statische Methode</strong>). Nach der letzten Runde kann Strom übrig bleiben, den die Mitglieder verbraucht hätten. Er geht ins Netz.</li>
+    <li><strong>Die Lösung:</strong> Dieselbe Berechnung lässt sich mit einer einzigen Formel zu Ende führen. Wir nennen sie die <strong>exakte statische Methode</strong>. Die Schlüssel gelten weiter, und niemand verliert.</li>
+    <li><strong>Der Nutzen:</strong> In der Beispielgruppe hätte die exakte Berechnung über das Jahr weitere 367 kWh geteilt, das sind 8,6 % der Erzeugung, bei gleichen Schlüsseln.</li>
+    <li><strong>Mehrere Anlagen:</strong> Für Gruppen, in denen jeder mit jedem teilt, schlagen wir den <strong>Pool-Modus</strong> vor. Er addiert die Erzeugung aller Anlagen und teilt sie mit derselben Formel auf.</li>
+  </ul>
+</aside>
+
+<h2>Wie das Teilen funktioniert</h2>
+<p>Eine Teilungsgruppe verbindet die Anlagen und Verbrauchsstellen ihrer Mitglieder. Die Anlage ist meist eine Photovoltaikanlage auf dem Dach. Der Strom fließt nicht über eine eigene Leitung, er wird nur auf dem Papier geteilt. Das tschechische Elektrizitäts-Datenzentrum (EDC) nimmt die gemessene Erzeugung und den Verbrauch in jeder Viertelstunde und berechnet, wie viel der Erzeugung an welches Mitglied geht. Für diesen Strom zahlt das Mitglied dem Lieferanten nicht den Preis der Elektrizität selbst. Die Netzentgelte fallen jedoch weiterhin an [1]. Die Regeln der Berechnung legt die Energieregulierungsbehörde (ERÚ) in der Verordnung Nr. 408/2015 Slg. über die Regeln des Strommarkts fest. Die Berechnung der Teilung ist in deren Anlage 25 beschrieben [2].</p>
+<p>Das Teilen ist seit August 2024 möglich, und das Interesse ist groß. Im August 2026 verzeichnete das EDC knapp 30.000 Teilungsgruppen, darunter 1.171 Wohnhäuser und 228 Energiegemeinschaften [3].</p>
+<dl class="glossary">
+  <div><dt>Verbrauchsstelle</dt><dd>Ein Ort mit Stromzähler, zum Beispiel eine Wohnung, ein Haus oder Geschäftsräume. Das EDC identifiziert sie über einen EANo-Code. Eine Anlage hat einen eigenen Code, EANd.</dd></div>
+  <div><dt>Allokationsschlüssel</dt><dd>Der vereinbarte Anteil eines Mitglieds an der Erzeugung, zum Beispiel 50 %. Er kann etwa dem Anteil entsprechen, den das Mitglied in die Anlage investiert hat.</dd></div>
+  <div><dt>Viertelstunde</dt><dd>Geteilt werden kann nur Strom, der in derselben Viertelstunde erzeugt und verbraucht wird. Die Berechnung läuft daher für jede Viertelstunde einzeln, 96-mal am Tag.</dd></div>
+  <div><dt>EDC</dt><dd>Das Elektrizitäts-Datenzentrum. Es führt die Teilungsgruppen und wertet aus den Messdaten aus, wie viel Strom die Mitglieder geteilt haben.</dd></div>
+</dl>
+
+<h2>Die heutige Berechnung: Runden und ein Rest, der ins Netz geht</h2>
+<p>Heute wird die statische Methode verwendet. Die Erzeugung wird nach festen Schlüsseln aufgeteilt, und die Berechnung läuft in Runden. In jeder Runde erhält ein Mitglied seinen Anteil an der noch zu verteilenden Erzeugung, aber nicht mehr, als es noch braucht. Was übrig bleibt, wird in der nächsten Runde verteilt. Die Ergebnisse werden auf Hundertstel kWh abgerundet. Das Verfahren ist leicht nachvollziehbar und leicht in einer Verordnung zu beschreiben.</p>
+<p>Wir veranschaulichen es an einem kleinen Beispiel, das uns durch den Artikel begleitet. In einer Viertelstunde erzeugt eine Anlage 12 kWh. Dana hat einen Schlüssel von 50 % und braucht 4 kWh. Emil hat einen Schlüssel von 30 % und braucht 5 kWh. Filip hat einen Schlüssel von 20 % und braucht 6 kWh. Tabelle 1 zeigt die Berechnung Runde für Runde.</p>
+<div class="tbl wide"><table>
+<thead><tr><th>Runde</th><th>Zu verteilen</th><th>Dana (50 %)</th><th>Emil (30 %)</th><th>Filip (20 %)</th><th>Übrig</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>12,00</td><td>4,00</td><td>3,60</td><td>2,40</td><td>2,00</td></tr>
+<tr><td>2</td><td>2,00</td><td>–</td><td>0,60</td><td>0,40</td><td>1,00</td></tr>
+<tr><td>3</td><td>1,00</td><td>–</td><td>0,30</td><td>0,20</td><td>0,50</td></tr>
+<tr><td>4</td><td>0,50</td><td>–</td><td>0,15</td><td>0,10</td><td>0,25</td></tr>
+<tr><td>5</td><td>0,25</td><td>–</td><td>0,07</td><td>0,05</td><td class="loss">0,13 → Netz</td></tr>
+<tr class="hl"><td>Summe</td><td></td><td>4,00</td><td>4,72</td><td>3,15</td><td></td></tr>
+</tbody></table></div>
+<p class="tcap">Tabelle 1: Die statische Methode in fünf Runden (kWh). Dana erhält alles in der ersten Runde. Emil und Filip erhalten den Rest in den folgenden Runden. Er halbiert sich in jeder Runde.</p>
+<p>Jede Runde verteilt nur einen Teil des Rests. Alles zu verteilen würde unendlich viele Runden erfordern. Seit August 2026 gilt eine Änderung der Verordnung: Für Gruppen mit bis zu 100 Verbrauchs- und Erzeugungsstellen werden fünf Runden berechnet, für größere Gruppen eine Runde [2, 4]. Wie schnell der Rest verschwindet, hängt von den Schlüsseln der Mitglieder ab, die noch etwas brauchen. Im Beispiel haben Emil und Filip zusammen 50 %, der Rest halbiert sich also in jeder Runde. Hätten sie zusammen nur 10 %, wären nach fünf Runden noch zwei Drittel des Rests aus der ersten Runde unverteilt.</p>
+<p>Die heutige Berechnung liefert also ein näherungsweises Ergebnis, das mit jeder Runde dem exakten näher kommt. Daher der Name <span class="term">näherungsweise statische Methode</span>. Das wirft die Frage auf, wo die Berechnung bei unendlich vielen Runden landen würde. Genau das beantwortet die exakte statische Methode.</p>
+
+<h2>Die exakte statische Methode: ein Pegel statt vieler Runden</h2>
+<p>Die exakte statische Methode teilt die Erzeugung nach denselben Schlüsseln wie die heutige Berechnung, nur gleich bis zum Ende. Sie ersetzt die Runden durch eine einzige Zahl, die eine Formel liefert.</p>
+
+<h3>Das Prinzip: kommunizierende Gefäße</h3>
+<p>Stellen Sie sich jedes Mitglied als Gefäß vor. Die Breite des Gefäßes entspricht seinem Schlüssel, sein Volumen dem Verbrauch. Wir gießen die Erzeugung in alle Gefäße zugleich. Die Gefäße sind verbunden, der Pegel steigt also überall gleich. Ein volles Gefäß nimmt nichts mehr auf, in den anderen steigt das Wasser weiter. Am Ende erhält jedes Mitglied so viel, wie in seinem Gefäß Wasser ist:</p>
+<div class="formula">geteilt = kleinerer Wert aus ( Verbrauch ; Schlüssel × H )</div>
+<p>Der Buchstabe H bezeichnet den gemeinsamen Pegel. Er gibt an, wie viel ein Mitglied mit einem Schlüssel von 100 % erhielte, deshalb messen wir ihn in kWh. Die Wassermenge in einem Gefäß ist Breite × Höhe. Bei einem nicht vollen Gefäß ist das Schlüssel × H, und das ist die geteilte Energie. Im Beispiel ist H = 16 kWh. Bei diesem Pegel könnte Dana bis zu 0,5 × 16 = 8 kWh erhalten. Sie braucht nur 4 kWh, also erhält sie 4 kWh. Emil erhält 0,3 × 16 = 4,8 kWh und Filip 0,2 × 16 = 3,2 kWh. Abb. 1 zeigt die ganze Situation.</p>
+<figure>
+  <div class="svgplate">{{NADOBY}}</div>
+  <figcaption><span class="fig-no">Abb. 1</span>Die Gefäße für das Beispiel aus Tabelle 1. Die Breite eines Gefäßes ist der Schlüssel, die Höhe wird in kWh je 100 % des Schlüssels gemessen. Die Zahl im Wasser ist die geteilte Energie. Danas Gefäß ist voll. Emil und Filip haben einen gemeinsamen Pegel H = 16 kWh. Sie erhalten daher genau im Verhältnis ihrer Schlüssel, also 30 : 20. Alle 12 kWh werden verteilt.</figcaption>
+</figure>
+
+<h3>Wie der Pegel berechnet wird</h3>
+<p>Den Pegel muss man nicht durch Probieren suchen. Wir sortieren die Mitglieder danach, wie schnell ihr Gefäß voll wird, und gehen sie nacheinander durch. Für jedes berechnen wir, wie hoch der Pegel wäre, wenn alle davor voll wären. Dazu genügt es, die verbleibende Erzeugung durch die Summe der Schlüssel der verbleibenden Mitglieder zu teilen. Der richtige Pegel ist der höchste der so berechneten Werte. Tabelle 2 zeigt das Vorgehen für unser Beispiel. Die genaue Formel steht im Kasten am Ende dieses Abschnitts.</p>
+<div class="tbl"><table>
+<thead><tr><th>Rang</th><th>Mitglied</th><th>Voll bei (kWh)</th><th>Berechnung</th><th>Pegel (kWh)</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Dana</td><td>4 / 0,5 = 8</td><td>12 / (0,5 + 0,3 + 0,2)</td><td>12</td></tr>
+<tr class="hl"><td>2</td><td>Emil</td><td>5 / 0,3 = 16,7</td><td>(12 − 4) / (0,3 + 0,2)</td><td>16 ← Max.</td></tr>
+<tr><td>3</td><td>Filip</td><td>6 / 0,2 = 30</td><td>(12 − 4 − 5) / 0,2</td><td>15</td></tr>
+</tbody></table></div>
+<p class="tcap">Tabelle 2: Berechnung des Pegels für das Beispiel. Die Berechnung kann beim ersten Mitglied enden, dessen Gefäß nicht voll wird. Hier ist das Emil. Sein Gefäß wäre erst bei einem Pegel von 16,7 kWh voll. Der Pegel wird in kWh je 100 % des Schlüssels angegeben.</p>
+<p>Die Schlüssel werden als Verhältnisse genommen. Sie dürfen deshalb in der Summe weniger als 100 % ergeben. Der nicht zugeteilte Anteil wird dann umverteilt, genau wie in den späteren Runden der heutigen Berechnung. Eine Gruppe, die einen Teil der Erzeugung bewusst verkaufen will, kann ihn vor der Berechnung als feste Reserve abziehen.</p>
+
+<h3>Dieselbe Methode, zu Ende gerechnet</h3>
+<p>Die exakte statische Methode führt keine neue Regel ein. Es ist die heutige statische Methode, nur zu Ende gerechnet. In der Theorie der fairen Verteilung ist sie die gut untersuchte gewichtete Regel der beschränkten gleichen Zuteilung (weighted constrained equal awards) [5, 6] (mehr dazu im Kasten unten). Jede Runde lässt sich als weitere Wasserportion vorstellen. Mitglieder mit einem noch nicht vollen Gefäß nehmen Wasser im Verhältnis ihrer Schlüssel auf. Nach jeder Runde steht das Wasser in diesen Gefäßen deshalb gleich hoch. Es steigt mit jeder Runde (Abb. 2). Über H hinaus kann es aber nicht steigen, denn dazu müsste mehr verteilt werden, als erzeugt wurde.</p>
+<figure>
+  <div class="svgplate">{{HLADINA}}</div>
+  <figcaption><span class="fig-no">Abb. 2</span>Der Pegel nach den einzelnen Runden der heutigen Berechnung: 12; 14; 15; 15,5; 15,75 … kWh. Mit jeder Runde nähert er sich H = 16 kWh. Die exakte Methode berechnet H sofort.</figcaption>
+</figure>
+<p>Die exakte Methode liefert also das Ergebnis, dem sich die heutige Berechnung mit jeder Runde annähert. Niemand verliert dadurch. Ausnahmen sind nur Viertelstunden mit sehr geringer Erzeugung. In ihnen kann die Rundung einige Hundertstel kWh zwischen den Mitgliedern verschieben.</p>
+
+<aside class="box">
+<p class="box-h">Woher die Methode kommt</p>
+<p>Einen begrenzten Haufen unter mehreren Menschen aufzuteilen ist ein Problem, so alt wie die Menschheit. Am schwierigsten ist es, wenn nicht für alle genug da ist. Damit befassen sich das Erbrecht, Insolvenzverfahren und Rationierungssysteme. Mathematiker untersuchen es als Anspruchsproblem (claims problem) [5, 6]. Ein Anspruch kann die Forderung eines Gläubigers, der Erbteil eines Erben oder, in unserem Fall, der Verbrauch eines Mitglieds sein. Es gibt viele Regeln. Die <strong>proportionale Regel</strong> teilt im Verhältnis der Ansprüche. Die <strong>Regel der beschränkten gleichen Zuteilung</strong> gibt allen gleich viel, aber niemandem mehr, als er beansprucht. Keine Regel ist die einzig richtige. Jede beantwortet die Frage, wer mehr bekommen soll, anders.</p>
+<p>Die statische Methode teilt nach den vereinbarten Schlüsseln, die exakte statische Methode ist daher die <strong>gewichtete Regel der beschränkten gleichen Zuteilung</strong>: Statt eines gleichen Anteils erhält jeder einen Anteil nach seinem Schlüssel, höchstens aber seinen Verbrauch.</p>
+</aside>
+
+<h3>Was die exakte Berechnung bringt</h3>
+<ul class="plain">
+<li><strong>Die Mitglieder teilen alles, was sie verbrauchen können,</strong> bei gleichen Schlüsseln.</li>
+<li><strong>Die Berechnung hängt weder von der Rundenzahl noch von der Gruppengröße ab.</strong> Sie ist für ein Familienhaus ebenso exakt wie für eine große Gemeinschaft.</li>
+<li><strong>Sie ist schnell.</strong> Die Neuberechnung eines ganzen Jahres der Beispielgruppe (35.040 Viertelstunden) dauerte 0,18 s. Ein Vergleich mit der heutigen Berechnung für Gruppen verschiedener Größe steht in Abb. 3 im Kasten unten.</li>
+<li><strong>Sie ist leicht nachzuprüfen.</strong> Es genügt, den Schlüssel und den Pegel H zu kennen. Jeder kann dann seinen Anteil als kleineren Wert aus Verbrauch und Schlüssel × H selbst berechnen.</li>
+</ul>
+
+<aside class="box">
+<p class="box-h">Für Neugierige und Programmierer</p>
+<p>Der Pegel als Formel. Wir nummerieren die Mitglieder danach, wie schnell ihr Gefäß voll wird, und nehmen den größten der Werte:</p>
+<div class="formula">H = max<sub>j</sub> ( P − Σ<sub>i&lt;j</sub> Verbrauch<sub>i</sub> ) / ( Σ<sub>i≥j</sub> Schlüssel<sub>i</sub> ) &nbsp;<span class="c">P = Erzeugung (kWh)</span></div>
+<p>Der Kern der exakten statischen Methode in Python. Der aufwendigste Schritt ist das Sortieren der Mitglieder, der Rest ist ein einziger Durchlauf. Für eine Gruppe mit 1.000 Verbrauchsstellen dauert die Berechnung einer Viertelstunde etwa eine halbe Millisekunde. Die vollständige Referenzimplementierung ist frei verfügbar [7]. Sie enthält Ganzzahlarithmetik, Rundung und Tests.</p>
+<pre><code>def exakte_statische(P, D, k):
+    """P Erzeugung, D Verbrauch, k Schlüssel (als Verhältnisse). Liefert die geteilten Mengen."""
+    idx = sorted(range(len(D)), key=lambda i: D[i] / k[i])   # Sortieren: O(n log n)
+    H, rest_P, rest_k = 0.0, P, sum(k)                       # ein Durchlauf: O(n)
+    for i in idx:
+        H = max(H, rest_P / rest_k)
+        if D[i] / k[i] &gt;= H:          # das nächste Mitglied wird nicht voll, der Pegel steht fest
+            break
+        rest_P -= D[i]
+        rest_k -= k[i]
+    return [min(D[i], k[i] * H) for i in range(len(D))]</code></pre>
+<figure>
+  <div class="plate"><img src="img/srovnani-vypoctu.png" alt="Diagramm: Rechenzeit und Anteil des verteilten Stroms nach Gruppengröße" width="2330" height="1018"></div>
+  <figcaption><span class="fig-no">Abb. 3</span>Links: Rechenzeit einer Viertelstunde nach Gruppengröße, rechts: Anteil des verteilten Stroms. Verglichen werden die heutige Berechnung nach den geltenden Regeln und die exakte Methode. Heute werden bis zu 100 Verbrauchs- und Erzeugungsstellen 5 Runden berechnet, darüber eine Runde. Es handelt sich um eine Simulation mit zufälligen Schlüsseln und Verbräuchen.</figcaption>
+</figure>
+</aside>
+
+<h2>Was die exakte Berechnung in einer realen Gruppe ändert</h2>
+<p>Vom Portal des EDC lässt sich ein Teilungsbericht mit Viertelstundendaten herunterladen. Jede Gruppe kann so sehen, wie das Teilen bei ihr funktioniert. Wir haben den Bericht einer Gruppe ausgewertet. Sie hat eine Photovoltaikanlage mit 11,44 kWp und einer 11,6-kWh-Batterie sowie fünf Verbrauchsstellen. Die Schlüssel betragen 50 % und viermal 10 %. Im Jahr von September 2025 bis September 2026 erzeugte die Anlage 4.275 kWh. Die Mitglieder verbrauchten 36.854 kWh.</p>
+<p>Den Bericht haben wir mit der frei verfügbaren Anwendung edc-report verarbeitet, die unter <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a> läuft [7]. Die Anwendung bildet die heutige Berechnung nach. In 99,2 % der Viertelstunden kommt sie exakt zum selben Ergebnis wie das EDC. Ihren Neuberechnungen können wir daher vertrauen.</p>
+<figure>
+  <div class="plate"><img src="img/kolac.png" alt="Kreisdiagramm: geteilt 2.235 kWh (52,3 %), hätte geteilt werden können 367 kWh (8,6 %), Überschuss 1.673 kWh (39,1 %)" width="1520" height="1120"></div>
+  <figcaption><span class="fig-no">Abb. 4</span>Wohin die Erzeugung der Gruppe über das Jahr ging. <b>Grün</b> ist der Strom, den die Mitglieder geteilt haben. <b>Rot</b> ist Strom, den die Mitglieder in derselben Viertelstunde verbraucht haben und den die exakte Berechnung ebenfalls verteilt hätte. <b>Grau</b> ist der Überschuss, den in der Gruppe niemand verbraucht hat.</figcaption>
+</figure>
+<p>Abb. 4 zeigt, wohin die Erzeugung über das ganze Jahr ging. Von der Erzeugung wurden 2.235 kWh (52,3 %) geteilt. Bei gleichen Schlüsseln hätte die exakte Berechnung weitere <strong>367 kWh verteilt, das sind 8,6 % der Erzeugung</strong>. Die übrigen 1.673 kWh (39,1 %) hätte in der Gruppe niemand verbraucht. Diesen Überschuss kann keine Methode verteilen, er geht ins Netz. Die exakte Berechnung hätte in 80 % der Viertelstunden geholfen, in denen die Anlage erzeugte. Über das Jahr hätte jedes der fünf Mitglieder gewonnen, und zwar zwischen 30 und 142 kWh. Abb. 5 zeigt, wie das an einem einzelnen Tag aussieht.</p>
+<figure>
+  <div class="pair">
+    <div class="plate"><img src="img/den_priblizna.png" alt="Teilen am 28. Juni 2026 mit der näherungsweise statischen Methode" width="1800" height="880"></div>
+    <div class="plate"><img src="img/den_presna.png" alt="Teilen am 28. Juni 2026 mit der exakten statischen Methode" width="1800" height="880"></div>
+  </div>
+  <figcaption><span class="fig-no">Abb. 5</span>Ein Tag in Viertelstunden (28. Juni 2026). Oben: die heutige Berechnung, unten: die exakte. Die farbigen Flächen zeigen den Strom, der mit den einzelnen Mitgliedern geteilt wurde. <b>Dunkelgrau</b> ist die ins Netz gelieferte Erzeugung, hellgrau der Bezug aus dem Netz. Die Anlage erzeugte an diesem Tag 30,8 kWh. Nach der heutigen Berechnung gingen 8,4 kWh ins Netz. Nach der exakten nur 3,0 kWh, die in der Gruppe niemand mehr brauchte.</figcaption>
+</figure>
+<p>Das ist eine Gruppe, andere Gruppen werden andere Zahlen haben. Der Unterschied wächst mit der Zahl der Mitglieder und mit kleineren Schlüsseln. Er betrifft daher vor allem Wohnhäuser und Energiegemeinschaften. Den Nutzen für das ganze Land ließe sich aus Daten des EDC berechnen.</p>
+<p>Jede Gruppe kann ihre eigenen Zahlen berechnen. Es genügt, den Teilungsbericht vom Portal des EDC herunterzuladen und in die Anwendung hochzuladen. Die Anwendung schätzt die Schlüssel, berechnet den ganzen Zeitraum mit der exakten statischen Methode neu und zeigt beide Methoden nebeneinander. Die hochgeladene Datei wird nirgends gespeichert.</p>
+<p class="keypoint">Probieren Sie es an Ihrer eigenen Gruppe aus. <span><a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a></span></p>
+
+<h2>Gruppen mit mehreren Anlagen: der Pool-Modus</h2>
+<p>Hat eine Gruppe mehrere Anlagen, wird für jedes Paar aus Anlage und Verbrauchsstelle ein Schlüssel festgelegt. Eine Verbrauchsstelle kann aus bis zu fünf Anlagen beziehen, und auch deren Reihenfolge spielt eine Rolle. Eine solche Einstellung ist sehr flexibel und erlaubt fast jede Anordnung. Für eine gewöhnliche Gruppe ist die Einstellung jedoch aufwendig und für die Mitglieder schwer verständlich. Außerdem wird die Aufteilung eines einzelnen Haufens zu einem Netzwerkproblem, denn die Entscheidung an einer Verbindung ändert die Möglichkeiten an den anderen. Ein einfaches Beispiel zeigt Abb. 6.</p>
+<figure>
+  <div class="svgplate">{{SIT}}</div>
+  <figcaption><span class="fig-no">Abb. 6</span>Anlage A teilt ihre 10 kWh zu je 50 % zwischen O1 und O2 auf. Anlage B darf nur mit O1 teilen. Beide Verbrauchsstellen brauchen 10 kWh.</figcaption>
+</figure>
+<p>Die statische Methode gibt O1 10 kWh, davon 5 aus A und 5 aus B. O2 erhält 5 kWh aus A. Geteilt werden 15 kWh, und 5 kWh aus Anlage B bleiben ungenutzt. Dabei ließen sich alle 20 kWh teilen: Anlage A würde alles an O2 schicken und Anlage B an O1. Eine Regel, die jede Anlage einzeln aufteilt, findet eine solche Lösung nicht. Das ist keine Schwäche einer bestimmten Methode, sondern eine Eigenschaft des Problems. Die dynamische oder hybride Methode würde genauso enden, wenn sie jede Anlage einzeln aufteilte.</p>
+
+<h3>Optimierung ist für die meisten Gruppen unnötig kompliziert</h3>
+<p>Für allgemeine Verbindungen ist Optimierung das richtige Werkzeug, zum Beispiel das Maximalflussproblem. Ein Computer bewältigt es. Es hat aber keine einfache Formel, und ein Gruppenmitglied kann das Ergebnis kaum nachprüfen. Außerdem wirft es eine weitere Frage auf. Die Optimierung stellt sicher, dass möglichst viel geteilt wird. Oft gibt es jedoch mehrere Verteilungen, die gleich viel teilen und sich darin unterscheiden, wer wie viel erhält. Zwischen ihnen muss eine weitere Regel entscheiden, und wir stehen wieder vor der Frage der Fairness.</p>
+<p>Die meisten Gruppen mit mehreren Anlagen brauchen aber nichts so Kompliziertes. Die Mitglieder wollen einfach, dass jeder mit jedem teilt. Für sie ist Optimierung ein unnötig schweres Werkzeug. Sinnvoll ist sie nur dort, wo eine Anlage nur mit einem Teil der Mitglieder teilen darf.</p>
+
+<h3>Der Pool-Modus</h3>
+<p>Wenn jeder mit jedem teilt, können wir die Erzeugung aller Anlagen auf einen Haufen schütten. Wir nennen ihn den Pool. Jedes Mitglied hat einen Schlüssel für die ganze Gruppe. Die gesamte Erzeugung wird nach der exakten statischen Methode verteilt. Das Ergebnis wird dann im Verhältnis ihrer Erzeugung auf die einzelnen Anlagen zurückgerechnet. Jede Anlage teilt so in einer gegebenen Viertelstunde denselben Anteil ihrer Erzeugung. Keine wird durch die Reihenfolge bevorzugt. Ein Beispiel zeigen Abb. 7 und Tabelle 3.</p>
+<figure>
+  <div class="svgplate">{{BAZEN}}</div>
+  <figcaption><span class="fig-no">Abb. 7</span>Anlagen A (10 kWh) und B (6 kWh), Schlüssel 50/50. O1 braucht 2 kWh, O2 20 kWh. Der Pegel beträgt 28 kWh. O1 erhält die vollen 2 kWh, O2 erhält 0,5 × 28 = 14 kWh. Alle 16 kWh werden verteilt.</figcaption>
+</figure>
+<div class="tbl"><table>
+<thead><tr><th></th><th>O1</th><th>O2</th><th>Summe</th></tr></thead>
+<tbody>
+<tr><td>Aus Anlage A (62,5 %)</td><td>1,25</td><td>8,75</td><td>10,00</td></tr>
+<tr><td>Aus Anlage B (37,5 %)</td><td>0,75</td><td>5,25</td><td>6,00</td></tr>
+<tr class="hl"><td>Summe</td><td>2,00</td><td>14,00</td><td>16,00</td></tr>
+</tbody></table></div>
+<p class="tcap">Tabelle 3: Rückrechnung des Pools auf die Anlagen (kWh).</p>
+<p>Der Pool wäre ein neuer, optionaler Modus. Er würde die heutige Einstellung nicht ersetzen, sondern neben ihr stehen. Gruppen mit besonderen Verbindungen können weiter Schlüssel nach Paaren verwenden. Für die übrigen brächte der Pool eine einfachere Einstellung mit einem Schlüssel je Mitglied. Und alles, was verbraucht werden kann, würde geteilt.</p>
+
+<aside class="box">
+<p class="box-h">Dynamische und hybride Methode</p>
+<p>Neben der statischen Methode werden zwei weitere diskutiert. Die <strong>dynamische Methode</strong> würde im Verhältnis zum momentanen Verbrauch verteilen. Es ist die proportionale Regel, bei der der Anspruch der Verbrauch ist. Wer gerade mehr verbraucht, würde mehr erhalten. Die <strong>hybride Methode</strong> würde beide Regeln verbinden. Sie würde die erste Runde nach Schlüsseln und den Rest im Verhältnis zum verbleibenden Verbrauch verteilen.</p>
+<p>Über ihre Einführung ist noch nicht entschieden. Nach Angaben des EDC wären sie frühestens ab 1. Dezember 2027 möglich. Der Gesetzesvorschlag der Gemeinschaftsenergie-Union geht vom 1. Dezember 2028 aus [8]. Die genaue Form der Berechnung wurde noch nicht veröffentlicht, daher stützen wir uns in Tabelle 4 auf die übliche Beschreibung. Welche Regel am besten geeignet ist, ist keine Frage der Mathematik. Es ist eine Frage der Vereinbarung unter den Mitgliedern und der Entscheidung des Regulierers. Die exakte statische Methode konkurriert nicht mit ihnen. Sie verfeinert die heutige statische Methode, die alle Gruppen verwenden.</p>
+<div class="tbl wide"><table>
+<thead><tr><th>Methode</th><th>Dana (50 %)</th><th>Emil (30 %)</th><th>Filip (20 %)</th><th>Ins Netz</th><th>Nach Schlüsseln</th></tr></thead>
+<tbody>
+<tr class="ref"><td>Verbrauch</td><td>4,00</td><td>5,00</td><td>6,00</td><td></td><td></td></tr>
+<tr><td>Statisch, 1 Runde</td><td>4,00</td><td>3,60</td><td>2,40</td><td class="loss">2,00</td><td>ja</td></tr>
+<tr><td>Statisch, 5 Runden</td><td>4,00</td><td>4,72</td><td>3,15</td><td class="loss">0,13</td><td>ja</td></tr>
+<tr><td>Dynamisch</td><td>3,20</td><td>4,00</td><td>4,80</td><td>0,00</td><td>nein</td></tr>
+<tr><td>Hybrid</td><td>4,00</td><td>4,16</td><td>3,84</td><td>0,00</td><td>in Runde 1</td></tr>
+<tr class="hl"><td>Exakt statisch</td><td>4,00</td><td>4,80</td><td>3,20</td><td>0,00</td><td>ja</td></tr>
+</tbody></table></div>
+<p class="tcap">Tabelle 4: Dieselbe Erzeugung von 12 kWh, nach verschiedenen Regeln aufgeteilt (kWh). Die erste Zeile erinnert an den Verbrauch der Mitglieder. Die statische Methode teilt nach Schlüsseln, die dynamische nach Verbrauch, die hybride nach beidem. Die letzte Zeile ist die exakte statische Methode aus diesem Artikel.</p>
+</aside>
+
+<h2>Wie es weitergeht: zwei Änderungen der Berechnung</h2>
+<p>Die Stromteilung läuft in Tschechien seit August 2024. In kurzer Zeit wurde ein weiter Weg zurückgelegt. Es wurde ein System aufgebaut, das die Erzeugung von Zehntausenden Gruppen jede Viertelstunde verteilt. Auch die Regeln werden laufend verbessert. Ab August 2026 geht das EDC schrittweise vom anfänglichen, provisorischen Modus in den Vollbetrieb über, der spätestens Ende 2027 abgeschlossen sein soll [9]. Das ist eine gute Gelegenheit, auch die Berechnung zu verfeinern. Unser Vorschlag knüpft mit zwei kleinen Änderungen an der Beschreibung der Berechnung in der Verordnung an die bisherige Arbeit an:</p>
+<ul class="plain">
+<li><strong>Die exakte statische Methode</strong> für Gruppen mit einer einzigen Anlage. Die heutige Berechnung wird mit einer Formel zu Ende geführt.</li>
+<li><strong>Der Pool-Modus</strong> für Gruppen mit mehreren Anlagen, in denen jeder mit jedem teilt. Die Erzeugung wird addiert und mit derselben Formel aufgeteilt.</li>
+</ul>
+<p>Beide Änderungen erhalten die Schlüssel und die Verträge. Auch die Abrechnung ändert sich nicht. Das Ergebnis der Berechnung hat dieselbe Form wie heute: das Volumen des geteilten Stroms für jedes Paar aus Anlage und Verbrauchsstelle in jeder Viertelstunde. Das Monatsvolumen ist die Summe der Viertelstundenwerte. Bei einer einzigen Anlage ändern sich nur die Werte, und sie werden genauer. Beim Pool kommt eine andere Regel hinzu, wie das Volumen einer Verbrauchsstelle auf die Anlagen aufgeteilt wird. Preise und die finanzielle Abrechnung unter den Mitgliedern richten sich nach ihren Verträgen, und die Berechnung greift nicht in sie ein. Genauer werden nur die berechneten Volumina des geteilten Stroms.</p>
+<p>Die Änderungen hängen nicht davon ab, ob und wann weitere Teilungsmethoden hinzukommen. Wir am UCEEB haben den Vorschlag als Grundlage für ein Gespräch mit der ERÚ und dem EDC vorbereitet. Die Referenzimplementierung ist frei verfügbar [7]. Ebenso die Anwendung <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a>. In ihr kann jede Gruppe sehen, wie die exakte statische Methode ihren Strom aufteilen würde.</p>
+
+<aside class="about">
+<p><strong>Das Universitätszentrum für energieeffiziente Gebäude der ČVUT Prag (UCEEB)</strong> betreibt Forschung zur Energieeffizienz von Gebäuden. Das Team Regelungssysteme und Optimierung befasst sich mit der Regelung und Optimierung von Energiesystemen. Kontakt: pavel.otta@cvut.cz</p>
+</aside>
+
+<section class="sources">
+<h2>Quellen</h2>
+<ol>
+<li>L. Šimšová: Jak funguje komunitní sdílení elektřiny a jaké změny lze očekávat od 1. srpna letošního roku (Wie die gemeinschaftliche Stromteilung funktioniert und welche Änderungen ab 1. August zu erwarten sind; auf Tschechisch). TZB-info, 29. Juli 2026, <a href="https://energetika.tzb-info.cz/30134-jak-funguje-komunitni-sdileni-elektriny-a-jake-zmeny-lze-ocekavat-od-1-srpna-letosniho-roku">energetika.tzb-info.cz</a>.</li>
+<li>Verordnung Nr. 408/2015 Slg. über die Regeln des Strommarkts in der geänderten Fassung, insbesondere durch die Verordnung Nr. 132/2026 Slg. (auf Tschechisch).</li>
+<li>Rozvoj EDC pokračuje: nový web usnadní přístup ke službám moderní energetiky (Die Entwicklung des EDC geht weiter: eine neue Website; auf Tschechisch). Feedit, 19. August 2026 (Pressemitteilung des EDC), <a href="https://feedit.cz/2026/08/19/rozvoj-edc-pokracuje-novy-web-usnadni-pristup-ke-sluzbam-moderni-energetiky/">feedit.cz</a>.</li>
+<li>ERÚ usnadnil sdílení elektřiny. Další změny ale budou potřeba (Die ERÚ hat die Stromteilung erleichtert. Weitere Änderungen werden aber nötig sein; auf Tschechisch). TZB-info, 13. Juli 2026, <a href="https://energetika.tzb-info.cz/energeticka-politika/30083-eru-usnadnil-sdileni-elektriny-dalsi-zmeny-ale-budou-potreba">energetika.tzb-info.cz</a>.</li>
+<li>B. O'Neill: A problem of rights arbitration from the Talmud. Mathematical Social Sciences 2(4), 1982.</li>
+<li>W. Thomson: Axiomatic and game-theoretic analysis of bankruptcy and taxation problems. Mathematical Social Sciences 45(3), 2003. W. Thomson: How to Divide When There Isn't Enough. Cambridge University Press, 2019.</li>
+<li>P. Otta: edc-report. Anwendung zur Analyse des Teilungsberichts und Referenzimplementierung der exakten statischen Methode, Anwendung <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a>, Quellcode <a href="https://github.com/ottapav/edc-report">github.com/ottapav/edc-report</a>.</li>
+<li>Komunitní energetika vyhlíží dynamické sdílení a chystá se na chytré řízení toků energie (Die Gemeinschaftsenergie erwartet die dynamische Teilung; auf Tschechisch). Hospodářské noviny, 19. Mai 2026, <a href="https://archiv.hn.cz/c1-67878010-komunitni-energetika-vyhlizi-dynamicke-sdileni-a-chysta-se-na-chytre-rizeni-toku-energie">hn.cz</a>.</li>
+<li>Elektroenergetické datové centrum vstupuje do plného provozu. Co to přinese domácnostem? (Das Elektrizitäts-Datenzentrum geht in den Vollbetrieb. Was bringt das den Haushalten?; auf Tschechisch). Naše střecha, 2. August 2026, <a href="https://www.nasestrecha.cz/clanky/elektroenergeticke-datove-centrum-vstupuje-do-plneho-provozu-co-to-prinese-domacnostem/">nasestrecha.cz</a>.</li>
+</ol>
+</section>
+</main>
+</body>
+</html>

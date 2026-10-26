@@ -7,10 +7,10 @@ sharing at a glance. The app also recomputes the whole period with the proposed 
 static method** (`presna_staticka.py`) and shows the result of the approximate static method (EDC's current implementation) and the exact one side by side,
 with the computation timed per 15-min interval.
 
-The interface is available in Czech, English and German (switch in the top bar; the explanatory article is Czech only).
+The interface is available in Czech, English and German (switch in the top bar; the explanatory article is available in the same three languages).
 
-**Live:** <https://edc-report.uceeb.cvut.cz/> · explanatory article (Czech):
-<https://edc-report.uceeb.cvut.cz/clanek/>
+**Live:** <https://edc-report.uceeb.cvut.cz/> · explanatory article:
+<https://edc-report.uceeb.cvut.cz/clanek/> (Czech), [`/clanek/en/`](https://edc-report.uceeb.cvut.cz/clanek/en/), [`/clanek/de/`](https://edc-report.uceeb.cvut.cz/clanek/de/)
 
 > **Česky:** Webová aplikace, která zobrazuje data o sdílení elektřiny z CSV reportu
 > vygenerovaného na portálu edc-cr.cz. Po nahrání CSV ukáže
@@ -243,11 +243,12 @@ consumed is shared while the keys hold. `recompute.py` calls `rozdel()` for ever
 interval of the report and builds a second report in the same structure, so every figure and
 table works for both.
 
-**Explanatory article (Czech).** [`clanek/`](clanek/README.md) explains the approximate and
+**Explanatory article (Czech, English, German).** [`clanek/`](clanek/README.md) explains the approximate and
 the exact static method, the pool mode for several producers and the results for one real
 group, for a broad audience (written for TZB-info, UCEEB ČVUT). The app assembles it from
-`clanek/clanek.html` and the figures in `clanek/schemata.py` on every request, serves it at
-`/clanek/` and links it from the *Exact static method* card, so an edit in the repository is
+`clanek/clanek.html`, `clanek.en.html` or `clanek.de.html` and the figures in `clanek/schemata.py` on
+every request, serves it at `/clanek/`, `/clanek/en/` and `/clanek/de/` and links the version for the
+current interface language from the *Exact static method* card, so an edit in the repository is
 what the app shows.
 
 **Timing.** The loop runs in a forked worker process: it gets a whole core, and the web
