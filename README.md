@@ -19,6 +19,7 @@ The interface is available in Czech, English and German (switch in the top bar; 
 > Jedním tlačítkem přepočítá sdílení přesnou statickou metodou a porovná ji s dneškem.
 > Dalším tlačítkem spočítá vyúčtování sdílené elektřiny podle přínosu (Shapleyho hodnota)
 > (zadáte ceny od prodejce a výkupní ceny výroben).
+> Souhrn lze stáhnout jako Excel nebo vytisknout do PDF.
 > Rozhraní je v češtině i angličtině, se světlým i tmavým režimem.
 
 ![Report of one group, light mode](docs/screenshot-light.png)
@@ -118,6 +119,20 @@ The interface is available in Czech, English and German (switch in the top bar; 
   effective price per kWh; per producer the energy it shared, its income, its share and the
   feed-in value it gave up.
 
+**Export:**
+
+* **Summary as Excel** (*Download summary* in the panel): one `.xlsx` with the numbers of the
+  page for the current selection (ticked members, names, language), as numbers rather than
+  text. Sheets: *Summary* (facts, energy tiles, next to the exact method once recomputed;
+  sharing error, keys and reserve; billing totals; key estimate), *Destinations* (the
+  per-destination table), *Comparison* (after the recompute), *Billing* (after the
+  billing) and *Daily* (kWh per day, for your own plots).
+* EANs are shortened to their last three digits as on the page; *Full EANs in the export*
+  writes them whole.
+* **Print / PDF** prints the report (to paper or PDF via the browser) without the panel and
+  the buttons, one column per page width. A dark page is printed in the light theme and
+  switched back afterwards.
+
 **Interface:**
 
 * EANs are shown by their last three digits only (anonymity, room in the panel).
@@ -167,6 +182,8 @@ gunicorn app:server -c gunicorn.conf.py        # listens on $PORT (default 8050)
    * click a day in either daily plot, or use ◀ ▶, to see it in 15-min steps;
    * untick members to see the rest of the group;
    * switch the heatmap between total production and total consumption.
+6. **Export** the summary to Excel, or print the report to PDF (the *Export* section of the
+   panel).
 
 ![Daily plot with the selected day, the hourly plot and the heatmap](docs/screenshot-hourly.png)
 
@@ -354,6 +371,7 @@ callbacks from both.
 | | `recompute.py` | Exact static recompute (the `rozdel()` loop in a child process), timing, sharing error |
 | | `billing.py` | Shapley values of the billing (exact, price layers), the settlement in Kč, values per 15 min |
 | | `procjob.py` | Runs a function in a forked child with progress, cancellation and a time limit |
+| | `export.py` | The summary as an Excel workbook (openpyxl): tables of numbers from the same sources as the page |
 | | `figures/` | Plotly figures: `base.py` themes, member colours and the shared chart shapes (stacked bars, pie, stacked areas by day and within a day, heatmap, pairing of the two columns); `energy.py` the report in kWh; `money.py` the billing in Kč |
 | | `i18n.py`, `i18n_de.py` | CZ/EN/DE strings, number and date formatting |
 | Server state | `config.py` | Settings from environment variables |
@@ -365,6 +383,7 @@ callbacks from both.
 | | `ui/panel.py` | Callbacks: labels (one table of id, property and string), theme, upload, grid buttons |
 | | `ui/compute.py` | Callbacks of the computation cards: start, one shared progress poll, results |
 | | `ui/report.py` | Callbacks of the report: the two columns, the hourly plot, the selected day |
+| | `ui/export.py` | Callbacks of the export: the workbook download, printing |
 | App | `app.py` | Creates the Dash app, `/healthz`, optional basic auth |
 | | `assets/style.css` | Styles, light/dark variables (Dash loads it automatically) |
 | | `gunicorn.conf.py`, `render.yaml`, `.python-version` | Deployment |

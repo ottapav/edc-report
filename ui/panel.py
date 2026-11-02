@@ -41,6 +41,10 @@ LABELS = [
     ("lbl-heat-metric", "children", "heat_metric"),
     ("lbl-group", "children", "panel_group"),
     ("group", "placeholder", "panel_group_ph"),
+    ("lbl-export", "children", "x_title"),
+    ("btn-export", "children", "x_btn"),
+    ("btn-print", "children", "x_print"),
+    ("lbl-export-hint", "children", "x_hint"),
     # computation cards
     ("exact-title", "children", "recompute_title"),
     ("exact-desc", "children", "recompute_desc"),
