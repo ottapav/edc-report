@@ -133,10 +133,29 @@ def test_exact_billing_and_fit_add_their_sheets(entry_key):
     entry.fit = entry.exact = entry.bill = None
 
 
-def test_download_callback(entry_key):
+def test_download_is_a_link_with_the_name_and_extension(entry_key):
+    """The workbook is served as an attachment under its name (a blob download lost the
+    name and the extension on Safari and on phones)."""
+    import app
     key, _ = entry_key
     data = store.get(key).data
-    out = ui_export.summary_file(key, None, [], [], "de", " Gruppe 7 ", ["full"])
-    assert out["filename"] == export.file_name(data, "de", "Gruppe 7")
-    assert out["filename"].startswith("edc-zusammenfassung-Gruppe-7-2026-06-01_")
-    assert out["base64"] and ui_export.summary_file("gone", None, [], [], "cs", "", []) is None
+    url = ui_export.summary_file(key, None, [], [], "de", " Gruppe 7 ", ["full"])
+    name = export.file_name(data, "de", "Gruppe 7")
+    assert name.startswith("edc-zusammenfassung-Gruppe-7-2026-06-01_") and name.endswith(".xlsx")
+    assert url.startswith("/export/") and url.endswith("/" + name)
+    client = app.server.test_client()
+    for _ in range(2):                          # some browsers fetch a download twice
+        r = client.get(url)
+        assert r.status_code == 200 and r.mimetype == export.XLSX_MIME
+        assert f'filename={name}' in r.headers["Content-Disposition"]
+        assert r.headers["Content-Disposition"].startswith("attachment")
+        assert load_workbook(io.BytesIO(r.data)).sheetnames[0] == t("x_sheet_summary", "de")
+    assert client.get("/export/nope/x.xlsx").status_code == 404
+    assert ui_export.summary_file("gone", None, [], [], "cs", "", []) is None
+
+
+def test_prepared_files_expire_and_are_bounded(monkeypatch):
+    tokens = [store.put_file(f"{i}.xlsx", b"x") for i in range(store.FILE_MAX + 5)]
+    assert store.get_file(tokens[0]) is None and store.get_file(tokens[-1]).name.endswith(".xlsx")
+    monkeypatch.setattr(store, "FILE_TTL_S", -1)
+    assert store.get_file(tokens[-1]) is None

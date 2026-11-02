@@ -19,12 +19,14 @@ from __future__ import annotations
 
 import argparse
 import hmac
+import io
 
 import dash
-from flask import Response, request, send_from_directory
+from flask import Response, request, send_file, send_from_directory
 
 import clanek
 import config
+import export
 import jobs
 import store
 import ui.compute
@@ -55,6 +57,18 @@ def _article(lang: str):
 @server.route("/clanek/<any(en,de):lang>/img/<path:name>")
 def _article_img(lang: str, name: str):
     return send_from_directory(clanek.img_dir(lang), name)
+
+
+@server.route("/export/<token>/<path:name>")
+def _export_file(token: str, name: str):
+    """A summary prepared by the export button (:func:`store.put_file`), as an attachment
+    under its own name, so the browser keeps the .xlsx extension."""
+    f = store.get_file(token)
+    if f is None:
+        return Response("Export expired, please download it again.", 404,
+                        mimetype="text/plain")
+    return send_file(io.BytesIO(f.content), mimetype=export.XLSX_MIME, as_attachment=True,
+                     download_name=f.name, max_age=0)
 
 
 @server.route("/healthz")

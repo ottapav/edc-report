@@ -147,7 +147,7 @@ def _panel() -> html.Aside:
             dcc.Checklist(id="export-full-ean", options=[{"label": "", "value": "full"}],
                           value=[], className="checks"),
             html.P(id="lbl-export-hint", className="hint"),
-            dcc.Download(id="export-download"),
+            dcc.Store(id="export-url"),
         ]),
     ])
 

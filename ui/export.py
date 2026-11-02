@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import dash
-from dash import Input, Output, State, callback, clientside_callback, dcc
+from dash import Input, Output, State, callback, clientside_callback
 
 import export
 import store
@@ -18,9 +20,9 @@ def _full_ean_label(lang):
     return [{"label": t("x_full_ean", lang), "value": "full"}]
 
 
-def summary_file(key, selected, rows, src_rows, lang, group, full_ean) -> dict | None:
-    """The workbook of the report ``key`` for this selection, as ``dcc.Download`` data
-    (None when the report is gone)."""
+def summary_file(key, selected, rows, src_rows, lang, group, full_ean) -> str | None:
+    """Prepare the workbook of the report ``key`` for this selection; return the link to
+    download it (None when the report is gone)."""
     entry = store.get(key)
     if entry is None:
         return None
@@ -29,11 +31,12 @@ def summary_file(key, selected, rows, src_rows, lang, group, full_ean) -> dict |
     content = export.summary_xlsx(
         entry, members.enabled(data, selected), members.names(data, lang, src_rows, rows),
         lang, group=group, full_ean="full" in (full_ean or []))
-    return dcc.send_bytes(content, export.file_name(data, lang, group))
+    name = export.file_name(data, lang, group)
+    return f"/export/{store.put_file(name, content)}/{quote(name)}"
 
 
 @callback(
-    Output("export-download", "data"),
+    Output("export-url", "data"),
     Input("btn-export", "n_clicks"),
     State("data-key", "data"),
     State("members", "selectedRows"),
@@ -45,10 +48,33 @@ def summary_file(key, selected, rows, src_rows, lang, group, full_ean) -> dict |
     prevent_initial_call=True,
 )
 def download_summary(n, key, selected, rows, src_rows, lang, group, full_ean):
-    out = summary_file(key, selected, rows, src_rows, lang, group, full_ean) if n else None
-    if out is None:
+    url = summary_file(key, selected, rows, src_rows, lang, group, full_ean) if n else None
+    if url is None:
         raise dash.exceptions.PreventUpdate
-    return out
+    return url
+
+
+# The download itself is an ordinary link to the file on the server (Content-Disposition:
+# attachment, the xlsx MIME type), so the browser saves it under its name with the
+# extension. A blob saved from script lost the name on Safari and on phones.
+clientside_callback(
+    """
+    function(url) {
+        if (url) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = decodeURIComponent(url.split('/').pop());
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("btn-export", "title"),
+    Input("export-url", "data"),
+    prevent_initial_call=True,
+)
 
 
 # Print: the figures are drawn for the current theme, and a dark page prints badly (light

@@ -36,6 +36,8 @@ from edc_data import (
 from i18n import t, tn
 from recompute import grid_loss
 
+#: MIME type of the workbook
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 #: Excel number formats (Excel shows them with the reader's own separators)
 KWH, PCT, KC, KW, INT = "#,##0.00", "0.0", "#,##0.00", "#,##0.00", "#,##0"
 _HEAD_FILL = PatternFill("solid", fgColor="E8EEE8")
