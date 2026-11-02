@@ -138,6 +138,17 @@ def _panel() -> html.Aside:
             html.H3(id="lbl-group"),
             dcc.Input(id="group", type="text", debounce=True, className="text-in"),
         ]),
+        html.Section(className="panel-section export-section", children=[
+            html.H3(id="lbl-export"),
+            html.Div(className="export-row", children=[
+                html.Button(id="btn-export", n_clicks=0, className="btn-primary"),
+                html.Button(id="btn-print", n_clicks=0, className="mini"),
+            ]),
+            dcc.Checklist(id="export-full-ean", options=[{"label": "", "value": "full"}],
+                          value=[], className="checks"),
+            html.P(id="lbl-export-hint", className="hint"),
+            dcc.Download(id="export-download"),
+        ]),
     ])
 
 

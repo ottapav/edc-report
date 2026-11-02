@@ -28,12 +28,13 @@ import config
 import jobs
 import store
 import ui.compute
+import ui.export
 import ui.panel
 import ui.report
 from ui.layout import INDEX_STRING, layout
 
 #: importing a ui module registers its callbacks (``dash.callback``)
-CALLBACK_MODULES = (ui.panel, ui.compute, ui.report)
+CALLBACK_MODULES = (ui.panel, ui.compute, ui.report, ui.export)
 
 app = dash.Dash(__name__, title="EDC sharing report", suppress_callback_exceptions=True)
 server = app.server  # for gunicorn: gunicorn app:server -c gunicorn.conf.py

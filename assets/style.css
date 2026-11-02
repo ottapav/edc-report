@@ -257,11 +257,26 @@ body {
 }
 
 @media print {
+  @page { size: A4; margin: 12mm; }
   body { background: #fff; }
-  .upload, .status, .panel, .modebar-container { display: none !important; }
+  .upload, .status, .panel, .modebar-container, .lang, .rc-row, .progress,
+  .right-view, .article-link { display: none !important; }
+  .page { padding: 0; }
   .report { display: block; }
-  .card { break-inside: avoid; border: 0; padding: 0 0 12px; }
+  .card { break-inside: avoid; border: 0; padding: 0 0 12px; box-shadow: none; }
+  /* one column on paper: the figures get the page width */
+  .compare.dual, .compare.single .col-a { display: block; }
+  .compare.dual .col { display: block; }
+  .js-plotly-plot, .js-plotly-plot .plot-container, .js-plotly-plot .svg-container {
+    max-width: 100% !important; }
+  .table-wrap { overflow: visible; }
+  .tbl { font-size: 10px; }
 }
+
+/* ---- export (panel) ---------------------------------------------------- */
+.export-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; }
+.checks label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.checks input { accent-color: var(--accent); margin: 0; }
 
 /* ---- inputs follow the theme ---------------------------------------- */
 input, .text-in, .num-in { background: var(--field); color: var(--ink); }
