@@ -100,6 +100,15 @@ def _grid(id_: str, columns: list, options: dict, **kw) -> dag.AgGrid:
         dashGridOptions=options, className="members-grid", style={"height": None}, **kw)
 
 
+def _pair_box() -> html.Div:
+    """Several producers: the key of every pair producer -> member, as set in EDC."""
+    return html.Div(id="pair-box", className="pair-box", style={"display": "none"}, children=[
+        html.H3(id="pair-title", className="sub-title"),
+        html.P(id="pair-hint", className="hint"),
+        _grid("pair-keys", [], members.pair_options()),
+    ])
+
+
 def _panel() -> html.Aside:
     return html.Aside(className="panel", children=[
         html.Section(className="panel-section", children=[
@@ -185,7 +194,7 @@ def _report() -> html.Div:
             html.Section(className="card", children=[
                 html.H2(id="info-title"), html.Div(id="info"), html.Div(id="notes")]),
             job_card("exact", [_number_input("reserve", "lbl-reserve", value="0")],
-                     [html.Div(id="exact-pool"), html.Div(id="fit-info"),
+                     [html.Div(id="exact-pool"), _pair_box(), html.Div(id="fit-info"),
                       html.Div(id="exact-stale"),
                       html.Div(id="exact-result")], link=ARTICLE_URL),
             job_card("bill", [_number_input("feed-in", "lbl-feed-in"),

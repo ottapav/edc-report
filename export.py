@@ -257,6 +257,47 @@ def bill_totals_table(entry, enabled: set[str], lang: str) -> Table:
                  [None, None, None], title=t("col_bill", lang))
 
 
+def pool_of(data: SharingData, K) -> list[float]:
+    """The pool's key of every member over the period: its pair keys weighted by each
+    producer's production (as the members' key column in the panel)."""
+    energy = [float(data.productions[e].clip(lower=0).sum()) if e in data.productions else 0.0
+              for e in data.source_eans]
+    total = sum(energy) or 1.0
+    return [sum(K[i][j] * w for i, w in enumerate(energy)) / total
+            for j in range(len(data.dest_eans))]
+
+
+def pair_table(entry, names: dict, lang: str, full_ean: bool, typed=None) -> Table:
+    """Several producers: the key of every pair producer -> member and the pool's key
+    over the period, as in the grid of the exact method's card: ``typed`` (np × n, the
+    grid with its empty cells filled by the estimate), else the keys of the recompute,
+    else the estimate."""
+    data = entry.data
+    exact = entry.exact
+    fit = entry.fit
+    if typed is not None and all(k is not None for row in typed for k in row):
+        K = typed
+    elif exact is not None and exact.pair_keys:
+        K = exact.pair_keys
+    else:
+        K = fit.pair_keys
+    pool = pool_of(data, K)
+    est = getattr(fit, "pair_keys", None)
+    estimated = bool(est) and all(abs(k - e) <= 1e-9 for row, erow in zip(K, est)
+                                  for k, e in zip(row, erow))
+    head = [t("col_name", lang), t("col_ean", lang),
+            *(f"{names.get(e, e)} {ean_label(e, full_ean)} [%]" for e in data.source_eans),
+            t("x_pool_key", lang)]
+    rows = [[names.get(e, e), ean_label(e, full_ean),
+             *(100 * float(K[i][j]) for i in range(len(data.source_eans))),
+             100 * float(pool[j])] for j, e in enumerate(data.dest_eans)]
+    rows.append(["Σ", None, *(100 * float(sum(K[i])) for i in range(len(data.source_eans))),
+                 100 * float(sum(pool))])
+    source = t("keys_est" if estimated else "keys_user", lang)
+    return Table(head, rows, [None, None] + ["0.00"] * (len(data.source_eans) + 1),
+                 title=f"{t('x_pair_source', lang)}: {source}", bold={len(rows) - 1})
+
+
 def fit_table(entry, lang: str) -> Table:
     fit = entry.fit
     rows = [[t("x_rounds", lang), fit.rounds, None],
@@ -411,7 +452,7 @@ def daily_table(entry, enabled: set[str], lang: str) -> Table:
 
 
 def sheets(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
-           full_ean: bool = False) -> list[Sheet]:
+           full_ean: bool = False, pair_keys=None) -> list[Sheet]:
     """The sheets of the export for this report and selection (what has been computed
     decides which ones there are)."""
     data = entry.data
@@ -429,6 +470,11 @@ def sheets(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
     if entry.exact is not None:
         out.append(Sheet(t("x_sheet_compare", lang),
                          [compare_table(entry, enabled, names, lang, full_ean)]))
+    has_pairs = ((entry.exact is not None and entry.exact.pair_keys)
+                 or (entry.fit is not None and entry.fit.pair_keys))
+    if has_pairs:
+        out.append(Sheet(t("x_sheet_pairs", lang),
+                         [pair_table(entry, names, lang, full_ean, pair_keys)]))
     if entry.bill is not None:
         out.append(Sheet(t("x_sheet_bill", lang),
                          [bill_table(entry, enabled, names, lang, full_ean)]))
@@ -483,11 +529,13 @@ def _write(ws, tables: list[Table]) -> None:
 
 
 def summary_xlsx(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
-                 full_ean: bool = False) -> bytes:
-    """The export of one report as the bytes of an .xlsx file."""
+                 full_ean: bool = False, pair_keys=None) -> bytes:
+    """The export of one report as the bytes of an .xlsx file; ``pair_keys`` are the
+    keys per producer as in the page's grid (several producers)."""
     wb = Workbook()
     wb.remove(wb.active)
-    for sh in sheets(entry, enabled, names, lang, group=group, full_ean=full_ean):
+    for sh in sheets(entry, enabled, names, lang, group=group, full_ean=full_ean,
+                     pair_keys=pair_keys):
         _write(wb.create_sheet(_sheet_title(sh.name)), sh.tables)
     wb.properties.title = t("report_title", lang)
     wb.properties.creator = "EDC sharing report"

@@ -20,8 +20,8 @@ from i18n import LANGS, decimal_char, t
 from .widgets import tail
 
 
-#: the grids that hold names and prices
-GRIDS = ("producers", "members")
+#: the grids that hold names, keys and prices
+GRIDS = ("producers", "members", "pair-keys")
 
 
 def default_names(data: SharingData, lang: str) -> dict[str, str]:
@@ -86,6 +86,91 @@ def key_problem(typed: list[float | None], fit) -> str | None:
     if len(keys) == len(typed) and not any(k > 0 for k in keys):
         return "keys_all_zero"
     return None
+
+
+# ---------------------------------------------------------------------------
+# Several producers: the keys of the pairs producer -> member (the "pair-keys" grid)
+# ---------------------------------------------------------------------------
+
+
+def pair_field(i: int) -> str:
+    """Column of producer ``i`` in the pair-keys grid."""
+    return f"k{i}"
+
+
+def pair_keys(data: SharingData, rows: list[dict] | None) -> list[list[float | None]]:
+    """The pair-keys grid (percent) -> fractions, np × n in report order; None = not set."""
+    by_ean = {r.get("ean"): r for r in rows or []}
+    out = []
+    for i in range(len(data.source_eans)):
+        row = []
+        for e in data.dest_eans:
+            v = number((by_ean.get(e) or {}).get(pair_field(i)))
+            row.append(None if v is None else v / 100)
+        out.append(row)
+    return out
+
+
+def merged_pair_keys(typed: list[list[float | None]], fit) -> list[list[float | None]]:
+    """Typed pair keys, empty cells filled with the estimate (None while there is none)."""
+    est = getattr(fit, "pair_keys", None) if fit is not None else None
+    return [[k if k is not None else (est[i][j] if est is not None else None)
+             for j, k in enumerate(row)] for i, row in enumerate(typed)]
+
+
+def pair_problem(typed: list[list[float | None]], fit) -> str | None:
+    """i18n key of what is wrong with the pair keys (negative, a producer over 100 %,
+    all zero), or None; empty cells count with their estimate."""
+    merged = merged_pair_keys(typed, fit)
+    flat = [k for row in merged for k in row if k is not None]
+    if any(k < 0 for k in flat):
+        return "keys_negative"
+    if any(sum(k for k in row if k is not None) > 1 + 1e-9 for row in merged):
+        return "pair_sum_over"
+    if len(flat) == sum(len(r) for r in merged) and not any(k > 0 for k in flat):
+        return "keys_all_zero"
+    return None
+
+
+def pool_keys(data: SharingData, merged: list[list[float | None]]) -> list[float | None]:
+    """The pool's key of every member over the period: its pair keys weighted by each
+    producer's production (None where a pair key is missing)."""
+    energy = [float(data.productions[e].clip(lower=0).sum()) if e in data.productions else 0.0
+              for e in data.source_eans]
+    total = sum(energy) or 1.0
+    out = []
+    for j in range(len(data.dest_eans)):
+        col = [merged[i][j] for i in range(len(data.source_eans))]
+        out.append(None if any(k is None for k in col)
+                   else sum(k * w for k, w in zip(col, energy)) / total)
+    return out
+
+
+def pair_columns(data: SharingData, lang: str, names: dict) -> list[dict]:
+    """Pair-keys grid: member name and EAN, then one key column per producer (header:
+    its name and EAN), in report order = priority."""
+    return [
+        {"field": "name", "headerName": t("col_name", lang), "editable": False, "flex": 1,
+         "minWidth": 110, "cellStyle": {"function": "({borderLeft: '6px solid ' + params.data.colour})"}},
+        _TAIL_COLUMN,
+        *[_number_column(pair_field(i), f"{names.get(e, e)} {tail(e)}", True, 96, lang,
+                         negative=True, wrapHeaderText=True, autoHeaderHeight=True,
+                         cellClassRules={"key-bad": "params.value != null && params.value < 0"})
+          for i, e in enumerate(data.source_eans)],
+    ]
+
+
+def pair_rows(data: SharingData, names: dict) -> list[dict]:
+    cmap = colour_map(data, top_dests(data.frame, data))
+    return [{"ean": e, "tail": tail(e), "name": names.get(e, e), "colour": cmap[e],
+             **{pair_field(i): None for i in range(len(data.source_eans))}}
+            for e in data.dest_eans]
+
+
+def pair_options() -> dict:
+    return {"singleClickEdit": True, "stopEditingWhenCellsLoseFocus": True,
+            "rowHeight": 32, "headerHeight": 34, "domLayout": "autoHeight",
+            "suppressHorizontalScroll": False}
 
 
 def prices(data: SharingData, rows: list[dict] | None, default) -> list[float | None]:
@@ -173,16 +258,22 @@ def _number_column(field: str, header: str, editable: bool, width: int, lang: st
             **extra}
 
 
-def columns(lang: str, editable: bool) -> list[dict]:
+def columns(lang: str, editable: bool, pool: bool = False) -> list[dict]:
     """Grid columns; formatters depend on the language (decimal comma, default names).
-    Keys and prices are editable only for an all report."""
+    Keys and prices are editable only for an all report. With several producers
+    (``pool``) the key column shows the pool's key, made of the keys per producer
+    (typed in their own grid), and cannot be edited here."""
+    key = (_number_column("key", t("key_pool_col", lang), False, 64, lang, negative=True,
+                          headerTooltip=t("key_pool_tip", lang))
+           if pool else
+           _number_column("key", t("keys", lang), editable, 64, lang, negative=True,
+                          tooltipField="range",
+                          cellClassRules={"key-warn": "params.data.warn",
+                                          "key-bad": "params.value != null && params.value < 0"}))
     return [
         _name_column(lang),
         _TAIL_COLUMN,
-        _number_column("key", t("keys", lang), editable, 64, lang, negative=True,
-                       tooltipField="range",
-                       cellClassRules={"key-warn": "params.data.warn",
-                                       "key-bad": "params.value != null && params.value < 0"}),
+        key,
         _number_column("price", t("price_col", lang), editable, 58, lang,
                        headerTooltip=t("price_col_tip", lang)),
     ]
