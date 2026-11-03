@@ -33,7 +33,7 @@ from edc_data import (
     KEY_OTHERS, SharingData, Summary, aggregate_grid_flows, exact_gain, filter_dests,
     per_destination, summarize, with_overlap,
 )
-from i18n import t, tn
+from i18n import method_title, t, tn
 from recompute import grid_loss
 
 #: MIME type of the workbook
@@ -158,14 +158,15 @@ def _method_columns(entry, lang: str) -> list[tuple[str, SharingData, SharingDat
     with them. The page shows the report next to the billing and the replay next to the
     exact method (:func:`ui.report._left_sides`), so the export has both."""
     data, exact = entry.data, entry.exact
+    n = len(data.source_eans)
+    report, replay, exact_t = (method_title(k, n, lang)
+                               for k in ("col_edc", "col_edc_replay", "col_exact"))
     if exact is None:
-        return [(t("col_edc", lang), data, None)]
+        return [(report, data, None)]
     if exact.approx is None:
-        return [(t("col_edc", lang), data, exact.data),
-                (t("col_exact", lang), exact.data, exact.data)]
-    return [(t("col_edc", lang), data, None),
-            (t("col_edc_replay", lang), exact.approx, exact.data),
-            (t("col_exact", lang), exact.data, exact.data)]
+        return [(report, data, exact.data), (exact_t, exact.data, exact.data)]
+    return [(report, data, None), (replay, exact.approx, exact.data),
+            (exact_t, exact.data, exact.data)]
 
 
 def energy_table(entry, enabled: set[str], lang: str) -> Table:
@@ -230,6 +231,8 @@ def exact_table(entry, enabled: set[str], names: dict, lang: str) -> Table:
         [t("x_keys_sum", lang), float(100 * sum(exact.keys)), "%"],
         [t("reserve", lang), float(100 * exact.reserve), "%"],
     ]
+    if exact.pool:
+        rows.append([t("x_pool", lang), exact.pool, None])
     return Table([t("x_item", lang), t("x_value", lang), t("x_unit", lang)], rows,
                  [None, None, None], title=t("loss_title", lang))
 
@@ -258,6 +261,9 @@ def fit_table(entry, lang: str) -> Table:
     fit = entry.fit
     rows = [[t("x_rounds", lang), fit.rounds, None],
             [t("x_fit_match", lang), float(100 * fit.match), "%"]]
+    n = len(entry.data.source_eans)
+    if n > 1:
+        rows.append([t("x_pool", lang), n, None])
     return Table([t("x_item", lang), t("x_value", lang), t("x_unit", lang)], rows,
                  [None, None, None], title=t("fit_title", lang))
 

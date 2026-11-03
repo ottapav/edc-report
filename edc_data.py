@@ -104,6 +104,17 @@ KEY_OTHERS = "others|shared"
 POOL = "pool"
 
 
+def shared_source(data: "SharingData") -> str:
+    """Source of the shared columns: the producer, or :data:`POOL` with several producers
+    (the report does not say which producer supplied which member)."""
+    return data.source_eans[0] if len(data.source_eans) == 1 else POOL
+
+
+def is_pool(data: "SharingData") -> bool:
+    """Several producers, shared as one pool."""
+    return len(data.source_eans) > 1
+
+
 def key_kind(key: str) -> str:
     """Return ``shared`` / ``unmet`` / ``unshared`` / ``others``."""
     return key.split("|", 1)[0]
@@ -187,7 +198,8 @@ def _detect_format(columns: list[str]) -> str:
     )
 
 
-def _attach_datetime_index(df: pd.DataFrame) -> pd.DataFrame:
+def _attach_datetime_index(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """The rows indexed by their start time, sorted; and notes about dropped rows."""
     if "Datum" not in df.columns or "Cas od" not in df.columns:
         raise ValueError("CSV is missing the 'Datum' / 'Cas od' columns.")
     out = df.copy()
@@ -195,7 +207,34 @@ def _attach_datetime_index(df: pd.DataFrame) -> pd.DataFrame:
         out["Datum"].astype(str).str.strip() + " " + out["Cas od"].astype(str).str.strip(),
         format="%d.%m.%Y %H:%M",
     )
-    return out.set_index("datetime").sort_index()
+    return _drop_detached(out.set_index("datetime").sort_index())
+
+
+#: rows separated from the rest by a longer gap form a block of their own
+DETACHED_GAP = pd.Timedelta(days=1)
+#: a block shorter than this, away from the report's period, is dropped (a stray day
+#: pasted from another report would stretch the period and every daily plot)
+DETACHED_MAX_ROWS = 96
+
+
+def _drop_detached(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """Drop short blocks of rows that are more than a day away from the report's main
+    period (e.g. a few rows of another month appended to the file), with a note."""
+    if len(df) < 2:
+        return df, []
+    block = (df.index.to_series().diff() > DETACHED_GAP).cumsum().to_numpy()
+    sizes = np.bincount(block)
+    if len(sizes) == 1:
+        return df, []
+    main = int(sizes.argmax())
+    drop = (block != main) & (sizes[block] < DETACHED_MAX_ROWS)
+    if not drop.any():
+        return df, []
+    gone = df.index[drop]
+    days = sorted({ts.strftime("%d.%m.%Y") for ts in gone})
+    note = (f"{int(drop.sum())} rows outside the report's period were left out "
+            f"({', '.join(days)}): they are more than a day away from the other rows.")
+    return df[~drop], [note]
 
 
 def _first_valid(s: pd.Series) -> pd.Timestamp | None:
@@ -204,7 +243,7 @@ def _first_valid(s: pd.Series) -> pd.Timestamp | None:
 
 
 def _load_part(df: pd.DataFrame) -> SharingData:
-    df = _attach_datetime_index(df)
+    df, dropped = _attach_datetime_index(df)
     pairs = [(c, *_RE_PAIR.match(c).groups()) for c in df.columns if _RE_PAIR.match(c)]
     out: dict[str, pd.Series] = {}
     sources: list[str] = []
@@ -226,13 +265,13 @@ def _load_part(df: pd.DataFrame) -> SharingData:
     return SharingData(
         frame=frame, fmt="part", source_eans=sources, dest_eans=dests,
         coverage=coverage, first_data=first, n_rows=len(frame),
-        notes=["Part report: production, grid export and unmet demand are not "
-               "available, so only shared energy is shown."],
+        notes=dropped + ["Part report: production, grid export and unmet demand are not "
+                         "available, so only shared energy is shown."],
     )
 
 
 def _load_all(df: pd.DataFrame) -> SharingData:
-    df = _attach_datetime_index(df)
+    df, dropped = _attach_datetime_index(df)
     cols = [str(c) for c in df.columns]
     prods: list[str] = []                          # file order
     for c in cols:
@@ -257,7 +296,7 @@ def _load_all(df: pd.DataFrame) -> SharingData:
     demand: dict[str, pd.Series] = {}
     coverage: dict[str, float] = {}
     first: dict[str, pd.Timestamp | None] = {}
-    notes: list[str] = []
+    notes: list[str] = list(dropped)
     for ean in dests:
         c_in, c_out = df[cons_in[ean]], df[cons_out[ean]]
         shared = (c_out - c_in).fillna(0).clip(lower=0)
@@ -298,7 +337,9 @@ def _load_all(df: pd.DataFrame) -> SharingData:
             )
     if len(prods) > 1:
         notes.append(f"{len(prods)} producers: the report does not say which producer "
-                     "supplied which member, so the shared energy is shown as one pool.")
+                     "supplied which member, so the shared energy is shown as one pool; the "
+                     "key estimate and the exact method share their production as one pool "
+                     "too.")
 
     return SharingData(
         frame=frame, fmt="all", source_eans=prods, dest_eans=dests,

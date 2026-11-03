@@ -75,6 +75,7 @@ def _labels(lang):
         source_title=Output("lbl-source", "children"),
         producer_columns=Output("producers", "columnDefs"),
         exact_title=Output("exact-btn", "title"),
+        exact_pool=Output("exact-pool", "children"),
         article_href=Output("exact-article", "href"),
         bill_title=Output("bill-btn", "title"),
     ),
@@ -98,8 +99,10 @@ def _report_labels(lang, key, heat):
         columns=members.columns(lang, editable=not part),
         source_title=tn("panel_source", lang, len(data.source_eans) if data else 1),
         producer_columns=members.producer_columns(lang),
-        exact_title=(t("part_no_recompute", lang) if part
-                     else t("multi_no_recompute", lang) if multi else ""),
+        exact_title=t("part_no_recompute", lang) if part else "",
+        # several producers: say up front that the key estimate and the recompute pool them
+        exact_pool=(html.P(t("pool_note", lang).format(n=len(data.source_eans)),
+                           className="hint pool-note") if multi and not part else []),
         bill_title=t("part_no_bill", lang) if part else "",
     )
 
@@ -192,8 +195,9 @@ def _on_upload(contents, filename, lang, old_key):
         rows=members.rows(data), selected={"ids": list(data.dest_eans)},
         grid=members.options(many), grid_style={"height": "440px" if many else None},
     )
-    if data.fmt == "all" and len(data.source_eans) == 1:
-        # estimate the keys right away, to check them before a recompute
+    if data.fmt == "all":
+        # estimate the keys right away, to check them before a recompute (several
+        # producers: for their pool, see recompute.to_hundredths)
         out.update(fit_job=jobs.start_fit(key), fit_poll_off=False)
     return out
 

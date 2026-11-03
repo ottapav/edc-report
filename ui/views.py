@@ -316,6 +316,8 @@ def fit_summary(fit: KeyFit, data: SharingData, rows: list[dict], lang: str):
         key = r.get("key") if r.get("key") not in (None, "") else members.pct_key(fit.keys[i])
         update.append(dict(r, key=key, range=text, warn=warn))
     notes = [html.P([html.B(f"{t('fit_title', lang)}: "), summary], className="fit-line")]
+    if len(data.source_eans) > 1:
+        notes.append(hint(t("fit_pool", lang).format(n=len(data.source_eans))))
     if fit.match < 0.95:
         notes.append(hint(t("fit_low", lang), "stale"))
     elif fit.rough:

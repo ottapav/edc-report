@@ -210,7 +210,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "feed_tip": "Feed-in price of this producer [CZK/kWh], for the billing; empty = the default",
         "panel_source_hint": "Feed-in price [CZK/kWh] for the billing; empty = the default in the billing card.",
         "pool_name": "Producers (pool)",
-        "multi_no_recompute": "The exact static method supports a report with one producer only.",
+        "pool_note": "{n} producers, shared as a pool: the key estimate and the exact method share the production of all producers as if it came from one big producer, with one key per member. The report does not say which producer supplied which member; the pool's surplus goes back to the producers in proportion to their production.",
+        "col_exact_pool": "Exact static method (recomputed, pool of {n} producers)",
+        "col_edc_replay_pool": "Approximate static method (EDC replayed with these keys, pool of {n} producers)",
+        "fit_pool": "Keys estimated for the pool of {n} producers (today's EDC method replayed on their total production).",
+        "x_pool": "Producers shared as a pool",
         "price_default": "Default supplier price [CZK/kWh]",
         "phase_bill": "Computing contributions",
         "bill_need_feed_in": "Enter the feed-in price of every producer, or a default feed-in price.",
@@ -506,7 +510,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "feed_tip": "Výkupní cena této výrobny [Kč/kWh], pro vyúčtování; prázdné = výchozí",
         "panel_source_hint": "Výkupní cena [Kč/kWh] pro vyúčtování; prázdné = výchozí z karty vyúčtování.",
         "pool_name": "Výrobny (bazén)",
-        "multi_no_recompute": "Přesná statická metoda zatím umí jen report s jednou výrobnou.",
+        "pool_note": "{n} výroben, počítáno jako bazén: odhad klíčů i přesná metoda dělí výrobu všech výroben, jako by to byla jedna velká výrobna, s jedním klíčem pro každého člena. Report neříká, která výrobna dodala kterému členovi; přebytek bazénu se výrobnám vrací podle jejich výroby.",
+        "col_exact_pool": "Přesná statická metoda (přepočet, bazén {n} výroben)",
+        "col_edc_replay_pool": "Přibližná statická metoda (simulace EDC se zadanými klíči, bazén {n} výroben)",
+        "fit_pool": "Klíče odhadnuté pro bazén {n} výroben (dnešní metoda EDC přehraná na jejich celkové výrobě).",
+        "x_pool": "Výrobny počítané jako bazén",
         "price_default": "Výchozí cena od prodejce [Kč/kWh]",
         "phase_bill": "Výpočet přínosu členů",
         "bill_need_feed_in": "Zadejte výkupní cenu každé výrobny, nebo výchozí výkupní cenu.",
@@ -650,6 +658,14 @@ def tn(key: str, lang: str, n: int) -> str:
     """``key`` for one item, ``key_n`` (when there is one) for several."""
     if n > 1 and f"{key}_n" in STRINGS["en"]:
         return t(f"{key}_n", lang)
+    return t(key, lang)
+
+
+def method_title(key: str, n_producers: int, lang: str) -> str:
+    """Title of a method's column: the exact method and the replay say when several
+    producers were shared as one pool (the page and the export use the same text)."""
+    if n_producers > 1 and f"{key}_pool" in STRINGS["en"]:
+        return t(f"{key}_pool", lang).format(n=n_producers)
     return t(key, lang)
 
 
