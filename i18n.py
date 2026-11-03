@@ -316,6 +316,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "x_cov_exact": "Covered exact [%]",
         "x_shared_sel": "Shared to selected [kWh]",
         "x_unshared": "Unshared [kWh]",
+        "x_m_replay": "EDC replayed",
+        "x_m_exact": "exact",
     },
     "cs": {
         "report_title": "Report sdílení elektřiny",
@@ -610,6 +612,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "x_cov_exact": "Pokryto přesně [%]",
         "x_shared_sel": "Nasdíleno vybraným [kWh]",
         "x_unshared": "Nesdíleno [kWh]",
+        "x_m_replay": "simulace EDC",
+        "x_m_exact": "přesně",
     },
 }
 

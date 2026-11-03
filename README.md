@@ -123,10 +123,15 @@ The interface is available in Czech, English and German (switch in the top bar; 
 
 * **Summary as Excel** (*Download summary* in the panel): one `.xlsx` with the numbers of the
   page for the current selection (ticked members, names, language), as numbers rather than
-  text. Sheets: *Summary* (facts, energy tiles, next to the exact method once recomputed;
-  sharing error, keys and reserve; billing totals; key estimate), *Destinations* (the
-  per-destination table), *Comparison* (after the recompute), *Billing* (after the
-  billing) and *Daily* (kWh per day, for your own plots).
+  text. Sheets: *Summary* (facts; energy tiles with the shares under them, for every
+  column the page can show: the EDC report, after the recompute the exact method and, with
+  keys other than the report's, EDC replayed with them; sharing error, keys and reserve;
+  billing totals; key estimate), *Destinations* (the per-destination table), *Comparison*
+  (after the recompute), *Billing* (after the billing) and *Daily* (the series of the daily
+  plots per day, for each of those columns).
+* The values are the page's: the same sources, and percentages and money in full
+  precision with the page's number of decimals as the cell format, so Excel shows the
+  figure the page shows.
 * EANs are shortened to their last three digits as on the page; *Full EANs in the export*
   writes them whole.
 * **Print / PDF** prints the report (to paper or PDF via the browser) without the panel and

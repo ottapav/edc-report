@@ -72,8 +72,10 @@ def test_report_only_has_summary_destinations_and_daily(entry_key):
     # daily rows add up to the totals
     daily = wb[t("x_sheet_daily", "cs")]
     assert daily.max_row == 1 + 20 + 1          # head, 20 days, Σ
-    assert _row(daily, "Σ")[1] == pytest.approx(s.production, abs=0.05)
-    assert _row(daily, "Σ")[2] == pytest.approx(s.shared, abs=0.05)
+    col = {h: i for i, h in enumerate(_row(daily, t("x_date", "cs")))}
+    total = _row(daily, "Σ")
+    assert total[col["Výroba [kWh]"]] == pytest.approx(s.production, abs=0.05)
+    assert total[col[t("x_shared_sel", "cs")]] == pytest.approx(s.shared, abs=0.05)
 
 
 def test_selection_and_ean_anonymity(entry_key):
@@ -129,7 +131,28 @@ def test_exact_billing_and_fit_add_their_sheets(entry_key):
     entry.exact = recompute.recompute(data, list(k), rounds=5)
     summary = _book(entry, enabled)[t("x_sheet_summary", "cs")]
     heads = [r for r in summary.iter_rows(values_only=True) if r[0] == t("x_item", "cs")]
-    assert heads[1][1] == t("col_edc_replay", "cs")
+    # the page shows the report next to the billing and the replay next to the exact
+    # method, so the export has all three
+    assert heads[1][1:5] == (t("col_edc", "cs"), t("col_edc_replay", "cs"),
+                             t("col_exact", "cs"), t("x_unit", "cs"))
+    # with unticked members "could have been shared" of the report is an upper bound, in
+    # a row of its own like the tile ("at most"); the other two are what the exact adds
+    report = core.summarize(data, enabled)
+    at_most = _row(summary, t("kpi_wasted_max", "cs"))
+    assert at_most[1] == pytest.approx(report.overlap, abs=0.01) and at_most[2:4] == (None, None)
+    gain = _row(summary, t("kpi_wasted", "cs"))
+    assert gain[1] is None
+    assert gain[2] == pytest.approx(core.exact_gain(entry.exact.approx, entry.exact.data, enabled),
+                                    abs=0.01)
+    assert gain[3] == 0
+    # the daily sheet has the series of every daily plot
+    daily = _book(entry, enabled)[t("x_sheet_daily", "cs")]
+    head = _row(daily, t("x_date", "cs"))
+    total = _row(daily, "Σ")
+    for d, suffix in ((data, ""), (entry.exact.approx, f" – {t('x_m_replay', 'cs')}"),
+                      (entry.exact.data, f" – {t('x_m_exact', 'cs')}")):
+        shared = core.summarize(d, enabled).shared
+        assert total[head.index(t("x_shared_sel", "cs") + suffix)] == pytest.approx(shared, abs=0.05)
     entry.fit = entry.exact = entry.bill = None
 
 
