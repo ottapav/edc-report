@@ -91,7 +91,10 @@ def _kwh(x) -> float | None:
 
 
 def _pct(x, base) -> float | None:
-    return round(100 * float(x) / float(base), 2) if x is not None and base else None
+    """A percentage in full precision: the cell's number format rounds it like the page,
+    so Excel shows the page's figure (rounding to 2 decimals first made 8.649 → 8.65,
+    which then reads 8.7 instead of the page's 8.6)."""
+    return 100 * float(x) / float(base) if x is not None and base else None
 
 
 def _summary(data: SharingData, enabled: set[str], exact: SharingData | None) -> Summary:
@@ -148,37 +151,70 @@ def info_table(entry, enabled: set[str], names: dict, lang: str, group: str,
                  [None, None, None], title=title, row_formats=formats)
 
 
-def energy_table(entry, enabled: set[str], lang: str) -> Table:
-    """The energy tiles; with the exact recompute, its column next to the one it is
-    compared with (the report, or today's method replayed with the same keys)."""
+def _method_columns(entry, lang: str) -> list[tuple[str, SharingData, SharingData | None]]:
+    """(header, data, exact recompute for "could have been shared") of every column the
+    page can show for this report: the EDC report; with the exact recompute also the
+    exact method and, when it used other keys than the report's, today's method replayed
+    with them. The page shows the report next to the billing and the replay next to the
+    exact method (:func:`ui.report._left_sides`), so the export has both."""
     data, exact = entry.data, entry.exact
-    left = exact.left(data) if exact is not None else data
-    a = _summary(left, enabled, exact.data if exact else None)
-    cols = [a]
-    head = [t("x_item", lang),
-            t("col_edc" if left is data else "col_edc_replay", lang)]
-    if exact is not None:
-        cols.append(_summary(exact.data, enabled, exact.data))
-        head.append(t("col_exact", lang))
-    head.append(t("x_unit", lang))
-    subset = len(_selected(data, enabled)) < len(data.dest_eans)
-    if data.fmt != "all":
-        items = [("kpi_shared", "shared", "kWh")]
-    else:
-        wasted = "kpi_wasted_max" if subset and exact is None else "kpi_wasted"
-        items = [("kpi_production", "production", "kWh"), ("kpi_shared", "shared", "kWh"),
-                 (wasted, "overlap", "kWh"), ("kpi_unshareable", "unshared_only", "kWh"),
-                 ("kpi_consumption", "consumption", "kWh"), ("kpi_from_grid", "unmet", "kWh")]
-    rows = [[t(key, lang), *(_kwh(getattr(s, f)) for s in cols), unit]
-            for key, f, unit in items]
+    if exact is None:
+        return [(t("col_edc", lang), data, None)]
+    if exact.approx is None:
+        return [(t("col_edc", lang), data, exact.data),
+                (t("col_exact", lang), exact.data, exact.data)]
+    return [(t("col_edc", lang), data, None),
+            (t("col_edc_replay", lang), exact.approx, exact.data),
+            (t("col_exact", lang), exact.data, exact.data)]
+
+
+def energy_table(entry, enabled: set[str], lang: str) -> Table:
+    """The energy tiles of every column the page can show (:func:`_method_columns`), with
+    the shares the tiles show under the values."""
+    data = entry.data
+    methods = _method_columns(entry, lang)
+    cols = [_summary(d, enabled, ex) for _h, d, ex in methods]
+    head = [t("x_item", lang), *(h for h, _d, _ex in methods), t("x_unit", lang)]
     fmts = [None] + [KWH] * len(cols) + [None]
-    if data.fmt == "all":
-        rows.append([f"{t('kpi_shared', lang)} / {t('kpi_production', lang)}",
-                     *(_pct(s.shared, s.production) for s in cols), "%"])
-        rows.append([t("col_coverage", lang),
-                     *(_pct(s.shared, s.consumption) for s in cols), "%"])
-    pct_rows = {len(items): PCT, len(items) + 1: PCT} if data.fmt == "all" else {}
-    return Table(head, rows, fmts, title=t("x_energy", lang), row_formats=pct_rows)
+    if data.fmt != "all":
+        rows = [[t("kpi_shared", lang), *(_kwh(s.shared) for s in cols), "kWh"]]
+        return Table(head, rows, fmts, title=t("x_energy", lang))
+    subset = len(_selected(data, enabled)) < len(data.dest_eans)
+    # "could have been shared" is an upper bound for a selection until the recompute,
+    # and the tile says so ("at most"): such a column gets its own row
+    bound = [subset and ex is None for _h, _d, ex in methods]
+
+    def only(values, keep):
+        return [v if k else None for v, k in zip(values, keep)]
+
+    exact_rows = [not b for b in bound]
+    rows, pct = [], {}
+    prod = [s.production for s in cols]
+    for key, field_ in (("kpi_production", "production"), ("kpi_shared", "shared")):
+        rows.append([t(key, lang), *(_kwh(getattr(s, field_)) for s in cols), "kWh"])
+    overlap = [_kwh(s.overlap) for s in cols]
+    if any(bound):
+        rows.append([t("kpi_wasted_max", lang), *only(overlap, bound), "kWh"])
+    if any(exact_rows):
+        rows.append([t("kpi_wasted", lang), *only(overlap, exact_rows), "kWh"])
+    for key, field_ in (("kpi_unshareable", "unshared_only"), ("kpi_consumption", "consumption"),
+                        ("kpi_from_grid", "unmet")):
+        rows.append([t(key, lang), *(_kwh(getattr(s, field_)) for s in cols), "kWh"])
+    # the shares under the tiles: of the production, and "from grid" of the consumption
+    of_prod = lambda key: f"{t(key, lang)} / {t('kpi_production', lang)}"  # noqa: E731
+    share = lambda f: [_pct(getattr(s, f), p) for s, p in zip(cols, prod)]  # noqa: E731
+    pct_rows = [[of_prod("kpi_shared"), *share("shared"), "%"]]
+    if any(bound):
+        pct_rows.append([of_prod("kpi_wasted_max"), *only(share("overlap"), bound), "%"])
+    if any(exact_rows):
+        pct_rows.append([of_prod("kpi_wasted"), *only(share("overlap"), exact_rows), "%"])
+    pct_rows.append([of_prod("kpi_unshareable"), *share("unshared_only"), "%"])
+    pct_rows.append([f"{t('kpi_from_grid', lang)} / {t('kpi_consumption', lang)}",
+                     *(_pct(s.unmet, s.consumption) for s in cols), "%"])
+    for r in pct_rows:
+        pct[len(rows)] = PCT
+        rows.append(r)
+    return Table(head, rows, fmts, title=t("x_energy", lang), row_formats=pct)
 
 
 def exact_table(entry, enabled: set[str], names: dict, lang: str) -> Table:
@@ -186,13 +222,13 @@ def exact_table(entry, enabled: set[str], names: dict, lang: str) -> Table:
     loss = grid_loss(exact.left(data), exact.data, enabled)
     source = t("keys_est" if exact.keys_estimated else "keys_user", lang)
     rows = [
-        [t("x_loss_pct", lang), round(loss.pct_of_max, 2), "%"],
+        [t("x_loss_pct", lang), float(loss.pct_of_max), "%"],
         [t("x_loss_kwh", lang), _kwh(loss.lost), "kWh"],
         [t("cmp_shared_edc", lang), _kwh(loss.shared_edc), "kWh"],
         [t("cmp_shared_exact", lang), _kwh(loss.shared_exact), "kWh"],
         [t("keys_used", lang), source, None],
-        [t("x_keys_sum", lang), round(100 * sum(exact.keys), 2), "%"],
-        [t("reserve", lang), round(100 * exact.reserve, 2), "%"],
+        [t("x_keys_sum", lang), float(100 * sum(exact.keys)), "%"],
+        [t("reserve", lang), float(100 * exact.reserve), "%"],
     ]
     return Table([t("x_item", lang), t("x_value", lang), t("x_unit", lang)], rows,
                  [None, None, None], title=t("loss_title", lang))
@@ -205,14 +241,14 @@ def bill_totals_table(entry, enabled: set[str], lang: str) -> Table:
     sel = np.array([e in enabled for e in data.dest_eans])
     n_prod = len(bill.feed_ins)
     rows = [
-        [t("bt_benefit", lang), round(bill.realized, 2), cur],
-        [t("x_max_benefit", lang), round(bill.maximum, 2), cur],
-        [t("x_efficiency", lang), round(100 * bill.efficiency, 2), "%"],
-        [t("bt_lost", lang), round(max(0.0, bill.maximum - bill.realized), 2), cur],
-        [tn("bt_producer", lang, n_prod), round(float(bill.producer_share.sum()), 2), cur],
-        [t("bt_members", lang), round(float(bill.share[sel].sum()), 2), cur],
-        [tn("bt_income", lang, n_prod), round(float(bill.producer_income.sum()), 2), cur],
-        [t("bt_feed_in", lang), round(float(bill.feed_in_value.sum()), 2), cur],
+        [t("bt_benefit", lang), float(bill.realized), cur],
+        [t("x_max_benefit", lang), float(bill.maximum), cur],
+        [t("x_efficiency", lang), float(100 * bill.efficiency), "%"],
+        [t("bt_lost", lang), float(max(0.0, bill.maximum - bill.realized)), cur],
+        [tn("bt_producer", lang, n_prod), float(bill.producer_share.sum()), cur],
+        [t("bt_members", lang), float(bill.share[sel].sum()), cur],
+        [tn("bt_income", lang, n_prod), float(bill.producer_income.sum()), cur],
+        [t("bt_feed_in", lang), float(bill.feed_in_value.sum()), cur],
     ]
     return Table([t("x_item", lang), t("x_value", lang), t("x_unit", lang)], rows,
                  [None, None, None], title=t("col_bill", lang))
@@ -221,7 +257,7 @@ def bill_totals_table(entry, enabled: set[str], lang: str) -> Table:
 def fit_table(entry, lang: str) -> Table:
     fit = entry.fit
     rows = [[t("x_rounds", lang), fit.rounds, None],
-            [t("x_fit_match", lang), round(100 * fit.match, 2), "%"]]
+            [t("x_fit_match", lang), float(100 * fit.match), "%"]]
     return Table([t("x_item", lang), t("x_value", lang), t("x_unit", lang)], rows,
                  [None, None, None], title=t("fit_title", lang))
 
@@ -248,11 +284,11 @@ def members_table(data: SharingData, enabled: set[str], names: dict, lang: str,
         if is_all:
             row += [_kwh(r.consumption), _kwh(r.shared), _kwh(r.unmet),
                     None if r.coverage_pct is None or pd.isna(r.coverage_pct)
-                    else round(r.coverage_pct, 2)]
+                    else float(r.coverage_pct)]
         else:
             row += [_kwh(r.shared)]
         first = r.first_data.date() if r.first_data is not None and not pd.isna(r.first_data) else None
-        row += [round(r.share_of_shared_pct, 2), first, round(r.data_pct, 2)]
+        row += [float(r.share_of_shared_pct), first, float(r.data_pct)]
         rows.append(row)
     foot = ["Σ", None, None]
     if is_all:
@@ -279,17 +315,17 @@ def compare_table(entry, enabled: set[str], names: dict, lang: str, full_ean: bo
 
     def values(sa, sb, dem):
         return [_kwh(dem), _kwh(sa), _kwh(sb), _kwh(sb - sa),
-                round(100 * (sb - sa) / sb, 2) if sb else None, _pct(sa, dem), _pct(sb, dem)]
+                float(100 * (sb - sa) / sb) if sb else None, _pct(sa, dem), _pct(sb, dem)]
 
     rows = [[names.get(e, e), ean_label(e, full_ean), _yes(e in enabled, lang),
-             round(100 * keys[e], 2),
+             float(100 * keys[e]),
              *values(a.at[e, "shared"], b.at[e, "shared"], a.at[e, "consumption"])]
             for e in data.dest_eans]
     sel = _selected(data, enabled)
     sa, sb = a.loc[sel, "shared"].sum(), b.loc[sel, "shared"].sum()
     dem = a.loc[sel, "consumption"].sum()
     rows.append([_sigma(len(sel), len(data.dest_eans), lang), None, None,
-                 round(100 * sum(keys[e] for e in sel), 2), *values(sa, sb, dem)])
+                 float(100 * sum(keys[e] for e in sel)), *values(sa, sb, dem)])
     return Table(head, rows, fmts, bold={len(rows) - 1})
 
 
@@ -302,52 +338,60 @@ def bill_table(entry, enabled: set[str], names: dict, lang: str, full_ean: bool)
             t("bill_col_share", lang), tn("bill_col_payment", lang, n_prod),
             t("bill_col_unit", lang)]
     fmts = [None, None, None, "0.00", KWH, KC, KC, KC, "0.00"]
-    unit = lambda pay, kwh: round(pay / kwh, 4) if kwh > 0 else None  # noqa: E731
+    unit = lambda pay, kwh: float(pay / kwh) if kwh > 0 else None  # noqa: E731
     rows = [[names.get(e, e), ean_label(e, full_ean), _yes(e in enabled, lang),
-             float(bill.prices[j]), _kwh(bill.shared[j]), round(float(bill.saving[j]), 2),
-             round(float(bill.share[j]), 2), round(float(bill.payment[j]), 2),
+             float(bill.prices[j]), _kwh(bill.shared[j]), float(bill.saving[j]),
+             float(bill.share[j]), float(bill.payment[j]),
              unit(float(bill.payment[j]), float(bill.shared[j]))]
             for j, e in enumerate(data.dest_eans)]
     kwh, paid = float(bill.shared.sum()), float(bill.payment.sum())
-    rows.append(["Σ", None, None, None, _kwh(kwh), round(float(bill.saving.sum()), 2),
-                 round(float(bill.share.sum()), 2), round(paid, 2), unit(paid, kwh)])
+    rows.append(["Σ", None, None, None, _kwh(kwh), float(bill.saving.sum()),
+                 float(bill.share.sum()), float(paid), unit(paid, kwh)])
     bold = {len(rows) - 1}
     for i, src in enumerate(data.source_eans):
         rows.append([t("bill_producer", lang).format(name=names.get(src, src)),
                      ean_label(src, full_ean), None, float(bill.feed_ins[i]),
-                     _kwh(bill.supplied[i]), round(float(bill.feed_in_value[i]), 2),
-                     round(float(bill.producer_share[i]), 2),
-                     round(float(bill.producer_income[i]), 2),
+                     _kwh(bill.supplied[i]), float(bill.feed_in_value[i]),
+                     float(bill.producer_share[i]),
+                     float(bill.producer_income[i]),
                      unit(float(bill.producer_income[i]), float(bill.supplied[i]))])
     return Table(head, rows, fmts, bold=bold)
 
 
-def daily_table(entry, enabled: set[str], lang: str) -> Table:
-    """kWh per day for the ticked members (the report; with the recompute also what the
-    exact method shares them)."""
-    data, exact = entry.data, entry.exact
-    flows = aggregate_grid_flows(filter_dests(data, enabled))
+def _daily_flows(d: SharingData, enabled: set[str], lang: str, suffix: str = "") -> dict:
+    """kWh per 15 min of one method for the ticked members: shared to them, shared to the
+    unticked ones, unshared, from the grid (the series of the daily plot)."""
+    flows = aggregate_grid_flows(filter_dests(d, enabled))
     shared = [c for c in flows.columns if c.startswith("shared|")]
+    out = {t("x_shared_sel", lang) + suffix: flows[shared].sum(axis=1)}
+    if KEY_OTHERS in flows:
+        out[f"{t('others_shared', lang)} [kWh]{suffix}"] = flows[KEY_OTHERS]
+    if "GRID_UNSHARED" in flows:
+        out[t("x_unshared", lang) + suffix] = flows["GRID_UNSHARED"]
+    if "GRID_UNMET" in flows:
+        out[f"{t('kpi_from_grid', lang)} [kWh]{suffix}"] = flows["GRID_UNMET"]
+    return out
+
+
+def daily_table(entry, enabled: set[str], lang: str) -> Table:
+    """kWh per day for the ticked members: the series of the daily plots, for every
+    column the page can show (the report; the replay and the exact method after the
+    recompute, marked in the header)."""
+    data, exact = entry.data, entry.exact
     cols: dict[str, pd.Series] = {}
     if data.production is not None:
         cols[f"{t('kpi_production', lang)} [kWh]"] = data.production
-    cols[t("x_shared_sel", lang)] = flows[shared].sum(axis=1)
-    if KEY_OTHERS in flows:
-        cols[f"{t('others_shared', lang)} [kWh]"] = flows[KEY_OTHERS]
-    if "GRID_UNSHARED" in flows:
-        cols[t("x_unshared", lang)] = flows["GRID_UNSHARED"]
     sel = _selected(data, enabled)
     if data.fmt == "all":
         demand = [data.demand[e] for e in sel if e in data.demand]
         cols[f"{t('kpi_consumption', lang)} [kWh]"] = (
             pd.concat(demand, axis=1).sum(axis=1) if demand
             else pd.Series(0.0, index=data.frame.index))
-    if "GRID_UNMET" in flows:
-        cols[f"{t('kpi_from_grid', lang)} [kWh]"] = flows["GRID_UNMET"]
+    cols.update(_daily_flows(data, enabled, lang))
     if exact is not None:
-        ex = exact.data.frame
-        ex_cols = [c for c in ex.columns if c.startswith("shared|") and c.split("|")[2] in enabled]
-        cols[t("cmp_shared_exact", lang)] = ex[ex_cols].sum(axis=1)
+        if exact.approx is not None:
+            cols.update(_daily_flows(exact.approx, enabled, lang, f" – {t('x_m_replay', lang)}"))
+        cols.update(_daily_flows(exact.data, enabled, lang, f" – {t('x_m_exact', lang)}"))
     daily = pd.DataFrame(cols).resample("D").sum().fillna(0.0)
     rows = [[d.date(), *(_kwh(v) for v in r)] for d, r in zip(daily.index, daily.to_numpy())]
     rows.append(["Σ", *(_kwh(v) for v in daily.sum().to_numpy())])
@@ -414,6 +458,8 @@ def _write(ws, tables: list[Table]) -> None:
                 fmt = tbl.formats[c - 1] if c - 1 < len(tbl.formats) else None
                 if c > 1 and i in tbl.row_formats and v is not None and not isinstance(v, str):
                     fmt = tbl.row_formats[i]
+                if fmt is None and isinstance(v, float) and row[-1] == "%":
+                    fmt = PCT                        # a percentage in a summary table
                 if fmt is None and isinstance(v, dt.datetime):
                     fmt = "yyyy-mm-dd hh:mm"
                 elif fmt is None and isinstance(v, dt.date):

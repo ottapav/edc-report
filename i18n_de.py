@@ -303,4 +303,6 @@ STRINGS: dict[str, str] = {
     "x_cov_exact": "Gedeckt exakt [%]",
     "x_shared_sel": "An Gewählte geteilt [kWh]",
     "x_unshared": "Nicht geteilt [kWh]",
+    "x_m_replay": "EDC simuliert",
+    "x_m_exact": "exakt",
 }
