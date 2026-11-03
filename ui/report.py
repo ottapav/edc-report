@@ -20,7 +20,7 @@ from figures import (
     flow_order, heat_metrics, heat_pivot, intraday_ymax, pair_figures, share_stack_ymax,
     share_xrange, theme, top_dests,
 )
-from i18n import t
+from i18n import method_title, t
 
 from . import members, views
 from .layout import fig_id, job_ids
@@ -251,8 +251,10 @@ def render(key, exact_rev, bill_rev, view, selected, changed, src_changed, lang,
         info=views.facts(s.entry.filename, data, s.enabled, s.names, lang),
         notes=views.data_notes(data, lang),
         compare=f"compare dual right-{right}" if right else "compare single",
-        head_a=t("col_edc" if left is data else "col_edc_replay", lang),
-        head_b={"exact": t("col_exact", lang), "bill": t("col_bill", lang)}.get(right, ""),
+        head_a=method_title("col_edc" if left is data else "col_edc_replay",
+                            len(data.source_eans), lang),
+        head_b={"exact": method_title("col_exact", len(data.source_eans), lang),
+                "bill": t("col_bill", lang)}.get(right, ""),
         pie_card={} if data.fmt == "all" else HIDDEN,
         dest_table=views.dest_table(data, s.enabled, s.names, lang, s.top),
         cmp_card={} if right == "exact" else HIDDEN,

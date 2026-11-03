@@ -201,6 +201,10 @@ body {
 .keys-line { font-size: 13px; margin: 12px 0 4px; }
 .stale { font-size: 13px; color: var(--warn); background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 6px; padding: 6px 10px; margin: 8px 0 0; }
 .stale.bad { color: var(--err); background: var(--err-bg); border-color: var(--err-line); }
+/* several producers: the computations pool them (said up front in the exact card) */
+.card .pool-note, .pool-note { font-size: 13px; color: var(--ink); background: var(--warn-bg);
+    border: 1px solid var(--warn-line); border-left: 4px solid var(--warn); border-radius: 6px;
+    padding: 8px 12px; margin: 10px 0 0; }
 
 /* ---- single / side-by-side ----------------------------------------- */
 .compare { min-width: 0; }

@@ -5,7 +5,11 @@ disturbed by the web server's threads and it can be cancelled. Allocation keys c
 they are estimated from the report in :mod:`keyfit` right after upload.
 
 All energies are integers in hundredths of kWh (0.01 kWh), like EDC data.
-Only the all report with one producer is supported (demand is needed).
+The all report is needed (demand). Several producers are one **pool**: their production
+is shared as if it came from one big producer, with one key per member (the report does
+not say which producer supplied whom). The pool's surplus goes back to the producers in
+proportion to their production in the interval, as in EDC reports, where every producer
+of a group shares nearly the same part of its production.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ from keyfit import replay_edc, replay_match
 from procjob import run_in_child
 from presna_staticka import rozdel
 from edc_data import (
-    SharingData, key_shared, key_unmet, key_unshared, producer_arrays,
+    SharingData, key_shared, key_unmet, key_unshared, producer_arrays, shared_source,
 )
 
 ProgressFn = Callable[[str, float], None]  # (phase, fraction 0..1)
@@ -37,15 +41,34 @@ def _noop(_phase: str, _frac: float) -> None:
 
 
 def to_hundredths(data: SharingData) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Return (P[T], D[T, n], S_actual[T, n]) as int64 hundredths of kWh."""
-    if data.fmt != "all" or data.production is None or len(data.source_eans) != 1:
-        raise ValueError("Recompute needs an all report with exactly one producer.")
-    src = data.source_eans[0]
+    """Return (P[T], D[T, n], S_actual[T, n]) as int64 hundredths of kWh; P is the
+    production of all producers together (the pool)."""
+    if data.fmt != "all" or data.production is None:
+        raise ValueError("Recompute needs an all report with the production of every producer.")
+    src = shared_source(data)
     P2, D = producer_arrays(data)
-    P = P2[:, 0]
+    P = P2.sum(axis=1)
     S = np.stack([np.round(data.frame[key_shared(src, e)].to_numpy(dtype=float) * 100)
                   for e in data.dest_eans], axis=1).astype(np.int64)
     return P, D, S
+
+
+def split_surplus(P2: np.ndarray, surplus: np.ndarray) -> np.ndarray:
+    """The pool's surplus (T, hundredths) per producer (T×np): in proportion to each
+    producer's production in the interval, whole hundredths that add up exactly (largest
+    remainder), never more than a producer produced."""
+    P2 = np.asarray(P2, dtype=np.int64)
+    total = P2.sum(axis=1)
+    if P2.shape[1] == 1:
+        return surplus[:, None].astype(np.int64)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        exact = np.where(total[:, None] > 0, P2 * (surplus / np.where(total > 0, total, 1))[:, None], 0.0)
+    out = np.floor(exact + 1e-9).astype(np.int64)
+    left = surplus.astype(np.int64) - out.sum(axis=1)
+    order = np.argsort(-(exact - out), axis=1, kind="stable")
+    for t in np.nonzero(left > 0)[0]:
+        out[t, order[t, :left[t]]] += 1
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +172,12 @@ class Recomputed:
     #: the report itself is the approximate method's result)
     approx: SharingData | None = None
 
+    @property
+    def pool(self) -> int:
+        """Number of producers shared as one pool (0 with one producer)."""
+        n = len(self.data.source_eans)
+        return n if n > 1 else 0
+
     def left(self, report: SharingData) -> SharingData:
         """What the exact method is compared with: the replay, or the EDC report."""
         return self.approx if self.approx is not None else report
@@ -173,19 +202,23 @@ def check_keys(keys: list[float]) -> None:
 
 
 def _as_data(data: SharingData, s: np.ndarray, P: np.ndarray, D: np.ndarray) -> SharingData:
-    """Shares ``s`` (T×n hundredths) as a report like ``data`` (single producer)."""
-    src = data.source_eans[0]
+    """Shares ``s`` (T×n hundredths) as a report like ``data``: shared from the producer
+    (or the pool), unmet per member, unshared per producer (:func:`split_surplus`)."""
+    src = shared_source(data)
     idx = data.frame.index
     cols: dict[str, pd.Series] = {}
     for j, e in enumerate(data.dest_eans):
         cols[key_shared(src, e)] = pd.Series(s[:, j] / 100, index=idx)
         cols[key_unmet(e)] = pd.Series((D[:, j] - s[:, j]) / 100, index=idx)
-    cols[key_unshared(src)] = pd.Series((P - s.sum(axis=1)) / 100, index=idx)
+    P2, _D = producer_arrays(data)
+    surplus = split_surplus(P2, P - s.sum(axis=1))
+    for i, p in enumerate(data.source_eans):
+        cols[key_unshared(p)] = pd.Series(surplus[:, i] / 100, index=idx)
     return SharingData(
         frame=pd.DataFrame(cols, index=idx), fmt="all", source_eans=list(data.source_eans),
         dest_eans=list(data.dest_eans), production=data.production,
-        demand=data.demand, coverage=data.coverage, first_data=data.first_data,
-        notes=[], n_rows=data.n_rows,
+        productions=data.productions, demand=data.demand, coverage=data.coverage,
+        first_data=data.first_data, notes=[], n_rows=data.n_rows,
     )
 
 
@@ -222,7 +255,7 @@ def grid_loss(edc: SharingData, exact: SharingData, enabled: set[str] | None = N
     enabled = set(edc.dest_eans) if enabled is None else enabled
 
     def shared(d: SharingData) -> float:
-        cols = [key_shared(d.source_eans[0], e) for e in d.dest_eans if e in enabled]
+        cols = [key_shared(shared_source(d), e) for e in d.dest_eans if e in enabled]
         return float(d.frame[cols].to_numpy(dtype=float).sum()) if cols else 0.0
 
     prod = float(edc.production.sum()) if edc.production is not None else 0.0

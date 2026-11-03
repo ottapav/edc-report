@@ -350,9 +350,6 @@ def test_billing_of_several_producers(pool_key):
     table = views.bill_table(bill, data, names, "cs")
     assert table is not None
     assert "Výrobny (bazén)" in split.layout.yaxis.ticktext
-    # the exact static method is refused, with a reason
-    out = compute.start_exact(1, pool_key, rows, 0, "cs")
-    assert out["cls"] == "progress error" and "jednou výrobnou" in out["text"]
 
 
 def test_panel_grids_and_ean_tails(pool_key):

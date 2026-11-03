@@ -43,14 +43,12 @@ def _started(job_id: str) -> dict:
                 text=no_update)                       # the poll draws the bar
 
 
-def _usable(entry, lang: str, part_reason: str, one_producer: bool = False) -> dict | None:
+def _usable(entry, lang: str, part_reason: str) -> dict | None:
     """Why a computation cannot start, as the card's outputs; None if it can."""
     if entry is None:                    # server restarted / went to sleep since the upload
         return _refused("session_lost", lang)
     if entry.data.fmt != "all":
         return _refused(part_reason, lang)
-    if one_producer and len(entry.data.source_eans) != 1:
-        return _refused("multi_no_recompute", lang)
     return None
 
 
@@ -77,7 +75,7 @@ def start_exact(n, key, rows, reserve, lang):
     if not n:
         raise dash.exceptions.PreventUpdate
     entry = store.get(key)
-    refused = _usable(entry, lang, "part_no_recompute", one_producer=True)
+    refused = _usable(entry, lang, "part_no_recompute")
     if refused:
         return refused
     typed = members.keys(entry.data, rows)

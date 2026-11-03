@@ -168,10 +168,16 @@ gunicorn app:server -c gunicorn.conf.py        # listens on $PORT (default 8050)
 1. **Upload** the CSV report generated on edc-cr.cz (file name like
    `Export-dat-…-report-….csv`). Both report layouts are detected from the header:
    * **all report** (`IN/OUT-<ean>-D` for each producer, `IN/OUT-<ean>-O` for members) carries
-     production and consumption and enables everything (with several producers: the billing,
-     not the exact static method; the report does not say which producer supplied whom, so
-     the shared energy is shown as one pool);
+     production and consumption and enables everything. With several producers the report
+     does not say which producer supplied whom, so the shared energy is shown as one
+     **pool**, and the key estimate and the exact method pool the producers too (see
+     [Several producers](#several-producers-the-pool)); the page says so in the exact
+     method's card and in the column titles;
    * **part report** (`<ean>-<ean>` columns) has shared energy only: no pie, no recompute.
+
+   A few rows more than a day away from the rest of the report (say a few intervals of
+   another month pasted at the end) are left out, and the *Notes* under the general
+   information say which.
 2. The report appears immediately, and the **allocation keys are estimated in the
    background**. A summary shows which EDC method explains the report (1 or 5 rounds) and
    how many 15-min intervals it reproduces. Keys that the report cannot pin down exactly are
@@ -264,6 +270,22 @@ longer.
 consumed is shared while the keys hold. `recompute.py` calls `rozdel()` for every 15-min
 interval of the report and builds a second report in the same structure, so every figure and
 table works for both.
+
+### Several producers: the pool
+
+With several producers (`IN/OUT-<ean>-D` for each), the key estimate and the exact method
+share their production as **one pool**, as if it came from one big producer, with one key
+per member: `P` in `rozdel(P, D, k)` and in the replay of today's EDC method is the total
+production of the interval. The EDC report does not say which producer supplied which
+member, so nothing finer can be checked against it. The pool's surplus goes back to the
+producers in proportion to their production in the interval (whole hundredths, adding up
+exactly), as in EDC reports, where every producer of a group shares nearly the same part of
+its production. The page says it is a pool in the exact method's card (before the
+computation), next to the key estimate and in the titles of the columns; the export too.
+
+How well the pooled keys explain the report shows in the key estimate's match. When EDC did
+not share the producers as one pool, the match is low and the page warns (below 95 %); the
+keys are then only a rough guide, to be checked against the contract.
 
 **Explanatory article (Czech, English, German).** [`clanek/`](clanek/README.md) explains the approximate and
 the exact static method, the pool mode for several producers and the results for one real
@@ -524,9 +546,10 @@ needed. It checks that:
 
 ## Limitations
 
-* **Several producers:** the billing supports them (pool); the exact static method and the
-  key estimate need one producer. The EDC report does not say which producer supplied which
-  member, so the energy figures show the producers as one pool.
+* **Several producers:** everything works with a pool of the producers (one key per member
+  for their total production). The EDC report does not say which producer supplied which
+  member, so per-producer keys cannot be estimated, and a report that EDC did not share as
+  one pool is matched only roughly (the key estimate says how well).
 * **Keys:** the estimate cannot be better than the report allows. Members that are almost
   always fully covered only get a lower bound. Irregular keys in large 5-round groups may stop
   at a local optimum. The match and the ranges are always shown.

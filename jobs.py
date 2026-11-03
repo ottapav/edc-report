@@ -141,11 +141,17 @@ def start_exact(data_key: str, keys: list[float | None], reserve: float) -> str:
                   for i, k in enumerate(keys)]
         if any(k is None for k in merged):
             raise RuntimeError("missing allocation keys")
+        # the grid shows the estimate in percent with two decimals, so a key read back
+        # from it can differ from the estimate in the last bits (1.04 % is 0.0104, the
+        # estimate 0.010400000000000001): within 1e-9 it is the estimate
+        estimated = fit is not None and len(fit.keys) == len(merged) and all(
+            abs(k - f) <= 1e-9 for k, f in zip(merged, fit.keys))
+        if estimated:
+            merged = [float(f) for f in fit.keys]
         job.progress("compute", 0.0)
         entry.exact = recompute(
             entry.data, merged, reserve, progress=job.progress, cancelled=job.cancelled,
-            keys_estimated=fit is not None and merged == list(fit.keys),
-            rounds=fit.rounds if fit else 5)
+            keys_estimated=estimated, rounds=fit.rounds if fit else 5)
     return start("exact", data_key, work)
 
 

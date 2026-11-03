@@ -185,7 +185,8 @@ def _report() -> html.Div:
             html.Section(className="card", children=[
                 html.H2(id="info-title"), html.Div(id="info"), html.Div(id="notes")]),
             job_card("exact", [_number_input("reserve", "lbl-reserve", value="0")],
-                     [html.Div(id="fit-info"), html.Div(id="exact-stale"),
+                     [html.Div(id="exact-pool"), html.Div(id="fit-info"),
+                      html.Div(id="exact-stale"),
                       html.Div(id="exact-result")], link=ARTICLE_URL),
             job_card("bill", [_number_input("feed-in", "lbl-feed-in"),
                               _number_input("price-default", "lbl-price-default")],
