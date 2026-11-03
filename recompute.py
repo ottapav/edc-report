@@ -5,11 +5,12 @@ disturbed by the web server's threads and it can be cancelled. Allocation keys c
 they are estimated from the report in :mod:`keyfit` right after upload.
 
 All energies are integers in hundredths of kWh (0.01 kWh), like EDC data.
-The all report is needed (demand). Several producers are one **pool**: their production
-is shared as if it came from one big producer, with one key per member (the report does
-not say which producer supplied whom). The pool's surplus goes back to the producers in
-proportion to their production in the interval, as in EDC reports, where every producer
-of a group shares nearly the same part of its production.
+The all report is needed (demand). Several producers are one **pool** for the exact
+method: their production is shared as if it came from one big producer. EDC itself sets
+a key for every pair producer -> member (:func:`keyfit.replay_edc_multi`); for the pool
+the pair keys are combined interval by interval, ``k_j(t) = sum_i K[i, j] · P_i(t) / P(t)``
+- the part of the total production the member would get by its pair keys. The pool's
+surplus goes back to the producers in proportion to their production in the interval.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from keyfit import replay_edc, replay_match
+from keyfit import pooled_keys, replay_edc, replay_edc_multi, replay_match, replay_match_multi
 from procjob import run_in_child
 from presna_staticka import rozdel
 from edc_data import (
@@ -53,6 +54,40 @@ def to_hundredths(data: SharingData) -> tuple[np.ndarray, np.ndarray, np.ndarray
     return P, D, S
 
 
+def to_hundredths_multi(data: SharingData):
+    """(P2[T, np] production per producer, D, S, Q[T, np] what each producer shared) as
+    int64 hundredths of kWh: the inputs of the pair keys."""
+    P, D, S = to_hundredths(data)
+    P2, _D = producer_arrays(data)
+    U = np.stack([np.round(data.frame[key_unshared(p)].to_numpy(dtype=float) * 100)
+                  for p in data.source_eans], axis=1).astype(np.int64)
+    return P2, D, S, np.clip(P2 - U, 0, None)
+
+
+def interval_keys(P2: np.ndarray, pair_keys) -> np.ndarray:
+    """The pool's key of every member in every interval (T×n) from the pair keys: the
+    pair keys weighted by the producers' production then; with no production, by the
+    producers' total production."""
+    K = np.asarray(pair_keys, dtype=float)
+    out = pooled_keys(K, P2)
+    night = P2.sum(axis=1) == 0
+    if night.any():
+        out[night] = pooled_keys(K, P2.sum(axis=0))
+    return out
+
+
+def check_pair_keys(pair_keys) -> None:
+    """Pair keys (np × n fractions): none negative, at least one positive, no producer
+    gives away more than 100 % (EDC rule)."""
+    K = np.asarray(pair_keys, dtype=float)
+    if (K < 0).any():
+        raise InvalidKeys("keys_negative")
+    if (K.sum(axis=1) > 1 + 1e-9).any():
+        raise InvalidKeys("pair_sum_over")
+    if not (K > 0).any():
+        raise InvalidKeys("keys_all_zero")
+
+
 def split_surplus(P2: np.ndarray, surplus: np.ndarray) -> np.ndarray:
     """The pool's surplus (T, hundredths) per producer (T×np): in proportion to each
     producer's production in the interval, whole hundredths that add up exactly (largest
@@ -76,23 +111,25 @@ def split_surplus(P2: np.ndarray, surplus: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
-def rozdel_all(Pl: list[int], Dl: list[list[int]], keys: list[float], reserve: float,
+def rozdel_all(Pl: list[int], Dl: list[list[int]], keys: list, reserve: float,
                chunk: int = 96, report: Callable[[float], None] | None = None):
     """Evaluate every interval with ``rozdel``; return (shares, timing dict).
 
-    Intervals are classified exactly like rozdel's fast paths (after the reserve)
-    and each class runs as one timed batch, so per-class times are exact without
-    timing every call. Intervals are independent, so the order does not matter.
+    ``keys`` is one list of keys, or a list of keys per interval (the pool of several
+    producers). Intervals are classified exactly like rozdel's fast paths (after the
+    reserve) and each class runs as one timed batch, so per-class times are exact
+    without timing every call. Intervals are independent, so the order does not matter.
     """
     T = len(Pl)
-    active = [k > 0 for k in keys]
+    per_interval = bool(keys) and isinstance(keys[0], (list, tuple))
+    key_of = (lambda t: keys[t]) if per_interval else (lambda t: keys)  # noqa: E731
     night, enough, full = [], [], []
     for t in range(T):
         p = Pl[t]
         p_eff = p - round(p * reserve) if reserve > 0 else p
         if p_eff <= 0:
             night.append(t)
-        elif sum(x for x, a in zip(Dl[t], active) if a) <= p_eff:
+        elif sum(x for x, k in zip(Dl[t], key_of(t)) if k > 0) <= p_eff:
             enough.append(t)
         else:
             full.append(t)
@@ -105,7 +142,7 @@ def rozdel_all(Pl: list[int], Dl: list[list[int]], keys: list[float], reserve: f
     for batch, name in ((night, "t_night"), (enough, "t_enough"), (full, "t_full")):
         c0 = clock()
         for pos, t in enumerate(batch):
-            out[t] = rozdel(Pl[t], Dl[t], keys, reserve)
+            out[t] = rozdel(Pl[t], Dl[t], key_of(t), reserve)
             if report is not None and pos % chunk == 0:
                 report((done + pos) / T)
         tt[name] = clock() - c0
@@ -171,6 +208,9 @@ class Recomputed:
     #: reserve, unless they are the report's own (estimated keys, no reserve: then None,
     #: the report itself is the approximate method's result)
     approx: SharingData | None = None
+    #: several producers: the pair keys (np × n) the pool's keys came from; ``keys``
+    #: are then the pool's keys over the period (pair keys weighted by production)
+    pair_keys: list | None = None
 
     @property
     def pool(self) -> int:
@@ -201,17 +241,22 @@ def check_keys(keys: list[float]) -> None:
         raise InvalidKeys("keys_all_zero")
 
 
-def _as_data(data: SharingData, s: np.ndarray, P: np.ndarray, D: np.ndarray) -> SharingData:
+def _as_data(data: SharingData, s: np.ndarray, P: np.ndarray, D: np.ndarray,
+             unshared: np.ndarray | None = None) -> SharingData:
     """Shares ``s`` (T×n hundredths) as a report like ``data``: shared from the producer
-    (or the pool), unmet per member, unshared per producer (:func:`split_surplus`)."""
+    (or the pool), unmet per member, unshared per producer (given, or the pool's surplus
+    split by :func:`split_surplus`)."""
     src = shared_source(data)
     idx = data.frame.index
     cols: dict[str, pd.Series] = {}
     for j, e in enumerate(data.dest_eans):
         cols[key_shared(src, e)] = pd.Series(s[:, j] / 100, index=idx)
         cols[key_unmet(e)] = pd.Series((D[:, j] - s[:, j]) / 100, index=idx)
-    P2, _D = producer_arrays(data)
-    surplus = split_surplus(P2, P - s.sum(axis=1))
+    if unshared is None:
+        P2, _D = producer_arrays(data)
+        surplus = split_surplus(P2, P - s.sum(axis=1))
+    else:
+        surplus = np.asarray(unshared, dtype=np.int64)
     for i, p in enumerate(data.source_eans):
         cols[key_unshared(p)] = pd.Series(surplus[:, i] / 100, index=idx)
     return SharingData(
@@ -223,12 +268,19 @@ def _as_data(data: SharingData, s: np.ndarray, P: np.ndarray, D: np.ndarray) -> 
 
 
 def replay_approx(data: SharingData, keys: list[float], rounds: int,
-                  reserve: float = 0.0) -> SharingData:
+                  reserve: float = 0.0, pair_keys=None) -> SharingData:
     """Today's EDC method (``rounds`` rounds) with ``keys``, over the whole report; a
-    reserve for sale is taken off the production first, as in the exact method."""
+    reserve for sale is taken off the production first, as in the exact method. With
+    ``pair_keys`` (several producers) it is EDC's method for several producers: what
+    each producer shared comes from the replay itself."""
     P, D, _S = to_hundredths(data)
-    P_eff = P - np.round(P * reserve).astype(np.int64) if reserve > 0 else P
-    return _as_data(data, replay_edc(P_eff, D, keys, rounds), P, D)
+    if pair_keys is None:
+        P_eff = P - np.round(P * reserve).astype(np.int64) if reserve > 0 else P
+        return _as_data(data, replay_edc(P_eff, D, keys, rounds), P, D)
+    P2, _D = producer_arrays(data)
+    P2_eff = P2 - np.round(P2 * reserve).astype(np.int64) if reserve > 0 else P2
+    s, q = replay_edc_multi(P2_eff, D, pair_keys, rounds)
+    return _as_data(data, s, P, D, unshared=P2 - q)
 
 
 @dataclass(frozen=True)
@@ -273,6 +325,7 @@ def recompute(
     keys_estimated: bool = False,
     rounds: int = 5,
     cancelled: Callable[[], bool] | None = None,
+    pair_keys=None,
 ) -> Recomputed:
     """Run ``rozdel`` for every 15-min interval and build a comparable SharingData.
 
@@ -282,6 +335,11 @@ def recompute(
     estimated from the report (and there is no reserve), today's method is replayed with
     them as well (``Recomputed.approx``), so both sides of the comparison use the same
     inputs.
+
+    With ``pair_keys`` (several producers, np × n) the pool gets in every interval the
+    keys :func:`interval_keys` makes of them, ``keys`` is ignored and becomes the pool's
+    keys over the period; the replay and its check use EDC's method for several
+    producers.
     """
     t_job = time.perf_counter()
     tm = Timing()
@@ -289,8 +347,16 @@ def recompute(
     P, D, S = to_hundredths(data)
     tm.t_prepare += time.perf_counter() - t0
 
-    keys = [float(x) for x in keys]
-    check_keys(keys)
+    if pair_keys is not None:
+        pair_keys = [[float(x) for x in row] for row in pair_keys]
+        check_pair_keys(pair_keys)
+        P2, _D, _S, Q = to_hundredths_multi(data)
+        keys = [float(x) for x in pooled_keys(pair_keys, P2.sum(axis=0))]
+        loop_keys = interval_keys(P2, pair_keys).tolist()
+    else:
+        keys = [float(x) for x in keys]
+        check_keys(keys)
+        loop_keys = keys
 
     T, n = D.shape
     tm.intervals, tm.members = T, n
@@ -299,7 +365,7 @@ def recompute(
 
     # The rozdel() loop runs in a separate process: it gets a whole core and its
     # timing is not disturbed by the web server's threads (GIL, caches).
-    out, tt = _run_isolated(Pl, Dl, keys, reserve, chunk, progress, cancelled)
+    out, tt = _run_isolated(Pl, Dl, loop_keys, reserve, chunk, progress, cancelled)
     for name, value in tt.items():
         setattr(tm, name, value)
     tm.t_total = tm.t_night + tm.t_enough + tm.t_full
@@ -307,10 +373,12 @@ def recompute(
     t0 = time.perf_counter()
     new = _as_data(data, np.asarray(out, dtype=np.int64), P, D)
     same_as_report = keys_estimated and reserve == 0
-    approx = None if same_as_report else replay_approx(data, keys, rounds, reserve)
-    edc_match = replay_match(P, D, S, keys, rounds)
+    approx = None if same_as_report else replay_approx(data, keys, rounds, reserve, pair_keys)
+    edc_match = (replay_match(P, D, S, keys, rounds) if pair_keys is None
+                 else replay_match_multi(P2, D, S, Q, pair_keys, rounds))
     tm.t_prepare += time.perf_counter() - t0
     tm.t_wall = time.perf_counter() - t_job
     progress("done", 1.0)
     return Recomputed(data=new, keys=keys, keys_estimated=keys_estimated, reserve=reserve,
-                      timing=tm, edc_match=edc_match, rounds=rounds, approx=approx)
+                      timing=tm, edc_match=edc_match, rounds=rounds, approx=approx,
+                      pair_keys=pair_keys)

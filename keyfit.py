@@ -116,6 +116,310 @@ def replay_match(P, D, S, k, rounds: int = 5) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Several producers: keys per producer-member pair (EDC methodology)
+# ---------------------------------------------------------------------------
+#
+# EDC sets a key for every pair producer i -> member j, and every member takes from its
+# producers in an order of priority. In every round each member, in priority order, gets
+# min(remaining demand, floor(K[i, j] * supply of i at the start of the round)); the
+# supplies drop by what was shared only after the round, so the order of the members
+# does not matter. A producer's keys sum to at most 100 %. With one producer this is
+# :func:`replay_edc`.
+
+
+def priorities(n: int, n_producers: int, priority=None) -> np.ndarray:
+    """Producer index per member and priority position (n × np); default: file order."""
+    if priority is None:
+        return np.tile(np.arange(n_producers), (n, 1))
+    return np.asarray(priority, dtype=np.int64)
+
+
+def replay_edc_multi(P2: np.ndarray, D: np.ndarray, K, rounds: int = 5, priority=None,
+                     want_sp: bool = False):
+    """Today's EDC static method with several producers, over intervals (rows).
+
+    ``P2`` is the production of each producer (T×np), ``K[i, j]`` the key of producer i
+    for member j. Returns the shares of the members ``s`` (T×n), what each producer
+    shared ``q`` (T×np) and, with ``want_sp``, each producer's supply at the start of
+    every round (T×np×rounds)."""
+    K = np.asarray(K, dtype=float)
+    T, n = D.shape
+    n_p = P2.shape[1]
+    order = priorities(n, n_p, priority)
+    cols = np.arange(n)
+    s_out = np.empty(D.shape, dtype=np.int64)
+    q_out = np.empty(P2.shape, dtype=np.int64)
+    sp_out = np.empty((T, n_p, rounds), dtype=float) if want_sp else None
+    for a in range(0, T, CHUNK):
+        b = min(a + CHUNK, T)
+        rem = D[a:b].astype(np.int64)
+        sup = P2[a:b].astype(np.int64)
+        s = np.zeros_like(rem)
+        q = np.zeros_like(sup)
+        for r in range(rounds):
+            if want_sp:
+                sp_out[a:b, :, r] = sup
+            took = np.zeros_like(sup)
+            for pos in range(n_p):
+                src = order[:, pos]                       # producer of each member here
+                x = np.minimum(rem, np.floor(sup[:, src] * K[src, cols][None, :] + 1e-9)
+                               .astype(np.int64))
+                rem -= x
+                s += x
+                for i in range(n_p):
+                    mine = src == i
+                    if mine.any():
+                        took[:, i] += x[:, mine].sum(axis=1)
+            sup = sup - took
+            q += took
+        s_out[a:b], q_out[a:b] = s, q
+    return (s_out, q_out, sp_out) if want_sp else (s_out, q_out)
+
+
+def replay_match_multi(P2, D, S, Q, K, rounds: int = 5, priority=None) -> float:
+    """Fraction of intervals where the replay with pair keys ``K`` gives every member
+    and every producer exactly what the report says."""
+    if not len(P2):
+        return 0.0
+    s, q = replay_edc_multi(P2, D, K, rounds, priority)
+    return float(((s == S).all(axis=1) & (q == Q).all(axis=1)).mean())
+
+
+def pooled_keys(K, energy) -> np.ndarray:
+    """One key per member for the producers' pool: the pair keys weighted by what each
+    producer produced (``energy`` per producer; per interval, a T×np production gives
+    T×n keys)."""
+    K = np.asarray(K, dtype=float)
+    E = np.asarray(energy, dtype=float)
+    tot = E.sum(axis=-1, keepdims=True)
+    w = np.where(tot > 0, E / np.where(tot > 0, tot, 1), 1.0 / E.shape[-1])
+    return w @ K
+
+
+def _pair_solve(X: np.ndarray, y: np.ndarray, prior: np.ndarray, lam: float) -> np.ndarray:
+    """Keys of one member for its producers: least squares of ``X k ≈ y`` pulled towards
+    ``prior`` (producers that produce alike cannot be told apart by the data; there the
+    keys stay near the member's common key), not negative."""
+    n_p = X.shape[1]
+    A = X.T @ X + lam * np.eye(n_p)
+    b = X.T @ y + lam * prior
+    k = np.linalg.solve(A, b)
+    for _ in range(n_p):                       # drop negative keys, solve for the rest
+        neg = k < 0
+        if not neg.any():
+            break
+        keep = ~neg
+        k = np.zeros(n_p)
+        if keep.any():
+            Ak = A[np.ix_(keep, keep)]
+            k[keep] = np.linalg.solve(Ak, b[keep])
+    return np.clip(k, 0.0, 1.0)
+
+
+def _cap_producers(K: np.ndarray) -> np.ndarray:
+    """No producer gives away more than 100 % (whole hundredths of a percent)."""
+    over = K.sum(axis=1) > 1.0 + 1e-9
+    K = K.copy()
+    K[over] = np.floor(K[over] / K[over].sum(axis=1, keepdims=True) * 1e4) / 1e4
+    return K
+
+
+def _pair_score(P2, D, S, Q, K, rounds) -> tuple[int, int]:
+    """(intervals matched exactly, member and producer values matched): the second
+    breaks ties."""
+    s, q = replay_edc_multi(P2, D, K, rounds)
+    ok = (s == S).all(axis=1) & (q == Q).all(axis=1)
+    return int(ok.sum()), int((s == S).sum() + (q == Q).sum())
+
+
+def _relaxed_multi(P2, D, K, rounds):
+    """:func:`replay_edc_multi` without whole hundredths, for the search: a share is
+    ``max(K·supply − ½, 0)`` (floor() loses half a hundredth on average), so a small
+    change of a key changes the result."""
+    rem = D.astype(float)
+    sup = P2.astype(float)
+    s = np.zeros_like(rem)
+    q = np.zeros_like(sup)
+    for _r in range(rounds):
+        took = np.zeros_like(sup)
+        for i in range(P2.shape[1]):
+            x = np.minimum(rem, np.maximum(sup[:, i:i + 1] * K[i][None, :] - 0.5, 0.0))
+            rem -= x
+            s += x
+            took[:, i] = x.sum(axis=1)
+        sup -= took
+        q += took
+    return s, q
+
+
+def _lm_pairs(P2, D, S, Q, K, rounds, free, deadline, iters: int = 30):
+    """Levenberg-Marquardt on the relaxed replay: what the members received *and* what
+    the producers shared. The producers' totals pin how much each of them gives away in
+    all (lower keys would leave more for the later rounds and the members alone could
+    not tell)."""
+    n_p = K.shape[0]
+    params = [(i, j) for j in free for i in range(n_p)]
+    if not params:
+        return K
+
+    def resid(KK):
+        s, q = _relaxed_multi(P2, D, KK, rounds)
+        return np.concatenate([(s - S).ravel(), (q - Q).ravel()])
+
+    r = resid(K)
+    cost, mu, h = float(r @ r), 1e-3, 1e-4
+    for _it in range(iters):
+        if _late(deadline):
+            break
+        J = np.empty((len(r), len(params)))
+        for c, (i, j) in enumerate(params):
+            KK = K.copy()
+            KK[i, j] += h
+            J[:, c] = (resid(KK) - r) / h
+        A, g = J.T @ J, J.T @ r
+        while True:
+            step = np.linalg.solve(A + mu * np.diag(np.diag(A) + 1e-12), -g)
+            KK = K.copy()
+            for c, (i, j) in enumerate(params):
+                KK[i, j] = min(1.0, max(0.0, KK[i, j] + step[c]))
+            over = KK.sum(axis=1) > 1.0
+            KK[over] /= KK[over].sum(axis=1, keepdims=True)
+            rr = resid(KK)
+            cc = float(rr @ rr)
+            if cc < cost:
+                K, r, cost, mu = KK, rr, cc, max(mu / 3, 1e-9)
+                break
+            mu *= 4
+            if mu > 1e8:
+                return K
+    return K
+
+
+def _exact_pair_step(P2, D, S, K, rounds, free):
+    """One step with the exact equations: a member not fully covered received exactly
+    ``sum_r sum_i floor(K[i, j] · supply_i,r)``; the supplies come from the current keys."""
+    _s, _q, sp = replay_edc_multi(P2, D, K, rounds, want_sp=True)
+    X_all = sp.sum(axis=2)
+    n_p = K.shape[0]
+    K = K.copy()
+    for j in free:
+        rows = S[:, j] < D[:, j]
+        if rows.sum() < n_p + 2:
+            continue
+        X = X_all[rows]
+        v = K[:, j][None, :, None] * sp[rows]
+        y = S[rows, j] + np.where(v >= 1, 0.5, v).sum(axis=(1, 2))
+        lam = 1e-4 * float(np.trace(X.T @ X)) / n_p + 1e-9
+        K[:, j] = _pair_solve(X, y, K[:, j], lam)
+    return _cap_producers(np.round(K / FINE) * FINE)
+
+
+def _settle_pairs(P2, D, S, Q, K, rounds, free, deadline):
+    """Move pair keys on the 0.01 % grid while the replay reproduces more: one key up or
+    down, and a member's key moved from one producer to another (producers that produce
+    alike stand in for each other, so moving one key alone may not help)."""
+    n_p = K.shape[0]
+    energy = np.maximum(P2.sum(axis=0).astype(float), 1.0)
+    best = _pair_score(P2, D, S, Q, K, rounds)
+    moves = [((i, 1.0),) for i in range(n_p)]
+    moves += [((i, 1.0), (i2, -energy[i] / energy[i2])) for i in range(n_p)
+              for i2 in range(n_p) if i2 != i]
+    for _sweep in range(8):
+        improved = False
+        for step in (0.01, 0.001, 0.0001):
+            for j in free:
+                for move in moves:
+                    for sign in (1, -1):
+                        while not _late(deadline):
+                            KK = K.copy()
+                            for i, w in move:
+                                KK[i, j] = round(min(1.0, max(0.0, KK[i, j] + sign * w * step)), 4)
+                            if (KK[:, j] == K[:, j]).all() or (KK.sum(axis=1) > 1.0 + 1e-9).any():
+                                break
+                            sc = _pair_score(P2, D, S, Q, KK, rounds)
+                            if sc > best:
+                                K, best, improved = KK, sc, True
+                            else:
+                                break
+        if not improved or _late(deadline):
+            break
+    return K, best
+
+
+def estimate_pair_keys(P2: np.ndarray, D: np.ndarray, S: np.ndarray, Q: np.ndarray,
+                       rounds: int | None = None, progress: ProgressFn = _noop,
+                       budget: float | None = FIT_BUDGET_S) -> "KeyFit":
+    """Rough keys for every pair producer -> member from a report with several producers.
+
+    The report gives what every member received and what every producer shared, not
+    the flows of the pairs; the producers' changing shares of the production over the
+    day tell the pair keys apart. Start: the keys of the pool (one key per member for
+    the total production, :func:`estimate_keys`) for every producer. Then, for 1 and
+    (groups up to 100) 5 rounds: Levenberg-Marquardt on a relaxed replay (members *and*
+    producers), steps with the exact equations of members not fully covered, and a
+    settle on the 0.01 % grid by the replay itself. The best of these and the pool's
+    keys wins. Members that are always covered keep the pool's covering key, members
+    with nothing to receive get 0. The match is measured on every interval and counts
+    an interval only when every member and every producer is reproduced.
+
+    Producers that produce alike (the same orientation) cannot be told apart well: the
+    keys of such pairs are uncertain, their sum for the member is not.
+    """
+    t0 = time.perf_counter()
+    deadline = None if not budget else t0 + budget
+    P2 = np.asarray(P2, dtype=np.int64)
+    n_p, n = P2.shape[1], D.shape[1]
+    P = P2.sum(axis=1)
+    pool = estimate_keys(P, D, S, rounds, lambda ph, f: progress(ph, 0.3 * f),
+                         budget=None if not budget else budget * 0.3)
+    status = pool.status
+    free = [j for j, st in enumerate(status) if st not in SKIP and st != "always_covered"]
+    day = np.nonzero(P > 0)[0]
+    fit_rows = day if len(day) <= 2 * MAX_FIT_ROWS else day[
+        np.linspace(0, len(day) - 1, 2 * MAX_FIT_ROWS).astype(int)]
+    lm_rows = fit_rows
+    K0 = np.tile(np.asarray(pool.keys, dtype=float), (n_p, 1))
+    options = [rounds] if rounds else ([1, 5] if n <= EDC_MAX_5_ROUNDS else [1])
+    candidates = [(replay_match_multi(P2, D, S, Q, K0, pool.rounds), pool.rounds, K0)]
+    tried = {}
+    for k_opt, R in enumerate(options):
+        part = 0.3 + 0.7 * k_opt / len(options)
+        # each round count gets its share of the time left
+        left = None if deadline is None else max(0.0, deadline - time.perf_counter())
+        until = None if left is None else time.perf_counter() + left / (len(options) - k_opt)
+        K = _lm_pairs(P2[lm_rows], D[lm_rows], S[lm_rows], Q[lm_rows], K0.copy(), R, free,
+                      until)
+        K = _cap_producers(np.round(K / FINE) * FINE)
+        Pf, Df, Sf, Qf = P2[fit_rows], D[fit_rows], S[fit_rows], Q[fit_rows]
+        best = _pair_score(Pf, Df, Sf, Qf, K, R)
+        for _round in range(4):                    # exact equations, then the replay
+            K2 = _exact_pair_step(Pf, Df, Sf, K, R, free)
+            if _pair_score(Pf, Df, Sf, Qf, K2, R) >= best:
+                K = K2
+            K, sc = _settle_pairs(Pf, Df, Sf, Qf, K, R, free, until)
+            progress("fit", part + 0.7 * (_round + 1) / 4 / len(options))
+            if sc <= best or sc[0] == len(fit_rows) or _late(until):
+                best = max(best, sc)
+                break
+            best = sc
+        for j, st in enumerate(status):
+            if st in SKIP:
+                K[:, j] = 0.0
+        K = _cap_producers(K)
+        match = replay_match_multi(P2, D, S, Q, K, R)
+        tried[R] = match
+        candidates.append((match, R, K))
+        progress("fit", part + 0.7 / len(options))
+    match, R, K = max(candidates, key=lambda c: c[0])
+    progress("fit", 1.0)
+    return KeyFit(keys=[float(x) for x in pooled_keys(K, P2.sum(axis=0))], rounds=R,
+                  match=match, seconds=time.perf_counter() - t0, status=list(status),
+                  support=[], tried=tried, ranges=[], rough=_late(deadline) or pool.rough,
+                  rows=len(fit_rows), pair_keys=[[float(x) for x in row] for row in K],
+                  pool_match=pool.match)
+
+
+# ---------------------------------------------------------------------------
 # Exact per-interval bounds
 # ---------------------------------------------------------------------------
 
@@ -512,6 +816,10 @@ class KeyFit:
     ranges: list = field(default_factory=list)         # (lo, hi) equally consistent keys
     rough: bool = False                                # time limit hit: best keys so far
     rows: int = 0                                      # intervals the 5-round search used
+    #: several producers: key of every pair producer i -> member j (np × n); ``keys``
+    #: are then the pool's keys, the pair keys weighted by the producers' production
+    pair_keys: list | None = None
+    pool_match: float | None = None                    # match of one key set for the pool
 
 
 def estimate_keys(P: np.ndarray, D: np.ndarray, S: np.ndarray,

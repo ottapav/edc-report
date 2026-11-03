@@ -20,9 +20,9 @@ import config
 import store
 from billing import BillResult, compute_shapley
 from edc_data import per_destination, producer_arrays, supplied_per_source
-from keyfit import estimate_keys
+from keyfit import estimate_keys, estimate_pair_keys
 from procjob import JobCancelled, JobTimeout, run_in_child
-from recompute import InvalidKeys, recompute, to_hundredths
+from recompute import InvalidKeys, recompute, to_hundredths, to_hundredths_multi
 
 
 @dataclass
@@ -118,9 +118,14 @@ def _run(job: Job, work: Work) -> None:
 
 
 def _estimate(entry: store.Entry, job: Job) -> None:
+    """Allocation keys from the report; with several producers the key of every pair
+    producer -> member (EDC's method for several producers)."""
     job.progress("fit", 0.0)
-    entry.fit = run_in_child(estimate_keys, to_hundredths(entry.data), progress=job.progress,
-                             cancelled=job.cancelled, timeout=config.FIT_TIMEOUT_S)
+    multi = len(entry.data.source_eans) > 1
+    fn, args = ((estimate_pair_keys, to_hundredths_multi(entry.data)) if multi
+                else (estimate_keys, to_hundredths(entry.data)))
+    entry.fit = run_in_child(fn, args, progress=job.progress, cancelled=job.cancelled,
+                             timeout=config.FIT_TIMEOUT_S)
 
 
 def start_fit(data_key: str) -> str:
@@ -128,11 +133,16 @@ def start_fit(data_key: str) -> str:
     return start("fit", data_key, _estimate)
 
 
-def start_exact(data_key: str, keys: list[float | None], reserve: float) -> str:
+def start_exact(data_key: str, keys: list[float | None] | None, reserve: float,
+                pairs: list[list[float | None]] | None = None) -> str:
     """Recompute with the exact static method; empty keys (None) take the estimate. With
     other keys than the estimate (or a reserve) today's method is replayed with them too
-    (see :func:`recompute.recompute`)."""
+    (see :func:`recompute.recompute`). Several producers: ``pairs`` are the pair keys
+    (np × n), the pool gets keys made of them in every interval."""
     def work(entry: store.Entry, job: Job) -> None:
+        if pairs is not None:
+            _exact_pairs(entry, job, pairs, reserve)
+            return
         if entry.fit is None and any(k is None for k in keys):
             job.with_fit = True
             _estimate(entry, job)
@@ -153,6 +163,30 @@ def start_exact(data_key: str, keys: list[float | None], reserve: float) -> str:
             entry.data, merged, reserve, progress=job.progress, cancelled=job.cancelled,
             keys_estimated=estimated, rounds=fit.rounds if fit else 5)
     return start("exact", data_key, work)
+
+
+def _exact_pairs(entry: store.Entry, job: Job, pairs, reserve: float) -> None:
+    """The exact method for several producers, from the pair keys (empty cells: the
+    estimate)."""
+    if entry.fit is None and any(k is None for row in pairs for k in row):
+        job.with_fit = True
+        _estimate(entry, job)
+    fit = entry.fit
+    est = getattr(fit, "pair_keys", None)
+    merged = [[k if k is not None else (est[i][j] if est else None)
+               for j, k in enumerate(row)] for i, row in enumerate(pairs)]
+    if any(k is None for row in merged for k in row):
+        raise RuntimeError("missing allocation keys")
+    # read back from the grid (percent, two decimals) a key may differ from the
+    # estimate in the last bits: within 1e-9 it is the estimate
+    estimated = bool(est) and all(abs(k - e) <= 1e-9 for row, erow in zip(merged, est)
+                                  for k, e in zip(row, erow))
+    if estimated:
+        merged = [[float(e) for e in row] for row in est]
+    job.progress("compute", 0.0)
+    entry.exact = recompute(entry.data, None, reserve, progress=job.progress,
+                            cancelled=job.cancelled, keys_estimated=estimated,
+                            rounds=fit.rounds if fit else 5, pair_keys=merged)
 
 
 def start_bill(data_key: str, prices: list[float], feed_ins: list[float]) -> str:

@@ -19,7 +19,7 @@ from edc_data import SharingData
 from figures import top_dests
 from i18n import fmt_duration, fmt_num, fmt_pct, t
 
-from . import members, views
+from . import members, panel, views
 from .layout import JOB_KINDS, job_ids
 
 _EXACT, _BILL = job_ids("exact"), job_ids("bill")
@@ -68,16 +68,23 @@ def bill_inputs(data: SharingData, rows, src_rows, feed_default, default):
     output=_start_outputs("exact"),
     inputs=dict(n=Input(_EXACT["btn"], "n_clicks")),
     state=dict(key=State("data-key", "data"), rows=State("members", "rowData"),
-               reserve=State("reserve", "value"), lang=State("lang", "value")),
+               reserve=State("reserve", "value"), lang=State("lang", "value"),
+               pair_rows=State("pair-keys", "rowData")),
     prevent_initial_call=True,
 )
-def start_exact(n, key, rows, reserve, lang):
+def start_exact(n, key, rows, reserve, lang, pair_rows=None):
     if not n:
         raise dash.exceptions.PreventUpdate
     entry = store.get(key)
     refused = _usable(entry, lang, "part_no_recompute")
     if refused:
         return refused
+    if len(entry.data.source_eans) > 1:              # several producers: the pair keys
+        typed = members.pair_keys(entry.data, pair_rows)
+        problem = members.pair_problem(typed, entry.fit)
+        if problem:
+            return _refused(problem, lang)
+        return _started(jobs.start_exact(key, None, members.reserve(reserve), pairs=typed))
     typed = members.keys(entry.data, rows)
     problem = members.key_problem(typed, entry.fit)
     if problem:
@@ -182,46 +189,94 @@ _GRIDS = dict(rows=State("members", "rowData"), src_rows=State("producers", "row
 @callback(
     Output("fit-info", "children"),
     Output("members", "rowTransaction", allow_duplicate=True),
+    Output("pair-keys", "rowTransaction", allow_duplicate=True),
     Input(_EXACT["rev"], "data"),
     Input("lang", "value"),
     Input("data-key", "data"),
     State("members", "rowData"),
+    State("pair-keys", "rowData"),
     prevent_initial_call="initial_duplicate",
 )
-def fit_info(_rev, lang, key, rows):
-    """Summary of the key estimate; per member the estimate, its range and a warning."""
+def fit_info(_rev, lang, key, rows, pair_rows):
+    """Summary of the key estimate; per member the estimate, its range and a warning.
+    Several producers: the estimated pair keys into the empty cells of their grid, and
+    the pool's key of every member into the panel."""
     entry = store.get(key)
     if entry is None or entry.fit is None or not rows:
-        return [], no_update
-    notes, update = views.fit_summary(entry.fit, entry.data, rows, lang)
-    return notes, {"update": update}
+        return [], no_update, no_update
+    data = entry.data
+    notes, update = views.fit_summary(entry.fit, data, rows, lang)
+    pairs = no_update
+    if entry.fit.pair_keys:
+        pairs = panel.pair_update(data, entry.fit, pair_rows)
+        filled = members.pair_keys(data, pairs["update"] if pairs is not no_update else pair_rows)
+        pool = members.pool_keys(data, members.merged_pair_keys(filled, entry.fit))
+        by_ean = dict(zip(data.dest_eans, pool))
+        update = [dict(r, key=None if by_ean.get(r["ean"]) is None
+                       else members.pct_key(by_ean[r["ean"]])) for r in update]
+    return notes, {"update": update}, pairs
+
+
+@callback(
+    Output("members", "rowTransaction", allow_duplicate=True),
+    Input("pair-keys", "cellValueChanged"),
+    State("pair-keys", "rowData"),
+    State("members", "rowData"),
+    State("data-key", "data"),
+    prevent_initial_call=True,
+)
+def pool_from_pairs(_changed, pair_rows, rows, key):
+    """A pair key typed: the pool's key of the members in the panel follows."""
+    entry = store.get(key)
+    if entry is None or not rows:
+        raise dash.exceptions.PreventUpdate
+    data = entry.data
+    merged = members.merged_pair_keys(members.pair_keys(data, pair_rows), entry.fit)
+    by_ean = dict(zip(data.dest_eans, members.pool_keys(data, merged)))
+    return {"update": [dict(r, key=None if by_ean.get(r.get("ean")) is None
+                            else members.pct_key(by_ean[r["ean"]]))
+                       for r in rows if r.get("ean") in by_ean]}
 
 
 @callback(
     Output("exact-stale", "children"),
     Input("members", "cellValueChanged"),
     Input("members", "rowData"),
+    Input("pair-keys", "cellValueChanged"),
     Input("reserve", "value"),
     Input(_EXACT["rev"], "data"),
     Input("lang", "value"),
+    State("pair-keys", "rowData"),
     State("data-key", "data"),
 )
-def exact_stale(_changed, rows, reserve, _rev, lang, key):
+def exact_stale(_changed, rows, _pair_changed, reserve, _rev, lang, pair_rows, key):
     """Invalid keys (negative, sum over 100 %), or "keys changed since the last
-    recompute" - a tiny callback, so typing a key does not re-render any figure."""
+    recompute" - a tiny callback, so typing a key does not re-render any figure.
+    Several producers: the pair keys are what counts."""
     entry = store.get(key)
     if entry is None:
         return []
-    current = members.keys(entry.data, rows)
-    problem = members.key_problem(current, entry.fit)
+    multi = len(entry.data.source_eans) > 1
+    if multi:
+        typed = members.pair_keys(entry.data, pair_rows)
+        problem = members.pair_problem(typed, entry.fit)
+    else:
+        current = members.keys(entry.data, rows)
+        problem = members.key_problem(current, entry.fit)
     if problem:
         return views.hint(t(problem, lang), "stale bad")
     exact = entry.exact
     if exact is None:
         return []
-    merged = members.merged_keys(current, entry.fit)
-    changed = (any(k is not None and abs(k - u) > 1e-6 for k, u in zip(merged, exact.keys))
-               or abs(members.reserve(reserve) - exact.reserve) > 1e-9)
+    if multi:
+        merged = members.merged_pair_keys(typed, entry.fit)
+        used = exact.pair_keys or []
+        changed = any(k is not None and abs(k - u) > 1e-6
+                      for row, urow in zip(merged, used) for k, u in zip(row, urow))
+    else:
+        merged = members.merged_keys(current, entry.fit)
+        changed = any(k is not None and abs(k - u) > 1e-6 for k, u in zip(merged, exact.keys))
+    changed = changed or abs(members.reserve(reserve) - exact.reserve) > 1e-9
     return views.hint(t("stale", lang), "stale") if changed else []
 
 

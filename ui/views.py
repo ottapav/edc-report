@@ -316,8 +316,9 @@ def fit_summary(fit: KeyFit, data: SharingData, rows: list[dict], lang: str):
         key = r.get("key") if r.get("key") not in (None, "") else members.pct_key(fit.keys[i])
         update.append(dict(r, key=key, range=text, warn=warn))
     notes = [html.P([html.B(f"{t('fit_title', lang)}: "), summary], className="fit-line")]
-    if len(data.source_eans) > 1:
-        notes.append(hint(t("fit_pool", lang).format(n=len(data.source_eans))))
+    if fit.pair_keys:
+        pool = "—" if fit.pool_match is None else fmt_pct(100 * fit.pool_match, lang)
+        notes.append(hint(t("fit_pool", lang).format(pool=pool)))
     if fit.match < 0.95:
         notes.append(hint(t("fit_low", lang), "stale"))
     elif fit.rough:
@@ -368,13 +369,14 @@ def exact_result(exact: Recomputed, data: SharingData, enabled: set[str], names:
     used = " · ".join(f"{names[e]} {fmt_pct(100 * k, lang, 1)}"
                       for e, k in zip(data.dest_eans, exact.keys))
     source = t("keys_est" if exact.keys_estimated else "keys_user", lang)
+    keys_used = t("keys_used_pool" if exact.pair_keys else "keys_used", lang)
     reserve = (f" · {t('reserve', lang)}: {fmt_pct(100 * exact.reserve, lang, 1)}"
                if exact.reserve else "")
     return [
         loss_box,
         html.H3(t("timing_title", lang), className="sub-title"),
         stats,
-        html.P([html.B(f"{t('keys_used', lang)} ({source}): "), used,
+        html.P([html.B(f"{keys_used} ({source}): "), used,
                 f" ({t('keys_sum', lang)} {fmt_pct(100 * sum(exact.keys), lang, 1)}){reserve}"],
                className="keys-line"),
         # estimated keys: the fit line above the result already gives this check

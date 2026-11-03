@@ -1,5 +1,6 @@
-"""Several producers: loaded as one pool, keys estimated for the pool, the exact static
-method shares the pool, and the page and the export say so."""
+"""Several producers: EDC's method with a key for every pair producer -> member, the
+estimate of those pair keys, the exact static method on the producers' pool with keys
+made of the pair keys interval by interval, and the page and the export saying so."""
 import io
 import time
 
@@ -15,34 +16,88 @@ import recompute
 import store
 from conftest import all_report_csv, synthetic_group
 from i18n import method_title, t
+from presna_staticka import rozdel
 from ui import compute, members, panel, report, views
 
 
-def _pool_report(n=5, days=20, producers=3, seed=6):
-    """Members share the producers' total production as one pool (today's EDC method)
-    with known keys; each producer supplies the same part of its production."""
-    keys = [0.3, 0.25, 0.2, 0.1, 0.05][:n]
-    P, D, S, k = synthetic_group(n, 96 * days, 5, keys=keys, seed=seed)
-    split = np.linspace(1.0, 0.6, producers)
-    P3 = np.floor(P[:, None] * split / split.sum()).astype(np.int64)
-    P3[:, 0] += P - P3.sum(axis=1)                       # adds up to P exactly
-    surplus = recompute.split_surplus(P3, P - S.sum(axis=1))
-    return all_report_csv(P3, D, S, supplied=P3 - surplus), P3, D, S, np.array(k)
+def _pair_group(n=6, n_p=3, days=20, seed=0, shifts=(-2.0, 0.0, 2.0)):
+    """Producers facing east, south and west; members' demand at random; shares by
+    EDC's method for several producers with random pair keys (each producer ≤ 95 %)."""
+    rng = np.random.default_rng(seed)
+    T = 96 * days
+    hour = (np.arange(T) % 96) / 4
+    P2 = np.stack([(30 * n * np.clip(np.sin(np.pi * (hour - 6 - sh) / 12), 0, None)
+                    * (6 + sh < hour) * (hour < 18 + sh) * rng.uniform(0.3, 1.0, T))
+                   .astype(np.int64) for sh in shifts[:n_p]], axis=1)
+    base = rng.lognormal(-1.5, 0.8, n)
+    D = np.maximum(0, 100 * base[None, :] * rng.uniform(0.2, 1.8, (T, n))).astype(np.int64)
+    K = rng.uniform(0, 1, (n_p, n))
+    K = np.round(K / K.sum(axis=1, keepdims=True) * 0.95, 4)
+    S, Q = keyfit.replay_edc_multi(P2, D, K, 5)
+    return all_report_csv(P2, D, S, supplied=Q), P2, D, S, Q, K
+
+
+@pytest.fixture(scope="module")
+def pair_group():
+    return _pair_group()
 
 
 @pytest.fixture
-def pool_entry():
-    csv, P3, D, S, k = _pool_report()
+def pool_entry(pair_group):
+    csv, *rest = pair_group
     key = store.put("pool.csv", core.load_report(csv))
-    yield key, P3, D, S, k
+    yield (key, *rest)
     store.drop(key)
 
 
-def _wait(job_id, seconds=120):
+def _wait(job_id, seconds=180):
     job, t0 = jobs.get(job_id), time.perf_counter()
     while not job.done and time.perf_counter() - t0 < seconds:
         time.sleep(0.05)
     assert job.done and job.error is None and job.error_key is None
+
+
+def _shares(data, d):
+    return np.stack([np.round(d.frame[core.key_shared(core.POOL, e)].to_numpy() * 100)
+                     for e in data.dest_eans], axis=1).astype(np.int64)
+
+
+# ---------------------------------------------------------------------------
+# EDC's method for several producers
+# ---------------------------------------------------------------------------
+
+
+def test_replay_follows_the_worked_example_of_the_edc_methodology():
+    """EDC methodology, example 4: FVE Obecní úřad 2.20 kWh, Solární park 132.45 kWh;
+    Obecní úřad 3.37 kWh (30 % from its FVE first, then 10 % from the park), Knihovna
+    1.20 kWh, Školka 36.87 kWh (10 % from the park); three members, three rounds."""
+    P2 = np.array([[220, 13245]])
+    D = np.array([[337, 120, 3687]])
+    K = np.array([[0.30, 0.0, 0.0], [0.10, 0.05, 0.10]])
+    s, q, sp = keyfit.replay_edc_multi(P2, D, K, rounds=3, want_sp=True)
+    assert sp[0, 1].tolist() == [13245, 11530, 10377]         # the park after each round
+    assert s[0].tolist() == [337, 120, 1324 + 1153 + 1037]     # Školka: 13.24 + 11.53 + 10.37
+    assert q[0].tolist() == [66, 271 + 120 + 1324 + 1153 + 1037]
+
+
+def test_replay_with_one_producer_is_todays_method():
+    rng = np.random.default_rng(1)
+    P = rng.integers(0, 900, 500)
+    D = rng.integers(0, 300, (500, 4))
+    k = [0.3, 0.2, 0.1, 0.25]
+    s, q = keyfit.replay_edc_multi(P[:, None], D, np.array([k]), 5)
+    assert (s == keyfit.replay_edc(P, D, k, 5)).all() and (q[:, 0] == s.sum(axis=1)).all()
+
+
+def test_pair_keys_are_estimated(pair_group):
+    _csv, P2, D, S, Q, K = pair_group
+    fit = keyfit.estimate_pair_keys(P2, D, S, Q)
+    assert fit.rounds == 5 and fit.match > 0.85
+    assert fit.pool_match < fit.match                       # one key set cannot do this
+    Kf = np.array(fit.pair_keys)
+    assert np.abs(Kf - K).max() < 0.01
+    assert np.allclose(fit.keys, keyfit.pooled_keys(Kf, P2.sum(axis=0)))
+    assert (Kf.sum(axis=1) <= 1 + 1e-9).all()
 
 
 def test_split_surplus_is_proportional_whole_and_exact():
@@ -53,92 +108,138 @@ def test_split_surplus_is_proportional_whole_and_exact():
     assert out[0].tolist() == [30, 20, 10] and out[3].tolist() == [7, 0, 3]
 
 
-def test_pool_report_estimates_the_keys_of_the_pool(pool_entry):
-    key, P3, D, S, k = pool_entry
-    data = store.get(key).data
-    P, D2, S2 = recompute.to_hundredths(data)
-    assert (P == P3.sum(axis=1)).all() and (D2 == D).all() and (S2 == S).all()
-    fit = keyfit.estimate_keys(P, D2, S2)
-    assert fit.match > 0.97
-    assert np.allclose(fit.keys, k, atol=0.006)
+# ---------------------------------------------------------------------------
+# The exact method on the pool
+# ---------------------------------------------------------------------------
 
 
-def test_exact_method_shares_the_pool(pool_entry):
-    key, P3, D, S, k = pool_entry
+def test_exact_method_shares_the_pool_with_keys_of_the_interval(pool_entry):
+    key, P2, D, S, Q, K = pool_entry
     entry = store.get(key)
     data = entry.data
-    rows = [{"ean": e, "key": None} for e in data.dest_eans]
-    out = compute.start_exact(1, key, rows, 0, "cs")         # not refused any more
+    pair_rows = members.pair_rows(data, members.default_names(data, "cs"))
+    out = compute.start_exact(1, key, [], 0, "cs", pair_rows)   # empty cells: the estimate
     assert out["busy"] is True
     _wait(out["job"])
-    exact = entry.exact
-    assert exact.pool == 3 and entry.fit is not None
-    # the shares are rozdel() of the pool's production, interval by interval
-    from presna_staticka import rozdel
-    P = P3.sum(axis=1)
-    got = np.stack([np.round(exact.data.frame[core.key_shared(core.POOL, e)].to_numpy() * 100)
-                    for e in data.dest_eans], axis=1).astype(np.int64)
-    for t_ in range(0, len(P), 97):
-        assert got[t_].tolist() == list(rozdel(int(P[t_]), D[t_].tolist(), exact.keys))
-    # every producer gets the surplus in proportion to its production, never more
+    exact, fit = entry.exact, entry.fit
+    assert exact.pool == 3 and fit.pair_keys and exact.keys_estimated
+    assert exact.pair_keys == fit.pair_keys and exact.approx is None
+    # in every interval the pool's keys are the pair keys weighted by the production then
+    P = P2.sum(axis=1)
+    kt = recompute.interval_keys(P2, exact.pair_keys)
+    got = _shares(data, exact.data)
+    for t_ in range(0, len(P), 37):
+        assert got[t_].tolist() == list(rozdel(int(P[t_]), D[t_].tolist(), kt[t_].tolist()))
+    assert np.allclose(exact.keys, keyfit.pooled_keys(np.array(exact.pair_keys), P2.sum(axis=0)))
+    # the producers get the pool's surplus by their production, never more
     U = np.stack([np.round(exact.data.frame[core.key_unshared(p)].to_numpy() * 100)
                   for p in data.source_eans], axis=1).astype(np.int64)
-    assert (U.sum(axis=1) + got.sum(axis=1) == P).all() and (U <= P3).all() and (U >= 0).all()
-    # it shares at least what the report shared, and the summaries add up
+    assert (U.sum(axis=1) + got.sum(axis=1) == P).all() and (U <= P2).all() and (U >= 0).all()
+    assert exact.edc_match == pytest.approx(fit.match)
     loss = recompute.grid_loss(data, exact.data)
     assert loss.shared_exact >= loss.shared_edc - 0.01
-    s = core.summarize(exact.data, set(data.dest_eans))
-    assert s.shared + s.unshared == pytest.approx(s.production, abs=0.05)
     entry.exact = None
 
 
-def test_keys_read_back_from_the_grid_are_the_estimate(pool_entry):
-    """The grid shows the estimated keys in percent with two decimals; pressing the
-    button without changing them recomputes with the estimate (not "entered keys",
-    and no replay): 1.04 % read back is 0.0104, the estimate 0.010400000000000001."""
-    key, *_ = pool_entry
+def test_typed_pair_keys_replay_edc_and_keep_the_estimate_otherwise(pool_entry):
+    key, P2, D, S, Q, K = pool_entry
     entry = store.get(key)
     data = entry.data
-    entry.fit = keyfit.estimate_keys(*recompute.to_hundredths(data))
-    entry.fit.keys = [0.010400000000000001] + [0.1] * (len(data.dest_eans) - 1)
-    rows = [{"ean": e, "key": members.pct_key(k)} for e, k in zip(data.dest_eans, entry.fit.keys)]
-    typed = members.keys(data, rows)
-    assert typed[0] != entry.fit.keys[0]                       # the float noise is real
-    _wait(compute.start_exact(1, key, rows, 0, "cs")["job"])
+    entry.fit = keyfit.estimate_pair_keys(P2, D, S, Q)
+    rows = members.pair_rows(data, members.default_names(data, "cs"))
+    # the estimate typed back from the grid (two decimals of a percent) is the estimate
+    est = rows_with(data, rows, entry.fit.pair_keys)
+    assert members.pair_problem(members.pair_keys(data, est), entry.fit) is None
+    _wait(compute.start_exact(1, key, [], 0, "cs", est)["job"])
     assert entry.exact.keys_estimated and entry.exact.approx is None
-    assert entry.exact.keys == entry.fit.keys
+    # the contract's keys: one changed -> EDC's method for several producers replayed
+    K2 = [row[:] for row in entry.fit.pair_keys]
+    K2[0][0] = round(K2[0][0] + 0.02, 4)
+    _wait(compute.start_exact(1, key, [], 0, "cs", rows_with(data, rows, K2))["job"])
+    ex = entry.exact
+    assert not ex.keys_estimated and ex.approx is not None
+    assert ex.pair_keys[0][0] == pytest.approx(K2[0][0])
+    s, q = keyfit.replay_edc_multi(P2, D, np.array(ex.pair_keys), ex.rounds)
+    assert (_shares(data, ex.approx) == s).all()
+    U = np.stack([np.round(ex.approx.frame[core.key_unshared(p)].to_numpy() * 100)
+                  for p in data.source_eans], axis=1).astype(np.int64)
+    assert (P2 - U == q).all()                                # what each producer shared
+    # a producer over 100 % is refused, with the reason
+    bad = rows_with(data, rows, [[0.6] * len(data.dest_eans)] + K2[1:])
+    assert members.pair_problem(members.pair_keys(data, bad), entry.fit) == "pair_sum_over"
+    out = compute.start_exact(1, key, [], 0, "cs", bad)
+    assert out["cls"] == "progress error" and "100" in out["text"]
     entry.fit = entry.exact = None
 
 
-def test_page_and_export_say_pool(pool_entry, monkeypatch):
-    key, P3, D, S, k = pool_entry
+def rows_with(data, rows, K):
+    return [dict(r, **{members.pair_field(i): members.pct_key(K[i][j])
+                       for i in range(len(data.source_eans))})
+            for j, r in enumerate(rows)]
+
+
+# ---------------------------------------------------------------------------
+# The page and the export
+# ---------------------------------------------------------------------------
+
+
+def test_page_and_export_say_pool_and_show_the_pair_keys(pool_entry, monkeypatch):
+    key, P2, D, S, Q, K = pool_entry
     entry = store.get(key)
     data = entry.data
-    entry.fit = keyfit.estimate_keys(*recompute.to_hundredths(data))
-    entry.exact = recompute.recompute(data, list(entry.fit.keys), keys_estimated=True,
-                                      rounds=entry.fit.rounds)
+    entry.fit = keyfit.estimate_pair_keys(P2, D, S, Q)
+    entry.exact = recompute.recompute(data, None, keys_estimated=True, rounds=entry.fit.rounds,
+                                      pair_keys=entry.fit.pair_keys)
     enabled = set(data.dest_eans)
-    # the card: the note up front (panel), the key estimate, the column title
+    # the card: the note up front, the pair-keys grid, the key estimate
     labels = panel._report_labels("cs", key, "production")
     assert "bazén" in labels["exact_pool"].children and "3 výroben" in labels["exact_pool"].children
-    assert labels["exact_title"] == ""
+    cols, style, _ = panel._pair_grid("cs", key, None, None, members.producer_rows(data),
+                                      members.rows(data), [])
+    assert style == {} and len(cols) == 2 + 3 and "Výroba B" in cols[3]["headerName"]
+    pair_rows = members.pair_rows(data, members.default_names(data, "cs"))
     rows = members.rows(data)
-    notes, _ = views.fit_summary(entry.fit, data, rows, "cs")
-    assert any("bazén 3 výroben" in str(getattr(n, "children", "")) for n in notes)
+    notes, update, pairs = compute.fit_info(1, "cs", key, rows, pair_rows)
+    filled = members.pair_keys(data, pairs["update"])
+    assert np.allclose(filled, entry.fit.pair_keys, atol=5e-5)       # two decimals of a %
+    pool = dict(zip(data.dest_eans, entry.fit.keys))
+    assert all(r["key"] == members.pct_key(pool[r["ean"]]) for r in update["update"])
+    assert any("dvojici" in str(getattr(n, "children", "")) for n in notes)
+    # the column title says pool
     title = method_title("col_exact", 3, "cs")
     assert title == "Přesná statická metoda (přepočet, bazén 3 výroben)"
     monkeypatch.setattr(members, "key_only_edit", lambda: False)   # outside a callback
     out = report.render(key, 1, 0, "exact", None, None, None, "cs", "", "production", "light",
                         rows, members.producer_rows(data), None)
     assert out["head_b"] == title
-    # the export: the same column title and the pool in the summary
+    result = views.exact_result(entry.exact, data, enabled, members.default_names(data, "cs"),
+                                "cs")
+    assert "klíče bazénu" in str(result)
+    # the export: the same title, the pool, and the pair keys
     names = members.default_names(data, "cs")
     wb = load_workbook(io.BytesIO(export.summary_xlsx(entry, enabled, names, "cs")))
-    summary = [r for r in wb[t("x_sheet_summary", "cs")].iter_rows(values_only=True)]
+    summary = list(wb[t("x_sheet_summary", "cs")].iter_rows(values_only=True))
     heads = [r for r in summary if r[0] == t("x_item", "cs")]
     assert title in heads[1]
-    pool_rows = [r for r in summary if r[0] == t("x_pool", "cs")]
-    assert pool_rows and all(r[1] == 3 for r in pool_rows)
+    assert [r for r in summary if r[0] == t("x_pool", "cs")]
+    pairs_sheet = list(wb[t("x_sheet_pairs", "cs")].iter_rows(values_only=True))
+    body = [r for r in pairs_sheet[2:] if r[0] != "Σ"]
+    assert len(body) == len(data.dest_eans)
+    for j, r in enumerate(body):
+        assert list(r[2:5]) == pytest.approx([100 * entry.fit.pair_keys[i][j] for i in range(3)])
+        assert r[5] == pytest.approx(100 * entry.fit.keys[j])
+    # a key typed in the grid and not recomputed yet: the export shows the grid
+    K2 = [row[:] for row in entry.fit.pair_keys]
+    K2[2][1] = 0.05
+    typed = members.merged_pair_keys(members.pair_keys(data, rows_with(data, pair_rows, K2)),
+                                     entry.fit)
+    wb = load_workbook(io.BytesIO(export.summary_xlsx(entry, enabled, names, "cs",
+                                                      pair_keys=typed)))
+    sheet = list(wb[t("x_sheet_pairs", "cs")].iter_rows(values_only=True))
+    assert sheet[0][0].endswith(t("keys_user", "cs"))
+    assert sheet[3][4] == pytest.approx(5.0)
+    pool_typed = members.pool_keys(data, typed)
+    assert sheet[3][5] == pytest.approx(100 * pool_typed[1])
     # one producer: no pool anywhere
     assert method_title("col_exact", 1, "cs") == t("col_exact", "cs")
     entry.fit = entry.exact = None

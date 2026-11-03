@@ -56,6 +56,8 @@ LABELS = [
     ("bill-btn", "children", "bill_btn"),
     ("lbl-feed-in", "children", "feed_in"),
     ("lbl-price-default", "children", "price_default"),
+    ("pair-title", "children", "pair_title"),
+    ("pair-hint", "children", "pair_hint"),
 ]
 
 
@@ -96,7 +98,7 @@ def _report_labels(lang, key, heat):
         heat_options=[{"label": t(f"heat_{m}", lang), "value": m} for m in metrics],
         heat_value=heat if heat in metrics else metrics[0],
         heat_box={"display": "none"} if len(metrics) < 2 else {},   # part report: no choice
-        columns=members.columns(lang, editable=not part),
+        columns=members.columns(lang, editable=not part, pool=multi and not part),
         source_title=tn("panel_source", lang, len(data.source_eans) if data else 1),
         producer_columns=members.producer_columns(lang),
         exact_title=t("part_no_recompute", lang) if part else "",
@@ -149,6 +151,7 @@ UPLOAD_OUTPUTS = dict(
     day=Output("day-picker", "date"),
     month=Output("day-picker", "initial_visible_month"),
     rows=Output("members", "rowData"),
+    pair_rows=Output("pair-keys", "rowData"),
     selected=Output("members", "selectedRows", allow_duplicate=True),
     grid=Output("members", "dashGridOptions"),
     grid_style=Output("members", "style"),
@@ -193,6 +196,8 @@ def _on_upload(contents, filename, lang, old_key):
         report="report", box="upload upload-small",
         first=first, last=last, day=last, month=last,
         rows=members.rows(data), selected={"ids": list(data.dest_eans)},
+        pair_rows=(members.pair_rows(data, members.default_names(data, lang))
+                   if len(data.source_eans) > 1 else []),
         grid=members.options(many), grid_style={"height": "440px" if many else None},
     )
     if data.fmt == "all":
@@ -204,16 +209,67 @@ def _on_upload(contents, filename, lang, old_key):
 
 @callback(
     Output("members", "rowTransaction"),
+    Output("pair-keys", "rowTransaction"),
     Input("btn-clear-keys", "n_clicks"),
     State("members", "rowData"),
+    State("pair-keys", "rowData"),
     State("data-key", "data"),
     prevent_initial_call=True,
 )
-def _reset_keys(n, rows, key):
-    """Put the estimated keys back (after manual edits)."""
+def _reset_keys(n, rows, pair_rows, key):
+    """Put the estimated keys back (after manual edits), the pair keys too."""
     entry = store.get(key)
     if not n or entry is None or entry.fit is None:
         raise dash.exceptions.PreventUpdate
     by_ean = dict(zip(entry.data.dest_eans, entry.fit.keys))
-    return {"update": [dict(r, key=members.pct_key(by_ean[r["ean"]])) for r in rows or []
+    keys = {"update": [dict(r, key=members.pct_key(by_ean[r["ean"]])) for r in rows or []
                        if r.get("ean") in by_ean]}
+    return keys, pair_update(entry.data, entry.fit, pair_rows, overwrite=True)
+
+
+def pair_update(data, fit, pair_rows, overwrite: bool = False):
+    """Row updates of the pair-keys grid with the estimated pair keys: into the empty
+    cells, or into all of them (``overwrite``, the Odhad button)."""
+    est = getattr(fit, "pair_keys", None)
+    if not est or not pair_rows:
+        return no_update
+    col = {e: j for j, e in enumerate(data.dest_eans)}
+    update = []
+    for r in pair_rows:
+        j = col.get(r.get("ean"))
+        if j is None:
+            continue
+        new = dict(r)
+        for i in range(len(data.source_eans)):
+            f = members.pair_field(i)
+            if overwrite or members.number(r.get(f)) is None:
+                new[f] = members.pct_key(est[i][j])
+        update.append(new)
+    return {"update": update}
+
+
+@callback(
+    Output("pair-keys", "columnDefs"),
+    Output("pair-box", "style"),
+    Output("pair-keys", "rowTransaction", allow_duplicate=True),
+    Input("lang", "value"),
+    Input("data-key", "data"),
+    Input("producers", "cellValueChanged"),
+    Input("members", "cellValueChanged"),
+    State("producers", "rowData"),
+    State("members", "rowData"),
+    State("pair-keys", "rowData"),
+    prevent_initial_call="initial_duplicate",
+)
+def _pair_grid(lang, key, _src_changed, _changed, src_rows, rows, pair_rows):
+    """The pair-keys grid of a report with several producers: a column per producer
+    named like in the producers' grid, the members named like in theirs."""
+    entry = store.get(key)
+    data = entry.data if entry else None
+    if data is None or data.fmt != "all" or len(data.source_eans) < 2:
+        return [], {"display": "none"}, no_update
+    names = members.names(data, lang, src_rows, rows)
+    rename = [dict(r, name=names.get(r.get("ean"), r.get("name"))) for r in pair_rows or []
+              if r.get("name") != names.get(r.get("ean"), r.get("name"))]
+    return (members.pair_columns(data, lang, names), {},
+            {"update": rename} if rename else no_update)

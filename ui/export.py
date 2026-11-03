@@ -20,7 +20,8 @@ def _full_ean_label(lang):
     return [{"label": t("x_full_ean", lang), "value": "full"}]
 
 
-def summary_file(key, selected, rows, src_rows, lang, group, full_ean) -> str | None:
+def summary_file(key, selected, rows, src_rows, lang, group, full_ean,
+                 pair_rows=None) -> str | None:
     """Prepare the workbook of the report ``key`` for this selection; return the link to
     download it (None when the report is gone)."""
     entry = store.get(key)
@@ -28,9 +29,12 @@ def summary_file(key, selected, rows, src_rows, lang, group, full_ean) -> str | 
         return None
     data = entry.data
     group = (group or "").strip()
+    pairs = None
+    if len(data.source_eans) > 1 and pair_rows:
+        pairs = members.merged_pair_keys(members.pair_keys(data, pair_rows), entry.fit)
     content = export.summary_xlsx(
         entry, members.enabled(data, selected), members.names(data, lang, src_rows, rows),
-        lang, group=group, full_ean="full" in (full_ean or []))
+        lang, group=group, full_ean="full" in (full_ean or []), pair_keys=pairs)
     name = export.file_name(data, lang, group)
     return f"/export/{store.put_file(name, content)}/{quote(name)}"
 
@@ -45,10 +49,12 @@ def summary_file(key, selected, rows, src_rows, lang, group, full_ean) -> str | 
     State("lang", "value"),
     State("group", "value"),
     State("export-full-ean", "value"),
+    State("pair-keys", "rowData"),
     prevent_initial_call=True,
 )
-def download_summary(n, key, selected, rows, src_rows, lang, group, full_ean):
-    url = summary_file(key, selected, rows, src_rows, lang, group, full_ean) if n else None
+def download_summary(n, key, selected, rows, src_rows, lang, group, full_ean, pair_rows=None):
+    url = (summary_file(key, selected, rows, src_rows, lang, group, full_ean, pair_rows)
+           if n else None)
     if url is None:
         raise dash.exceptions.PreventUpdate
     return url
