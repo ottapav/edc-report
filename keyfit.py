@@ -185,15 +185,29 @@ def replay_match_multi(P2, D, S, Q, K, rounds: int = 5, priority=None) -> float:
     return float(((s == S).all(axis=1) & (q == Q).all(axis=1)).mean())
 
 
-def pooled_keys(K, energy) -> np.ndarray:
-    """One key per member for the producers' pool: the pair keys weighted by what each
-    producer produced (``energy`` per producer; per interval, a T×np production gives
-    T×n keys)."""
+def ratio_keys(K) -> np.ndarray:
+    """Every producer's keys as shares of their sum (a row of zeros stays zeros).
+
+    EDC with endlessly many rounds gives away all of a producer's production, whatever
+    its keys add up to: what is left after a round is shared again in the same ratio.
+    Its keys therefore act as ratios, as in the exact method (``rozdel``)."""
     K = np.asarray(K, dtype=float)
+    s = K.sum(axis=1, keepdims=True)
+    return np.where(s > 0, K / np.where(s > 0, s, 1.0), 0.0)
+
+
+def pooled_keys(K, energy) -> np.ndarray:
+    """One key per member for the producers' pool: every producer's keys as ratios
+    (:func:`ratio_keys`), weighted by what the producer produced (``energy`` per
+    producer; per interval, a T×np production gives T×n keys). A producer's weight is
+    its production alone, not the sum of its keys: when no member is filled up, the
+    exact method on the pool then gives every member what EDC with endlessly many rounds
+    would."""
+    R = ratio_keys(K)
     E = np.asarray(energy, dtype=float)
     tot = E.sum(axis=-1, keepdims=True)
     w = np.where(tot > 0, E / np.where(tot > 0, tot, 1), 1.0 / E.shape[-1])
-    return w @ K
+    return w @ R
 
 
 def _pair_solve(X: np.ndarray, y: np.ndarray, prior: np.ndarray, lam: float) -> np.ndarray:

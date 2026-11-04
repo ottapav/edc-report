@@ -14,6 +14,7 @@ from string import ascii_uppercase
 from dash import ctx
 
 from edc_data import POOL, SharingData
+from keyfit import pooled_keys
 from figures import colour_map, top_dests
 from i18n import LANGS, decimal_char, t
 
@@ -133,17 +134,18 @@ def pair_problem(typed: list[list[float | None]], fit) -> str | None:
 
 
 def pool_keys(data: SharingData, merged: list[list[float | None]]) -> list[float | None]:
-    """The pool's key of every member over the period: its pair keys weighted by each
-    producer's production (None where a pair key is missing)."""
-    energy = [float(data.productions[e].clip(lower=0).sum()) if e in data.productions else 0.0
-              for e in data.source_eans]
-    total = sum(energy) or 1.0
-    out = []
-    for j in range(len(data.dest_eans)):
-        col = [merged[i][j] for i in range(len(data.source_eans))]
-        out.append(None if any(k is None for k in col)
-                   else sum(k * w for k, w in zip(col, energy)) / total)
-    return out
+    """The pool's key of every member over the period (:func:`keyfit.pooled_keys`: each
+    producer's keys as ratios, weighted by its production); all None while a pair key is
+    missing (a producer's ratios need all its keys)."""
+    if any(k is None for row in merged for k in row):
+        return [None] * len(data.dest_eans)
+    return [float(x) for x in pooled_keys(merged, production_energy(data))]
+
+
+def production_energy(data: SharingData) -> list[float]:
+    """kWh each producer produced over the report."""
+    return [float(data.productions[e].clip(lower=0).sum()) if e in data.productions else 0.0
+            for e in data.source_eans]
 
 
 def pair_columns(data: SharingData, lang: str, names: dict) -> list[dict]:

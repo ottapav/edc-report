@@ -100,6 +100,34 @@ def test_pair_keys_are_estimated(pair_group):
     assert (Kf.sum(axis=1) <= 1 + 1e-9).all()
 
 
+def test_pool_keys_treat_each_producers_keys_as_ratios():
+    """EDC with endlessly many rounds gives away all of a producer's production, so its
+    keys act as ratios: a producer's weight in the pool is its production alone."""
+    K = np.array([[0.30, 0.10, 0.10], [0.45, 0.45, 0.0]])     # sums 50 % and 90 %
+    assert np.allclose(keyfit.ratio_keys(K), [[0.6, 0.2, 0.2], [0.5, 0.5, 0.0]])
+    # producers produce alike: the pool's key is the mean of the ratios
+    assert np.allclose(keyfit.pooled_keys(K, [100, 100]), [0.55, 0.35, 0.1])
+    assert keyfit.pooled_keys(K, [100, 100]).sum() == pytest.approx(1.0)
+    assert (keyfit.ratio_keys([[0.0, 0.0], [0.2, 0.2]])[0] == 0).all()
+
+
+def test_pool_equals_edc_with_endless_rounds_when_nobody_is_filled_up():
+    """Different keys and different key sums per producer: as long as no member is
+    filled up, the exact method on the pool gives every member what EDC's method for
+    several producers gives after endlessly many rounds (up to rounding)."""
+    rng = np.random.default_rng(5)
+    for _ in range(50):
+        P2 = rng.integers(2000, 9000, (1, 3)) * 100
+        D = np.full((1, 5), 10**9)
+        K = rng.uniform(0.05, 1, (3, 5))
+        K = K / K.sum(axis=1, keepdims=True) * rng.uniform(0.5, 1.0, (3, 1))
+        edc, _q = keyfit.replay_edc_multi(P2, D, K, rounds=400)
+        k = recompute.interval_keys(P2, K)[0]
+        pool = np.array(rozdel(int(P2.sum()), D[0].tolist(), k.tolist()))
+        assert np.abs(pool - edc[0]).max() <= 400 * 3            # floor() per round and producer
+        assert pool.sum() == P2.sum()
+
+
 def test_split_surplus_is_proportional_whole_and_exact():
     P2 = np.array([[300, 200, 100], [0, 0, 0], [1, 1, 1], [7, 0, 3]])
     surplus = np.array([60, 0, 2, 10])

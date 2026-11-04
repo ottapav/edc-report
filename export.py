@@ -34,6 +34,7 @@ from edc_data import (
     per_destination, summarize, with_overlap,
 )
 from i18n import method_title, t, tn
+from keyfit import pooled_keys
 from recompute import grid_loss
 
 #: MIME type of the workbook
@@ -258,13 +259,11 @@ def bill_totals_table(entry, enabled: set[str], lang: str) -> Table:
 
 
 def pool_of(data: SharingData, K) -> list[float]:
-    """The pool's key of every member over the period: its pair keys weighted by each
-    producer's production (as the members' key column in the panel)."""
+    """The pool's key of every member over the period, as the members' key column in the
+    panel (:func:`keyfit.pooled_keys`)."""
     energy = [float(data.productions[e].clip(lower=0).sum()) if e in data.productions else 0.0
               for e in data.source_eans]
-    total = sum(energy) or 1.0
-    return [sum(K[i][j] * w for i, w in enumerate(energy)) / total
-            for j in range(len(data.dest_eans))]
+    return [float(x) for x in pooled_keys(K, energy)]
 
 
 def pair_table(entry, names: dict, lang: str, full_ean: bool, typed=None) -> Table:

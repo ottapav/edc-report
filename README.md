@@ -296,9 +296,17 @@ typed from the contract in the *Keys per producer* grid of the exact method's ca
 members' key column in the panel then shows the pool's key over the period.
 
 **The exact method on the pool.** The production of all producers is shared as one pool,
-as if from one big producer. In every interval each member's key is its pair keys weighted
-by what the producers produce then: `k_j(t) = Σ_i K[i, j] · P_i(t) / P(t)` (morning: mostly
-the east roof's keys; afternoon: the west roof's). The pool's surplus goes back to the
+as if from one big producer. In every interval each member's key is made of its pair keys:
+`k_j(t) = Σ_i (K[i, j] / Σ_l K[i, l]) · P_i(t) / P(t)` - every producer's keys as ratios,
+weighted by what the producers produce then (morning: mostly the east roof's keys;
+afternoon: the west roof's). The keys are ratios because EDC with endlessly many rounds
+gives away all of a producer's production whatever its keys add up to; so when nobody is
+filled up, every member gets exactly what EDC's method for several producers gives after
+endlessly many rounds. Where the two differ: a member that is filled up leaves its share to
+*all* members of the pool, not only to the other members of the same producer; and the pool
+ignores pair keys of 0 (a producer's energy may reach a member that has no key with it), so
+it always shares the maximum, `min(production, demand of the members with a key)`, where the
+pair rule may not (that would be a maximum-flow problem). The pool's surplus goes back to the
 producers in proportion to their production. The page says it is a pool in the exact
 method's card (before the computation), next to the key estimate and in the column titles;
 the export too, with a sheet of the pair keys.
