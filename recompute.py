@@ -8,8 +8,11 @@ All energies are integers in hundredths of kWh (0.01 kWh), like EDC data.
 The all report is needed (demand). Several producers are one **pool** for the exact
 method: their production is shared as if it came from one big producer. EDC itself sets
 a key for every pair producer -> member (:func:`keyfit.replay_edc_multi`); for the pool
-the pair keys are combined interval by interval, ``k_j(t) = sum_i K[i, j] · P_i(t) / P(t)``
-- the part of the total production the member would get by its pair keys. The pool's
+the pair keys are combined interval by interval,
+``k_j(t) = sum_i (K[i, j] / sum_l K[i, l]) · P_i(t) / P(t)``: every producer's keys as
+ratios (EDC with endlessly many rounds gives away all of a producer's production, so its
+keys act as ratios), weighted by what the producers produce then. When nobody is filled
+up, every member gets what EDC with endlessly many rounds would give it. The pool's
 surplus goes back to the producers in proportion to their production in the interval.
 """
 
@@ -65,9 +68,9 @@ def to_hundredths_multi(data: SharingData):
 
 
 def interval_keys(P2: np.ndarray, pair_keys) -> np.ndarray:
-    """The pool's key of every member in every interval (T×n) from the pair keys: the
-    pair keys weighted by the producers' production then; with no production, by the
-    producers' total production."""
+    """The pool's key of every member in every interval (T×n) from the pair keys: each
+    producer's keys as ratios, weighted by the producers' production then; with no
+    production, by the producers' total production (:func:`keyfit.pooled_keys`)."""
     K = np.asarray(pair_keys, dtype=float)
     out = pooled_keys(K, P2)
     night = P2.sum(axis=1) == 0
