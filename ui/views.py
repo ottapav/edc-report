@@ -473,39 +473,48 @@ def spot_tiles(cmp: Comparison, bill: Billing | None, lang: str) -> list:
 
 
 def spot_verdict(cmp: Comparison, m: Mix | None, lang: str, curve_note: str | None = None):
-    """The answer: does sharing or selling on spot pay more, for all of the production
-    and for a part of it; how much a choice every 15 min could add; what price of the
-    shared electricity suits both sides."""
+    """The answer: which pays most of sharing everything (the report), sharing and
+    selling the unshared rest on spot, selling a share of the production on spot and
+    sharing the rest (``m``), and selling everything on spot; how much a choice every
+    15 min could add; what price of the shared electricity suits both sides."""
     if not cmp.priced or not cmp.valid.any():
         return []
     pct = lambda x: f"{fmt_num(100 * x, lang)}{NBSP}%"  # noqa: E731
-    gain = cmp.gain
-    best = m.levels[m.best] if m is not None else (0.0 if gain >= 0 else 1.0)
-    if best <= 0:
-        title, cls = t("verdict_share", lang), "loss-box ok verdict"
-    elif best >= 1:
-        title, cls = t("verdict_spot", lang), "loss-box verdict spot"
-    else:
-        title, cls = t("verdict_mix", lang).format(pct=pct(best)), "loss-box verdict spot"
+    best_r = m.levels[m.best] if m is not None else None
+    options = {"share": cmp.sharing_value, "spot": cmp.spot_revenue}
+    if cmp.gain_unshared < 0:
+        options["rest"] = cmp.rest_on_spot_value
+    if best_r is not None and 0 < best_r < 1:
+        options["mix"] = float(m.total[m.best])
+    best = max(options, key=lambda k: (options[k], k == "share"))
+    title = {"share": t("verdict_share", lang), "spot": t("verdict_spot", lang),
+             "rest": t("verdict_rest", lang),
+             "mix": t("verdict_mix", lang).format(pct=pct(best_r or 0))}[best]
+    cls = "loss-box ok verdict" if best in ("share", "rest") else "loss-box verdict spot"
     lines = [t("verdict_all", lang).format(v=_kc(cmp.sharing_value, lang),
                                            r=_kc(cmp.spot_revenue, lang),
-                                           g=_kc(gain, lang, signed=True))]
+                                           g=_kc(cmp.gain, lang, signed=True))]
     if m is None:
         if curve_note:
             lines.append(curve_note)
-    elif 0 < best < 1:
+    elif 0 < best_r < 1:
         tot = m.total
         lines.append(t("verdict_part_mix", lang).format(
-            pct=pct(best), v=_kc(tot[m.best], lang), g=_kc(tot[m.best] - tot[0], lang, True)))
-    elif best <= 0:
+            pct=pct(best_r), v=_kc(tot[m.best], lang), g=_kc(tot[m.best] - tot[0], lang, True)))
+    elif best_r <= 0:
         lines.append(t("verdict_part_share", lang).format(kc=_kc(m.step_cost, lang)))
+    if cmp.unshared.sum() > 0:
+        units = dict(a=_unit(cmp.feed_in_avg, lang), b=_unit(cmp.capture_unshared, lang))
+        lines.append(t("verdict_rest_spot", lang).format(
+            kc=_kc(-cmp.gain_unshared, lang), w=_kc(cmp.rest_on_spot_value, lang), **units)
+            if cmp.gain_unshared < 0 else t("verdict_rest_feed", lang).format(**units))
     if cmp.spot_better_intervals:
         lines.append(t("verdict_quarter", lang).format(
             n=fmt_num(cmp.spot_better_intervals, lang), kc=_kc(cmp.spot_better_kc, lang),
             kwh=fmt_num(cmp.spot_better_kwh, lang, 1)))
     else:
         lines.append(t("verdict_quarter_none", lang))
-    if np.isfinite(cmp.break_even_avg) and best < 1:
+    if best == "share" and np.isfinite(cmp.break_even_avg):    # all shared vs all on spot
         lines.append(t("verdict_sides", lang).format(unit=_unit(cmp.break_even_avg, lang),
                                                     p=_unit(cmp.supplier_avg, lang)))
     return html.Div(className=cls, children=[

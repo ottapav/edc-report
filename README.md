@@ -126,8 +126,11 @@ The interface is available in Czech, English and German (switch in the top bar; 
 
 * The answer first: does sharing pay, or selling part or all of the production on the OTE
   day-ahead market (the members then buy what they no longer get from their supplier)? A
-  box says which, by how much, what every 10 % moved to spot costs, how much choosing
-  every 15 min could add at most, and from which internal price sharing pays the producer.
+  box names the option worth most of: sharing as in the report; sharing and selling the
+  unshared rest on spot (a feed-in contract at the spot price); selling a share of the
+  production on spot and sharing the rest; selling everything on spot. It says by how
+  much, what every 10 % moved to spot costs, how much choosing every 15 min could add at
+  most, and from which internal price sharing pays the producer.
 * **Part on spot:** the value for 0, 10, …, 100 % of the production sold on spot, the rest
   shared by today's EDC method with the keys of the panel (estimated or typed); 0 % is the
   report's sharing, 100 % all on spot. The OTE prices of the
@@ -472,6 +475,9 @@ for *r* = 0, 10, …, 100 % (≈ 2 s for 150 members over a year, then memoised)
 anchored to the report member by member, so 0 % is exactly the report and 100 % exactly
 all on spot. Choosing every 15 min where each shared kWh goes (spot when spot − fee is
 above the member's supplier price) gives an upper bound; EDC sharing cannot do that.
+Sharing as in the report with the unshared rest sold on spot instead of at the feed-in
+price is Σ_j p_j · shared_j + Σ_i v · unshared_i; the verdict compares it with the other
+options.
 
 A producer's **break-even price**
 of the shared electricity is (spot revenue − f · unshared) / shared: with an internal price

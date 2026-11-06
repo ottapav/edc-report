@@ -38,7 +38,9 @@ Selling a share ``r`` of the production on spot is a reserve for sale: in every 
 ``r · P`` goes to the spot market and the rest is shared by today's EDC method with the
 same keys (:func:`replays`, as the exact method's reserve). The replay is anchored to the
 report (``r = 0`` is the report's sharing, ``r = 1`` all on spot); :func:`mix` values every
-level. Deciding every 15 min where each kWh goes would add at most
+level, the unshared rest at the feed-in price. Selling only that unshared rest on spot
+(a feed-in contract at the spot price) is :attr:`Comparison.rest_on_spot_value`.
+Deciding every 15 min where each kWh goes would add at most
 :attr:`Comparison.spot_better_kc` (an upper bound: EDC sharing cannot be switched per
 interval).
 """
@@ -47,6 +49,7 @@ from __future__ import annotations
 
 import json
 import threading
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -167,23 +170,30 @@ def _series(values, starts: pd.DatetimeIndex) -> pd.Series:
     return s.groupby(level=0).mean().sort_index()
 
 
+def _priced_rows(xml: bytes, period: str) -> tuple[list[str], np.ndarray, np.ndarray]:
+    """(days, period numbers, prices) of the ``Item`` rows that have a price; a row
+    without its date or period means the service changed its format."""
+    rows = [r for r in items(xml, "Item") if r.get("Price") not in (None, "")]
+    try:
+        return ([r["Date"] for r in rows], np.array([int(r[period]) for r in rows], dtype=np.int64),
+                np.array([float(r["Price"]) for r in rows], dtype=float))
+    except (KeyError, ValueError) as exc:
+        raise SpotError(f"OTE: unexpected response format ({exc})") from exc
+
+
 def parse_quarter_prices(xml: bytes) -> pd.Series:
     """``GetDamPricePeriodE`` (PT15M) → EUR/MWh by local start."""
-    rows = [r for r in items(xml, "Item") if r.get("Price") not in (None, "")]
-    if not rows:
+    days, index, price = _priced_rows(xml, "PeriodIndex")
+    if not days:
         return pd.Series(dtype=float)
-    starts = _starts([r["Date"] for r in rows], [int(r["PeriodIndex"]) for r in rows], 15)
-    return _series([float(r["Price"]) for r in rows], starts)
+    return _series(price, _starts(days, index, 15))
 
 
 def parse_hourly_prices(xml: bytes) -> pd.Series:
     """``GetDamPriceE`` (CZK) → CZK/MWh by local start of every quarter-hour."""
-    rows = [r for r in items(xml, "Item") if r.get("Price") not in (None, "")]
-    if not rows:
+    days, hours, price = _priced_rows(xml, "Hour")
+    if not days:
         return pd.Series(dtype=float)
-    hours = np.array([int(r["Hour"]) for r in rows])
-    days = [r["Date"] for r in rows]
-    price = np.array([float(r["Price"]) for r in rows])
     # quarter q of hour h is period 4 (h − 1) + q + 1 of 15 min
     parts = [_series(price, _starts(days, 4 * (hours - 1) + q + 1, 15)) for q in range(4)]
     return pd.concat(parts).groupby(level=0).mean().sort_index()
@@ -394,22 +404,60 @@ def _nan(values) -> np.ndarray:
     return np.array([np.nan if v is None else float(v) for v in values], dtype=float)
 
 
-@dataclass
-class Comparison:
-    """Sharing as in the report vs selling the whole surplus on spot (Kč, kWh). Intervals
-    without a spot price are left out of both."""
+@dataclass(eq=False)
+class Flows:
+    """The report's energy in the intervals with a spot price (the others are 0): what
+    does not depend on the prices typed, computed once per report and spot prices."""
 
     index: pd.DatetimeIndex
     spot: np.ndarray                # Kč/kWh (NaN unknown)
-    value: np.ndarray               # Kč/kWh the producer gets for a kWh on spot (0 unknown)
     valid: np.ndarray               # interval has a spot price
+    SH: np.ndarray                  # (T, n) kWh shared to each member
+    UN: np.ndarray                  # (T, np) kWh unshared per producer
+    SU: np.ndarray                  # (T, np) kWh each producer shared
+
+    @cached_property
+    def surplus(self) -> np.ndarray:
+        """(T,) kWh of the whole surplus: shared + unshared."""
+        return self.SU.sum(axis=1) + self.UN.sum(axis=1)
+
+
+@dataclass
+class Comparison:
+    """Sharing as in the report vs selling the whole surplus on spot (Kč, kWh). Intervals
+    without a spot price are left out of both. The (T, n) arrays belong to :class:`Flows`
+    and are shared by every comparison of the same report."""
+
+    flows: Flows
+    value: np.ndarray               # Kč/kWh the producer gets for a kWh on spot (0 unknown)
     fee: float                      # Kč/kWh
     curtail: bool
     prices: np.ndarray              # supplier price per member (NaN not entered)
     feed_ins: np.ndarray            # feed-in price per producer (NaN not entered)
-    SH: np.ndarray                  # (T, n) kWh shared to each member
-    UN: np.ndarray                  # (T, np) kWh unshared per producer
-    SU: np.ndarray                  # (T, np) kWh each producer shared
+
+    @property
+    def index(self) -> pd.DatetimeIndex:
+        return self.flows.index
+
+    @property
+    def spot(self) -> np.ndarray:
+        return self.flows.spot
+
+    @property
+    def valid(self) -> np.ndarray:
+        return self.flows.valid
+
+    @property
+    def SH(self) -> np.ndarray:
+        return self.flows.SH
+
+    @property
+    def UN(self) -> np.ndarray:
+        return self.flows.UN
+
+    @property
+    def SU(self) -> np.ndarray:
+        return self.flows.SU
 
     # --- per member ---
     @cached_property
@@ -486,6 +534,12 @@ class Comparison:
         return float(self.unshared_gain.sum())
 
     @property
+    def rest_on_spot_value(self) -> float:
+        """Kč: sharing as in the report, the unshared surplus sold on spot instead of at
+        the feed-in price (a feed-in contract at the spot price)."""
+        return float(self.at_supplier.sum() + self.unshared_at_spot.sum())
+
+    @property
     def surplus_kwh(self) -> float:
         return float(self.supplied.sum() + self.unshared.sum())
 
@@ -532,32 +586,34 @@ class Comparison:
 
     # --- 15 min by 15 min: where spot pays more than sharing ---
     @cached_property
-    def _spot_better(self) -> np.ndarray:
-        """(T, n) Kč a member's shared kWh would have earned more on spot (≥ 0)."""
+    def _spot_better(self) -> tuple[float, float, int]:
+        """(Kč, kWh, intervals): the shared kWh that would have earned more on spot than
+        the member's supplier price, and by how much."""
         with np.errstate(invalid="ignore"):
-            return np.clip(self.value[:, None] - self.prices[None, :], 0, None) * self.SH
+            better = (self.value[:, None] > self.prices[None, :]) & (self.SH > 0)
+            extra = np.where(better, (self.value[:, None] - self.prices[None, :]) * self.SH, 0.0)
+        return float(extra.sum()), float(self.SH[better].sum()), int(better.any(axis=1).sum())
 
     @property
     def spot_better_kc(self) -> float:
         """Kč: selling the shared energy on spot in the intervals where that pays more
         than the member's supplier price (an upper bound: EDC cannot switch per 15 min)."""
-        return float(np.nansum(self._spot_better))
+        return self._spot_better[0]
 
     @property
     def spot_better_kwh(self) -> float:
-        return float(self.SH[self._spot_better > 0].sum())
+        return self._spot_better[1]
 
     @property
     def spot_better_intervals(self) -> int:
-        return int((self._spot_better > 0).any(axis=1).sum())
+        return self._spot_better[2]
 
     # --- negative prices ---
     @cached_property
     def _negative(self) -> np.ndarray:
         """Intervals in which a sold kWh would cost money (spot price below the fee)."""
-        surplus = self.SU.sum(axis=1) + self.UN.sum(axis=1)
         with np.errstate(invalid="ignore"):
-            return self.valid & (self.spot - self.fee < 0) & (surplus > 0)
+            return self.valid & (self.spot - self.fee < 0) & (self.flows.surplus > 0)
 
     @property
     def negative_intervals(self) -> int:
@@ -565,15 +621,15 @@ class Comparison:
 
     @property
     def negative_kwh(self) -> float:
-        return float((self.SU.sum(axis=1) + self.UN.sum(axis=1))[self._negative].sum())
+        return float(self.flows.surplus[self._negative].sum())
 
     @property
     def negative_cost(self) -> float:
         """Kč the surplus of those intervals costs on spot (0 when curtailed)."""
         if self.curtail:
             return 0.0
-        surplus = self.SU.sum(axis=1) + self.UN.sum(axis=1)
-        return float(-((self.spot - self.fee)[self._negative] * surplus[self._negative]).sum())
+        neg = self._negative
+        return float(-((self.spot[neg] - self.fee) * self.flows.surplus[neg]).sum())
 
     # --- per 15 min (the group) ---
     @cached_property
@@ -584,7 +640,7 @@ class Comparison:
         return pd.DataFrame({
             "gain_shared": ((self.prices[None, :] - v) * self.SH).sum(axis=1),
             "gain_unshared": ((self.feed_ins[None, :] - v) * self.UN).sum(axis=1),
-            "spot_revenue": self.value * (self.SU.sum(axis=1) + self.UN.sum(axis=1)),
+            "spot_revenue": self.value * self.flows.surplus,
             "shared": self.SH.sum(axis=1),
             "unshared": self.UN.sum(axis=1),
             "spot": self.spot,
@@ -616,8 +672,8 @@ def compare(data: SharingData, spot: SpotPrices, prices, feed_ins, fee_mwh: floa
 
 
 @memoized
-def _compare(data: SharingData, spot: SpotPrices, prices: tuple, feed_ins: tuple,
-             fee_mwh: float, curtail: bool) -> Comparison:
+def flows(data: SharingData, spot: SpotPrices) -> Flows:
+    """The report's shared and unshared energy where there is a spot price."""
     if data.fmt != "all":
         raise ValueError("The spot comparison needs an all report.")
     frame = data.frame
@@ -626,18 +682,24 @@ def _compare(data: SharingData, spot: SpotPrices, prices: tuple, feed_ins: tuple
     if len(s) != len(frame):
         s = pd.Series(s, index=spot.index).reindex(frame.index).to_numpy(dtype=float)
     valid = ~np.isnan(s)
-    fee = fee_mwh / 1000
-    value = np.where(valid, s - fee, 0.0)
-    if curtail:
-        value = np.clip(value, 0, None)
     keep = valid[:, None]
     SH = frame[[key_shared(src, e) for e in data.dest_eans]].to_numpy(dtype=float)
     UN = frame[[key_unshared(e) for e in data.source_eans]].to_numpy(dtype=float)
     SH, UN = np.nan_to_num(SH) * keep, np.nan_to_num(UN) * keep
-    SU = _supplied(data, SH.sum(axis=1), UN)
-    return Comparison(index=frame.index, spot=s, value=value, valid=valid, fee=fee,
-                      curtail=curtail, prices=_nan(prices), feed_ins=_nan(feed_ins),
-                      SH=SH, UN=UN, SU=SU)
+    return Flows(index=frame.index, spot=s, valid=valid, SH=SH, UN=UN,
+                 SU=_supplied(data, SH.sum(axis=1), UN))
+
+
+@memoized
+def _compare(data: SharingData, spot: SpotPrices, prices: tuple, feed_ins: tuple,
+             fee_mwh: float, curtail: bool) -> Comparison:
+    f = flows(data, spot)
+    fee = fee_mwh / 1000
+    value = np.where(f.valid, f.spot - fee, 0.0)
+    if curtail:
+        value = np.clip(value, 0, None)
+    return Comparison(flows=f, value=value, fee=fee, curtail=curtail, prices=_nan(prices),
+                      feed_ins=_nan(feed_ins))
 
 
 def missing_surplus(data: SharingData, spot: SpotPrices) -> float:
@@ -737,8 +799,9 @@ class Mix:
 
     @property
     def step_cost(self) -> float:
-        """Kč the group loses on average per 10 % of the production moved to spot (from
-        the best level towards all on spot; negative: it gains)."""
+        """Kč the group loses on average per step of :data:`LEVELS` (10 % of the
+        production) moved from sharing to spot, between 0 % and 100 %; negative: it
+        gains."""
         tot = self.total
         steps = len(tot) - 1
         return float((tot[0] - tot[-1]) / steps) if steps else 0.0

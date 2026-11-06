@@ -41,10 +41,12 @@ def _gain_colour(x: float, th: dict) -> str:
     return th["source"] if x >= 0 else th["wasted"]
 
 
-def _need_prices(fig: go.Figure, lang: str, th: dict) -> go.Figure:
-    """No comparison without the supplier and feed-in prices: say so in the plot."""
-    fig.add_annotation(text=t("spot_need_prices_short", lang), x=0.5, y=0.5, xref="paper",
-                       yref="paper", showarrow=False, font=dict(size=13, color=th["muted"]))
+def _need_prices(fig: go.Figure, lang: str, th: dict, text: str | None = None) -> go.Figure:
+    """No comparison (without the supplier and feed-in prices, or the keys): say why in
+    the plot."""
+    fig.add_annotation(text=text or t("spot_need_prices_short", lang), x=0.5, y=0.5,
+                       xref="paper", yref="paper", showarrow=False,
+                       font=dict(size=13, color=th["muted"]))
     fig.update_layout(xaxis_visible=False, yaxis_visible=False)
     return fig
 
@@ -55,18 +57,15 @@ def _need_prices(fig: go.Figure, lang: str, th: dict) -> go.Figure:
 
 
 def fig_spot_mix(m: Mix | None, lang: str = "cs", th: dict | None = None,
-                 note: str | None = None) -> go.Figure:
+                 note: str | None = None, rest: float | None = None) -> go.Figure:
     """The group's value by the share of the production sold on spot (0 % = the
     report's sharing, 100 % = all on spot): stacked members' savings, feed-in of the
-    unshared rest and spot sales, the total, the best share marked."""
+    unshared rest and spot sales, the total, the best share marked. ``rest``: the value
+    of sharing with the unshared surplus sold on spot, when that beats the feed-in."""
     th = th or THEMES["light"]
     fig = figure(t("spot_mix_title", lang), lang, 440, th)
     if m is None or not np.isfinite(m.total).all():
-        fig.add_annotation(text=note or t("spot_need_prices_short", lang), x=0.5, y=0.5,
-                           xref="paper", yref="paper", showarrow=False,
-                           font=dict(size=13, color=th["muted"]))
-        fig.update_layout(xaxis_visible=False, yaxis_visible=False)
-        return fig
+        return _need_prices(fig, lang, th, note)
     x = 100 * m.levels
     cur = _cur(lang)
     hover = "%{y:,.0f} " + cur
@@ -80,10 +79,16 @@ def fig_spot_mix(m: Mix | None, lang: str = "cs", th: dict | None = None,
     fig.add_scatter(x=x, y=tot, name=t("spot_mix_total", lang), mode="lines+markers",
                     line=dict(color=th["total"], width=2), marker=dict(size=6),
                     hovertemplate=hover)
+    if rest is not None and np.isfinite(rest):
+        fig.add_scatter(x=[0], y=[rest], name=t("spot_mix_rest", lang), mode="markers",
+                        marker=dict(symbol="diamond", size=11, color=th["source"],
+                                    line=dict(color=th["paper"], width=1)),
+                        hovertemplate=hover, cliponaxis=False)
     b = m.best
     fig.add_annotation(x=x[b], y=tot[b], text=f"<b>{t('spot_mix_best', lang)}</b><br>"
-                       f"{_kc(tot[b], lang)}", showarrow=True, arrowhead=0, ax=40 if b < 6 else -40,
-                       ay=-36, font=dict(size=11, color=th["ink"]), bgcolor=th["label_bg"])
+                       f"{_kc(tot[b], lang)}", showarrow=True, arrowhead=0, ax=60 if b < 6 else -60,
+                       ay=-34, xanchor="left" if b < 6 else "right", align="left",
+                       font=dict(size=11, color=th["ink"]), bgcolor=th["label_bg"])
     fig.update_layout(
         hovermode="x unified",
         xaxis=dict(title=t("spot_mix_x", lang), range=[0, 100], dtick=10, ticksuffix=" %",

@@ -17,7 +17,7 @@ from i18n import t
 from spot import compare, mix, replays
 
 from . import members, views
-from .compute import _refused, _start_outputs, _started
+from .compute import refused, start_outputs, started
 from .layout import SPOT_FIGURES, job_ids, spot_fig_id
 
 _SPOT = job_ids("spot")
@@ -60,7 +60,7 @@ def _running(job_id: str | None, key: str | None) -> bool:
 
 
 @callback(
-    output=_start_outputs("spot"),
+    output=start_outputs("spot"),
     inputs=dict(n=Input(_SPOT["btn"], "n_clicks"), tab=Input("tabs", "value"),
                 key=Input("data-key", "data")),
     state=dict(job_id=State(_SPOT["job"], "data"), lang=State("lang", "value")),
@@ -74,26 +74,28 @@ def start_spot(n, tab, key, job_id, lang):
     entry = store.get(key)
     if entry is None:
         if clicked:
-            return _refused("session_lost", lang)
+            return refused("session_lost", lang)
         raise dash.exceptions.PreventUpdate
     if entry.data.fmt != "all":
-        return _refused("part_no_spot", lang)
+        return refused("part_no_spot", lang)
     if _running(job_id, key) or (not clicked and entry.spot is not None):
         raise dash.exceptions.PreventUpdate
-    return _started(jobs.start_spot(key))
+    return started(jobs.start_spot(key))
 
 
+#: what the comparison depends on (the prices and the fee typed, the selection, …)
 _INPUTS = dict(
     key=Input("data-key", "data"), rev=Input(_SPOT["rev"], "data"), tab=Input("tabs", "value"),
-    fit_rev=Input(_EXACT["rev"], "data"), pair_changed=Input("pair-keys", "cellValueChanged"),
     selected=Input("members", "selectedRows"), changed=Input("members", "cellValueChanged"),
     src_changed=Input("producers", "cellValueChanged"), feed_in=Input("feed-in", "value"),
     default=Input("price-default", "value"), fee=Input("spot-fee", "value"),
     curtail=Input("spot-curtail", "value"), lang=Input("lang", "value"),
     theme_name=Input("theme", "data"),
 )
-_STATE = dict(rows=State("members", "rowData"), src_rows=State("producers", "rowData"),
-              pair_rows=State("pair-keys", "rowData"))
+#: and what the part on spot depends on besides: the keys (estimated, typed)
+_KEY_INPUTS = dict(fit_rev=Input(_EXACT["rev"], "data"),
+                   pair_changed=Input("pair-keys", "cellValueChanged"))
+_STATE = dict(rows=State("members", "rowData"), src_rows=State("producers", "rowData"))
 
 
 def comparison(entry, rows, src_rows, feed_in, default, fee, curtail):
@@ -140,10 +142,11 @@ _OUTPUTS = dict(
 )
 
 
-@callback(output=_OUTPUTS, inputs=_INPUTS,
-          state=dict(**_STATE, sel_day=State("day-picker", "date")))
-def render_spot(key, rev, tab, fit_rev, pair_changed, selected, changed, src_changed, feed_in,
-                default, fee, curtail, lang, theme_name, rows, src_rows, pair_rows, sel_day):
+@callback(output=_OUTPUTS, inputs=dict(**_INPUTS, **_KEY_INPUTS),
+          state=dict(**_STATE, pair_rows=State("pair-keys", "rowData"),
+                     sel_day=State("day-picker", "date")))
+def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default, fee, curtail,
+                lang, theme_name, fit_rev, pair_changed, rows, src_rows, pair_rows, sel_day):
     """Tiles, figures and the table of the spot tab (only while it is open)."""
     if tab != "spot":
         raise dash.exceptions.PreventUpdate
@@ -159,7 +162,8 @@ def render_spot(key, rev, tab, fit_rev, pair_changed, selected, changed, src_cha
     th = theme(theme_name)
     top = top_dests(data.frame, data)
     figs = dict(
-        mix=fig_spot_mix(m, lang, th, note=why),
+        mix=fig_spot_mix(m, lang, th, note=why,
+                         rest=cmp.rest_on_spot_value if cmp.gain_unshared < 0 else None),
         waterfall=fig_spot_waterfall(cmp, lang, th),
         members=fig_spot_members(cmp, data, names, enabled, lang=lang, th=th, top=top),
         daily=fig_spot_daily(cmp, lang=lang, sel_day=str(sel_day)[:10] if sel_day else None,
@@ -177,8 +181,8 @@ def render_spot(key, rev, tab, fit_rev, pair_changed, selected, changed, src_cha
 
 @callback(Output(spot_fig_id("hourly"), "figure"), Output(spot_fig_id("hourly"), "style"),
           inputs=dict(day=Input("day-picker", "date"), **_INPUTS), state=_STATE)
-def spot_hourly(day, key, rev, tab, fit_rev, pair_changed, selected, changed, src_changed,
-                feed_in, default, fee, curtail, lang, theme_name, rows, src_rows, pair_rows):
+def spot_hourly(day, key, rev, tab, selected, changed, src_changed, feed_in, default, fee,
+                curtail, lang, theme_name, rows, src_rows):
     """The selected day: the spot price against the members' prices, and the surplus."""
     if tab != "spot":
         raise dash.exceptions.PreventUpdate

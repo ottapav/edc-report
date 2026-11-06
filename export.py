@@ -461,6 +461,7 @@ def spot_tables(cmp, data: SharingData, enabled: set[str], names: dict, lang: st
         [t("spot_col_gain", lang), num(cmp.gain), cur],
         [t("spot_t_shared", lang), num(cmp.gain_shared), cur],
         [t("spot_t_unshared", lang), num(cmp.gain_unshared), cur],
+        [t("x_spot_rest", lang), num(cmp.rest_on_spot_value), cur],
         [t("x_spot_surplus", lang), num(cmp.surplus_kwh), "kWh"],
         [t("spot_mean", lang), num(cmp.mean_spot), unit],
         [t("spot_capture", lang), num(cmp.capture), unit],

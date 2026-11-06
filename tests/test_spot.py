@@ -282,6 +282,28 @@ def test_choosing_every_15_min_is_an_upper_bound():
     assert "Sharing pays" in text and "In no quarter-hour" in text
 
 
+def test_the_verdict_names_the_option_worth_most():
+    data = _data()
+    sp = _prices(data)
+    keys = tuple([0.15] * 5)
+    cases = {                       # supplier, feed-in -> verdict
+        (4.5, 1.2): "Sharing pays",
+        (4.5, 0.0): "Sharing pays, and selling the unshared surplus on spot",
+        (0.2, 0.0): "Selling on spot pays",
+    }
+    for (p, f), title in cases.items():
+        c = spot.compare(data, sp, [p] * 5, [f])
+        m = spot.mix(c, spot.replays(data, sp, keys, 5))
+        div = views.spot_verdict(c, m, "en")
+        assert div.children[0].children == title, (p, f)
+        options = [c.sharing_value, c.spot_revenue, float(m.total[m.best])]
+        if c.gain_unshared < 0:
+            options.append(c.rest_on_spot_value)
+        assert max(options) == pytest.approx(
+            {"Sharing pays": c.sharing_value, "Selling on spot pays": c.spot_revenue}.get(
+                title, c.rest_on_spot_value))
+
+
 def test_hourly_and_quarter_intervals_are_counted():
     data = _data(days=20, start="2025-09-25")
     sp = spot.SpotPrices.build(spot.fetch_prices(date(2025, 9, 25), date(2025, 10, 14),
@@ -382,8 +404,11 @@ def test_the_tab_fetches_once_and_renders(entry_key, monkeypatch):
     with pytest.raises(dash.exceptions.PreventUpdate):     # prices there: no new fetch
         run(ui_spot.start_spot, "tabs.value", n=0, tab="spot", key=entry_key, job_id=None,
             lang="cs")
-    out = ui_spot.render_spot(entry_key, 1, "spot", 0, None, None, None, None, "1,1", "4,2",
-                              "200", ["on"], "cs", "light", None, None, None, "2025-10-05")
+    args = dict(key=entry_key, rev=1, tab="spot", selected=None, changed=None,
+                src_changed=None, feed_in="1,1", default="4,2", fee="200", curtail=["on"],
+                lang="cs", theme_name="light", rows=None, src_rows=None)
+    out = ui_spot.render_spot(**args, fit_rev=0, pair_changed=None, pair_rows=None,
+                              sel_day="2025-10-05")
     assert out["body"] == {} and out["tiles"] and out["table"]
     assert all(out[n].layout.title.text
                for n in ("mix", "waterfall", "members", "daily", "monthly"))
@@ -391,12 +416,11 @@ def test_the_tab_fetches_once_and_renders(entry_key, monkeypatch):
     assert "odhadu klíčů" in out["mix"].layout.annotations[0].text
     assert "Vyplatí se" in str(out["verdict"])
     rows = [{"ean": e, "key": 15} for e in entry.data.dest_eans]
-    out = ui_spot.render_spot(entry_key, 1, "spot", 0, None, None, None, None, "1,1", "4,2",
-                              "200", [], "cs", "light", rows, None, None, "2025-10-05")
+    out = ui_spot.render_spot(**{**args, "rows": rows, "curtail": []}, fit_rev=0,
+                              pair_changed=None, pair_rows=None, sel_day="2025-10-05")
     assert len(out["mix"].data) == 4 and "Vyplatí se sdílet" in str(out["verdict"])
-    fig, _style = ui_spot.spot_hourly("2025-10-05", entry_key, 1, "spot", 0, None, None, None,
-                                      None, "1,1", "4,2", "200", [], "en", "dark", None, None,
-                                      None)
+    fig, _style = ui_spot.spot_hourly(day="2025-10-05", **{**args, "lang": "en",
+                                                           "theme_name": "dark"})
     assert len(fig.data) >= 4
 
 
