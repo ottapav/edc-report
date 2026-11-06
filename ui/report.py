@@ -23,7 +23,7 @@ from figures import (
 from i18n import method_title, t
 
 from . import members, views
-from .layout import fig_id, job_ids
+from .layout import fig_id, job_ids, spot_fig_id
 
 HIDDEN = {"display": "none"}
 _REVS = dict(exact_rev=Input(job_ids("exact")["rev"], "data"),
@@ -284,6 +284,7 @@ def _day(value) -> str | None:
     Output("day-picker", "date", allow_duplicate=True),
     Input(fig_id("daily", "a"), "clickData"),
     Input(fig_id("daily", "b"), "clickData"),
+    Input(spot_fig_id("daily"), "clickData"),
     Input("btn-prev-day", "n_clicks"),
     Input("btn-next-day", "n_clicks"),
     State("day-picker", "date"),
@@ -291,10 +292,12 @@ def _day(value) -> str | None:
     State("day-picker", "max_date_allowed"),
     prevent_initial_call=True,
 )
-def select_day(click_a, click_b, _prev, _next, current, lo, hi):
+def select_day(click_a, click_b, click_spot, _prev, _next, current, lo, hi):
     trig = ctx.triggered_id
-    if trig in (fig_id("daily", "a"), fig_id("daily", "b")):
-        click = click_a if trig == fig_id("daily", "a") else click_b
+    clicks = {fig_id("daily", "a"): click_a, fig_id("daily", "b"): click_b,
+              spot_fig_id("daily"): click_spot}
+    if trig in clicks:
+        click = clicks[trig]
         if not click or not click.get("points"):
             raise dash.exceptions.PreventUpdate
         day = _day(click["points"][0].get("x"))

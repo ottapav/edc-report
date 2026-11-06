@@ -23,7 +23,8 @@ from . import members, panel, views
 from .layout import JOB_KINDS, job_ids
 
 _EXACT, _BILL = job_ids("exact"), job_ids("bill")
-_PHASES = {"fit": "phase_fit", "compute": "phase_compute", "bill": "phase_bill"}
+_PHASES = {"fit": "phase_fit", "compute": "phase_compute", "bill": "phase_bill",
+           "spot": "phase_spot"}
 
 
 def _start_outputs(kind: str) -> dict:
@@ -150,7 +151,7 @@ def poll_state(job_id: str | None, rev: int | None, lang: str) -> tuple:
         return False, True, "progress running", {"width": f"{100 * frac:.1f}%"}, text, nu
     job.reported = True
     if job.error_key or job.error:
-        msg = (t(job.error_key, lang) if job.error_key
+        msg = (t(job.error_key, lang).replace("{detail}", job.error or "") if job.error_key
                else f"{t('phase_error', lang)}: {job.error}")
         job.final = (True, False, "progress error", {"width": "100%"}, msg, nu)
     else:

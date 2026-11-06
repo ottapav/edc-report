@@ -10,6 +10,8 @@ table:
 * destinations: the per-destination table of the EDC report;
 * comparison (after the recompute): approximate vs exact method per destination;
 * billing (after the billing): the settlement per member and per producer;
+* spot (after the OTE prices were fetched): sharing vs the surplus sold on spot, the
+  totals, per member and per producer, and per month;
 * daily: energy per day, for your own plots.
 
 EANs are shortened to their last three digits as on the page unless ``full_ean``.
@@ -36,6 +38,7 @@ from edc_data import (
 from i18n import method_title, t, tn
 from keyfit import pooled_keys
 from recompute import grid_loss
+from spot import monthly
 
 #: MIME type of the workbook
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -445,15 +448,81 @@ def daily_table(entry, enabled: set[str], lang: str) -> Table:
                  [date_format(lang)] + [KWH] * len(daily.columns), bold={len(rows) - 1})
 
 
+def spot_tables(cmp, data: SharingData, enabled: set[str], names: dict, lang: str,
+                full_ean: bool) -> list[Table]:
+    """Sharing vs spot: the totals (the tiles), per member and producer (the table), and
+    the prices per month."""
+    cur, unit = t("currency", lang), f"{t('currency', lang)}/kWh"
+    num = lambda x: None if x is None or not np.isfinite(x) else float(x)  # noqa: E731
+    per = lambda x, kwh: num(x / kwh) if kwh > 0 else None  # noqa: E731
+    totals = Table([t("x_item", lang), t("x_value", lang), t("x_unit", lang)], [
+        [t("spot_t_revenue", lang), num(cmp.spot_revenue), cur],
+        [t("spot_t_sharing", lang), num(cmp.sharing_value), cur],
+        [t("spot_col_gain", lang), num(cmp.gain), cur],
+        [t("spot_t_shared", lang), num(cmp.gain_shared), cur],
+        [t("spot_t_unshared", lang), num(cmp.gain_unshared), cur],
+        [t("x_spot_surplus", lang), num(cmp.surplus_kwh), "kWh"],
+        [t("spot_mean", lang), num(cmp.mean_spot), unit],
+        [t("spot_capture", lang), num(cmp.capture), unit],
+        [t("spot_supplier_avg", lang), num(cmp.supplier_avg), unit],
+        [t("x_spot_break_even", lang), num(cmp.break_even_avg), unit],
+        [t("spot_fee", lang), 1000 * cmp.fee, f"{cur}/MWh"],
+        [t("spot_curtail", lang), _yes(cmp.curtail, lang), None],
+        [t("spot_t_negative", lang), num(cmp.negative_kwh), "kWh"],
+        [t("x_spot_negative_cost", lang), num(cmp.negative_cost), cur],
+    ], [None, "#,##0.00", None], title=t("spot_title", lang))
+    head = [t("col_name", lang), t("col_ean", lang), t("x_included", lang),
+            t("spot_col_price", lang), t("spot_col_kwh", lang), t("spot_col_sharing", lang),
+            t("spot_col_spot", lang), t("spot_col_gain", lang), t("spot_col_unit", lang)]
+    rows = [[names.get(e, e), ean_label(e, full_ean), _yes(e in enabled, lang),
+             num(cmp.prices[j]), _kwh(cmp.shared[j]), num(cmp.at_supplier[j]),
+             num(cmp.shared_at_spot[j]), num(cmp.member_gain[j]),
+             per(cmp.shared_at_spot[j], cmp.shared[j])]
+            for j, e in enumerate(data.dest_eans)]
+    kwh = float(cmp.shared.sum())
+    rows.append(["Σ", None, None, None, _kwh(kwh), num(cmp.at_supplier.sum()),
+                 num(cmp.shared_at_spot.sum()), num(cmp.gain_shared),
+                 per(cmp.shared_at_spot.sum(), kwh)])
+    bold = {len(rows) - 1}
+    for i, src in enumerate(data.source_eans):
+        rows.append([t("spot_row_unshared", lang).format(name=names.get(src, src)),
+                     ean_label(src, full_ean), None, num(cmp.feed_ins[i]),
+                     _kwh(cmp.unshared[i]), num(cmp.at_feed_in[i]),
+                     num(cmp.unshared_at_spot[i]), num(cmp.unshared_gain[i]),
+                     per(cmp.unshared_at_spot[i], cmp.unshared[i])])
+    rows.append([t("spot_total", lang), None, None, None, _kwh(cmp.surplus_kwh),
+                 num(cmp.sharing_value), num(cmp.spot_revenue), num(cmp.gain),
+                 per(cmp.spot_revenue, cmp.surplus_kwh)])
+    bold.add(len(rows) - 1)
+    per_member = Table(head, rows, [None, None, None, "0.00", KWH, KC, KC, KC, "0.00"],
+                       title=t("spot_table_title", lang), bold=bold)
+    producers = Table([t("col_name", lang), t("col_ean", lang), t("x_spot_surplus", lang),
+                       t("spot_t_revenue", lang) + f" [{cur}]",
+                       t("x_spot_break_even", lang) + f" [{unit}]"],
+                      [[names.get(src, src), ean_label(src, full_ean),
+                        _kwh(cmp.supplied[i] + cmp.unshared[i]), num(cmp.revenue[i]),
+                        num(cmp.break_even[i])] for i, src in enumerate(data.source_eans)],
+                      [None, None, KWH, KC, "0.00"])
+    m = monthly(cmp)
+    months = Table([t("x_month", lang), t("spot_mean", lang), t("spot_capture", lang),
+                    t("spot_supplier_avg", lang), t("spot_feed_in_avg", lang),
+                    t("x_spot_surplus", lang)],
+                   [[str(p), num(r.mean_spot), num(r.capture), num(r.supplier), num(r.feed_in),
+                     _kwh(r.surplus)] for p, r in zip(m.index, m.itertuples())],
+                   [None, "0.000", "0.000", "0.000", "0.000", KWH],
+                   title=t("spot_monthly_title", lang) + f" [{unit}]")
+    return [totals, per_member, producers, months]
+
+
 # ---------------------------------------------------------------------------
 # The workbook
 # ---------------------------------------------------------------------------
 
 
 def sheets(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
-           full_ean: bool = False, pair_keys=None) -> list[Sheet]:
+           full_ean: bool = False, pair_keys=None, spot_cmp=None) -> list[Sheet]:
     """The sheets of the export for this report and selection (what has been computed
-    decides which ones there are)."""
+    decides which ones there are); ``spot_cmp`` is the spot comparison as on the page."""
     data = entry.data
     summary = [info_table(entry, enabled, names, lang, group, full_ean),
                energy_table(entry, enabled, lang)]
@@ -477,6 +546,9 @@ def sheets(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
     if entry.bill is not None:
         out.append(Sheet(t("x_sheet_bill", lang),
                          [bill_table(entry, enabled, names, lang, full_ean)]))
+    if spot_cmp is not None:
+        out.append(Sheet(t("x_sheet_spot", lang),
+                         spot_tables(spot_cmp, data, enabled, names, lang, full_ean)))
     out.append(Sheet(t("x_sheet_daily", lang), [daily_table(entry, enabled, lang)]))
     return out
 
@@ -528,13 +600,13 @@ def _write(ws, tables: list[Table]) -> None:
 
 
 def summary_xlsx(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
-                 full_ean: bool = False, pair_keys=None) -> bytes:
+                 full_ean: bool = False, pair_keys=None, spot_cmp=None) -> bytes:
     """The export of one report as the bytes of an .xlsx file; ``pair_keys`` are the
     keys per producer as in the page's grid (several producers)."""
     wb = Workbook()
     wb.remove(wb.active)
     for sh in sheets(entry, enabled, names, lang, group=group, full_ean=full_ean,
-                     pair_keys=pair_keys):
+                     pair_keys=pair_keys, spot_cmp=spot_cmp):
         _write(wb.create_sheet(_sheet_title(sh.name)), sh.tables)
     wb.properties.title = t("report_title", lang)
     wb.properties.creator = "EDC sharing report"

@@ -19,6 +19,8 @@ The interface is available in Czech, English and German (switch in the top bar; 
 > Jedním tlačítkem přepočítá sdílení přesnou statickou metodou a porovná ji s dneškem.
 > Dalším tlačítkem spočítá vyúčtování sdílené elektřiny podle přínosu (Shapleyho hodnota)
 > (zadáte ceny od prodejce a výkupní ceny výroben).
+> Druhá záložka ukáže, co by vyneslo prodávat celý přebytek na spotovém trhu (denní trh OTE)
+> místo sdílení: ceny OTE se stáhnou samy, srovnání po členech, dnech a měsících.
 > Souhrn lze stáhnout jako Excel nebo vytisknout do PDF.
 > Rozhraní je v češtině i angličtině, se světlým i tmavým režimem.
 
@@ -32,6 +34,7 @@ The interface is available in Czech, English and German (switch in the top bar; 
 - [How the allocation keys are estimated](#how-the-allocation-keys-are-estimated)
 - [Exact static method and timing](#exact-static-method-and-timing)
 - [Billing by contribution (the Shapley value)](#billing-by-contribution-the-shapley-value)
+- [Spot market instead of sharing](#spot-market-instead-of-sharing)
 - [Architecture](#architecture)
 - [Performance](#performance)
 - [Deployment on Render](#deployment-on-render)
@@ -119,6 +122,24 @@ The interface is available in Czech, English and German (switch in the top bar; 
   effective price per kWh; per producer the energy it shared, its income, its share and the
   feed-in value it gave up.
 
+**Spot market instead of sharing** (second tab; all report):
+
+* What the surplus would earn if the producers sold all of it on the OTE day-ahead market,
+  while the members bought all their electricity from their supplier. The OTE prices of the
+  report's period are downloaded when the tab opens; the comparison then follows every
+  price, fee or tick typed, with no button.
+* Inputs: the supplier prices and feed-in prices of the panel (the defaults can be typed in
+  the spot card or the billing card, they are the same), the trader's fee in CZK/MWh, and
+  whether the producer stops selling at a negative price.
+* Tiles: the surplus sold on spot (and what a kWh got on average), the value with sharing,
+  the gain and its two parts (shared electricity: supplier price vs spot; unshared surplus:
+  feed-in price vs spot), the price window of the shared electricity that suits both sides,
+  the surplus at negative prices.
+* Figures: from spot to sharing step by step; with sharing vs on spot per member; the gain
+  per day (click selects the day); the selected day's spot price against the supplier and
+  feed-in prices, with the surplus below; the prices per month. A table per member and per
+  producer, with each producer's break-even price.
+
 **Export:**
 
 * **Summary as Excel** (*Download summary* in the panel): one `.xlsx` with the numbers of the
@@ -127,7 +148,8 @@ The interface is available in Czech, English and German (switch in the top bar; 
   column the page can show: the EDC report, after the recompute the exact method and, with
   keys other than the report's, EDC replayed with them; sharing error, keys and reserve;
   billing totals; key estimate), *Destinations* (the per-destination table), *Comparison*
-  (after the recompute), *Billing* (after the billing) and *Daily* (the series of the daily
+  (after the recompute), *Billing* (after the billing), *Spot* (once the OTE prices are
+  there: totals, per member and producer, per month) and *Daily* (the series of the daily
   plots per day, for each of those columns).
 * The values are the page's: the same sources, and percentages and money in full
   precision with the page's number of decimals as the cell format, so Excel shows the
@@ -141,7 +163,7 @@ The interface is available in Czech, English and German (switch in the top bar; 
 **Interface:**
 
 * EANs are shown by their last three digits only (anonymity, room in the panel).
-* CZ / EN.
+* CZ / EN / DE.
 * Light and dark mode: the default follows the system, and the ☾/☀ icon switches and
   remembers the choice.
 * Works on a phone.
@@ -408,6 +430,40 @@ The cost grows with the number of members, the size of the production and demand
 hundredths of kWh, and the number of distinct prices. With several producers the closed
 forms rarely apply, so more intervals need the quadrature. Expect several times longer on the free Render instance.
 
+## Spot market instead of sharing
+
+`spot.py` compares the report's sharing with selling the producers' whole surplus on the
+OTE day-ahead market.
+
+**Prices.** The OTE public web service (SOAP, `https://www.ote-cr.cz/services/PublicDataService`,
+no registration) gives the Czech day-ahead price:
+
+* from delivery day 1 Oct 2025 the 15-min price (`GetDamPricePeriodE`, PT15M) in EUR/MWh,
+  converted with OTE's EUR rate of the day (`GetDamIndexE`; the ČNB rate of the month when
+  OTE has none);
+* before that the hourly price (`GetDamPriceE`) in CZK/MWh, the same for the four quarters
+  of the hour.
+
+One call returns at most 31 days, so a year takes about 25 calls, four at a time (a few
+seconds). Period *k* of a day starts (k − 1) × 15 min after midnight in absolute time, so
+the 23- and 25-hour days land on the report's local wall clock. Days that are over stay
+in memory for every user (public data). Intervals without a price are left out of both
+sides, with a note. The server needs outbound HTTPS to www.ote-cr.cz (and api.cnb.cz for
+the fallback rate); when OTE cannot be reached the card says why, and the button tries
+again.
+
+**Comparison.** With sharing, a member's shared kWh is worth its supplier price *p* (it did
+not buy it) and the unshared surplus the feed-in price *f*. On spot every kWh of the surplus
+earns *v* = spot price − fee (with curtailment never below 0). Per 15 min the group gains
+
+    G = Σ_j (p_j − v) · shared_j + Σ_i (f_i − v) · unshared_i,
+
+which is the value with sharing minus the spot revenue. A producer's **break-even price**
+of the shared electricity is (spot revenue − f · unshared) / shared: with an internal price
+between it and the members' supplier price both sides are better off than on spot. The
+members' shares and payments are internal transfers and do not enter G; after the billing
+by contribution the price window tile also shows what the billing pays per kWh.
+
 ## Architecture
 
 The code is in three layers. The domain modules know nothing about the web page; the
@@ -421,19 +477,21 @@ callbacks from both.
 | | `presna_staticka.py` | Reference implementation of the exact static method |
 | | `recompute.py` | Exact static recompute (the `rozdel()` loop in a child process), timing, sharing error |
 | | `billing.py` | Shapley values of the billing (exact, price layers), the settlement in Kč, values per 15 min |
+| | `spot.py` | OTE day-ahead prices (SOAP client, chunks, cache, DST-safe alignment) and the comparison of sharing with selling the surplus on spot |
 | | `procjob.py` | Runs a function in a forked child with progress, cancellation and a time limit |
 | | `export.py` | The summary as an Excel workbook (openpyxl): tables of numbers from the same sources as the page |
-| | `figures/` | Plotly figures: `base.py` themes, member colours and the shared chart shapes (stacked bars, pie, stacked areas by day and within a day, heatmap, pairing of the two columns); `energy.py` the report in kWh; `money.py` the billing in Kč |
+| | `figures/` | Plotly figures: `base.py` themes, member colours and the shared chart shapes (stacked bars, pie, stacked areas by day and within a day, heatmap, pairing of the two columns); `energy.py` the report in kWh; `money.py` the billing in Kč; `spot.py` the spot comparison in Kč |
 | | `i18n.py`, `i18n_de.py` | CZ/EN/DE strings, number and date formatting |
 | Server state | `config.py` | Settings from environment variables |
-| | `store.py` | Uploaded reports and their results (key estimate, recompute, billing), newest `EDC_CACHE_MAX` kept |
-| | `jobs.py` | Background computations: queue, child process, cancellation, progress |
+| | `store.py` | Uploaded reports and their results (key estimate, recompute, billing, spot prices), newest `EDC_CACHE_MAX` kept |
+| | `jobs.py` | Background computations: queue, child process, cancellation, progress; the spot prices are fetched without a CPU slot |
 | UI | `ui/layout.py` | The page; both computation cards come from one `job_card()` with ids `<kind>-btn`, `<kind>-progress`, … |
 | | `ui/members.py` | The members grid (tick, name, key, price) and reading what was typed in it |
 | | `ui/widgets.py`, `ui/views.py` | Tiles, facts, tables, result summaries (pure functions of the data) |
 | | `ui/panel.py` | Callbacks: labels (one table of id, property and string), theme, upload, grid buttons |
 | | `ui/compute.py` | Callbacks of the computation cards: start, one shared progress poll, results |
 | | `ui/report.py` | Callbacks of the report: the two columns, the hourly plot, the selected day |
+| | `ui/spot.py` | Callbacks of the spot tab: the tabs, fetching the prices, the comparison |
 | | `ui/export.py` | Callbacks of the export: the workbook download, printing |
 | App | `app.py` | Creates the Dash app, `/healthz`, optional basic auth |
 | | `assets/style.css` | Styles, light/dark variables (Dash loads it automatically) |
