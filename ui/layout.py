@@ -29,7 +29,7 @@ JOB_KINDS = ("exact", "bill", "spot")
 #: the tabs of the report
 TABS = ("sharing", "spot")
 #: the figures of the spot tab
-SPOT_FIGURES = ("waterfall", "members", "daily", "hourly", "monthly")
+SPOT_FIGURES = ("mix", "waterfall", "members", "daily", "hourly", "monthly")
 #: figures that appear in both columns, in row order; "fig-<name>" left, "fig-<name>-b" right
 PAIRED_FIGURES = ("overview", "pie", "daily", "hourly", "heat")
 
@@ -210,12 +210,14 @@ def _spot_pane() -> html.Div:
                           curtail],
                  [html.Div(id="spot-info")]),
         html.Div(id="spot-body", className="spot-body", style={"display": "none"}, children=[
-            html.Section(className="card tiles-card", children=html.Div(id="spot-tiles")),
+            html.Section(className="card tiles-card", children=[
+                html.Div(id="spot-verdict"), html.Div(id="spot-tiles")]),
+            _graph(spot_fig_id("mix"), "spot-mix-card"),
             _graph(spot_fig_id("waterfall"), "spot-waterfall-card"),
-            _graph(spot_fig_id("members"), "spot-members-card"),
             _graph(spot_fig_id("daily"), "spot-daily-card daily-card"),
             _graph(spot_fig_id("hourly"), "spot-hourly-card"),
             _graph(spot_fig_id("monthly"), "spot-monthly-card"),
+            _graph(spot_fig_id("members"), "spot-members-card"),
             html.Section(className="card table-card", children=[
                 html.H2(id="spot-table-title"), html.Div(id="spot-table", className="table-wrap")]),
         ]),

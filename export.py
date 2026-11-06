@@ -449,9 +449,9 @@ def daily_table(entry, enabled: set[str], lang: str) -> Table:
 
 
 def spot_tables(cmp, data: SharingData, enabled: set[str], names: dict, lang: str,
-                full_ean: bool) -> list[Table]:
-    """Sharing vs spot: the totals (the tiles), per member and producer (the table), and
-    the prices per month."""
+                full_ean: bool, mix=None) -> list[Table]:
+    """Sharing vs spot: the totals (the tiles), the value by the share of the production
+    sold on spot (``mix``), per member and producer (the table), the prices per month."""
     cur, unit = t("currency", lang), f"{t('currency', lang)}/kWh"
     num = lambda x: None if x is None or not np.isfinite(x) else float(x)  # noqa: E731
     per = lambda x, kwh: num(x / kwh) if kwh > 0 else None  # noqa: E731
@@ -511,7 +511,18 @@ def spot_tables(cmp, data: SharingData, enabled: set[str], names: dict, lang: st
                      _kwh(r.surplus)] for p, r in zip(m.index, m.itertuples())],
                    [None, "0.000", "0.000", "0.000", "0.000", KWH],
                    title=t("spot_monthly_title", lang) + f" [{unit}]")
-    return [totals, per_member, producers, months]
+    out = [totals]
+    if mix is not None:
+        out.append(Table([t("x_spot_level", lang), t("spot_mix_members", lang) + f" [{cur}]",
+                          t("spot_mix_feed_in", lang) + f" [{cur}]",
+                          t("spot_mix_spot", lang) + f" [{cur}]",
+                          t("spot_mix_total", lang) + f" [{cur}]", t("spot_col_kwh", lang)],
+                         [[float(100 * lv), num(a), num(b), num(c), num(a + b + c), _kwh(k)]
+                          for lv, a, b, c, k in zip(mix.levels, mix.members, mix.feed_in,
+                                                    mix.spot, mix.shared_kwh)],
+                         ["0", KC, KC, KC, KC, KWH], title=t("x_spot_mix", lang),
+                         bold={mix.best}))
+    return out + [per_member, producers, months]
 
 
 # ---------------------------------------------------------------------------
@@ -520,7 +531,7 @@ def spot_tables(cmp, data: SharingData, enabled: set[str], names: dict, lang: st
 
 
 def sheets(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
-           full_ean: bool = False, pair_keys=None, spot_cmp=None) -> list[Sheet]:
+           full_ean: bool = False, pair_keys=None, spot_cmp=None, spot_mix=None) -> list[Sheet]:
     """The sheets of the export for this report and selection (what has been computed
     decides which ones there are); ``spot_cmp`` is the spot comparison as on the page."""
     data = entry.data
@@ -548,7 +559,8 @@ def sheets(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
                          [bill_table(entry, enabled, names, lang, full_ean)]))
     if spot_cmp is not None:
         out.append(Sheet(t("x_sheet_spot", lang),
-                         spot_tables(spot_cmp, data, enabled, names, lang, full_ean)))
+                         spot_tables(spot_cmp, data, enabled, names, lang, full_ean,
+                                     spot_mix)))
     out.append(Sheet(t("x_sheet_daily", lang), [daily_table(entry, enabled, lang)]))
     return out
 
@@ -600,13 +612,14 @@ def _write(ws, tables: list[Table]) -> None:
 
 
 def summary_xlsx(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
-                 full_ean: bool = False, pair_keys=None, spot_cmp=None) -> bytes:
+                 full_ean: bool = False, pair_keys=None, spot_cmp=None,
+                 spot_mix=None) -> bytes:
     """The export of one report as the bytes of an .xlsx file; ``pair_keys`` are the
     keys per producer as in the page's grid (several producers)."""
     wb = Workbook()
     wb.remove(wb.active)
     for sh in sheets(entry, enabled, names, lang, group=group, full_ean=full_ean,
-                     pair_keys=pair_keys, spot_cmp=spot_cmp):
+                     pair_keys=pair_keys, spot_cmp=spot_cmp, spot_mix=spot_mix):
         _write(wb.create_sheet(_sheet_title(sh.name)), sh.tables)
     wb.properties.title = t("report_title", lang)
     wb.properties.creator = "EDC sharing report"

@@ -1,5 +1,6 @@
 """The spot-market figures (Kč): what the surplus is worth with sharing and on spot.
 
+* value by the share of the production sold on spot (:func:`fig_spot_mix`)
 * from spot to sharing, step by step             (:func:`fig_spot_waterfall`)
 * with sharing vs on spot, per member            (:func:`fig_spot_members`)
 * gain of sharing per day                        (:func:`fig_spot_daily`)
@@ -18,7 +19,7 @@ from plotly.subplots import make_subplots
 
 from edc_data import POOL, SharingData
 from i18n import fmt_num, fmt_signed, month_label, t
-from spot import Comparison, monthly
+from spot import Comparison, Mix, monthly
 
 from .base import (
     OTHER, OTHER_COLOUR, THEMES, colour_map, daily_layout, date_text, figure, member_groups,
@@ -45,6 +46,53 @@ def _need_prices(fig: go.Figure, lang: str, th: dict) -> go.Figure:
     fig.add_annotation(text=t("spot_need_prices_short", lang), x=0.5, y=0.5, xref="paper",
                        yref="paper", showarrow=False, font=dict(size=13, color=th["muted"]))
     fig.update_layout(xaxis_visible=False, yaxis_visible=False)
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Part on spot, the rest shared
+# ---------------------------------------------------------------------------
+
+
+def fig_spot_mix(m: Mix | None, lang: str = "cs", th: dict | None = None,
+                 note: str | None = None) -> go.Figure:
+    """The group's value by the share of the production sold on spot (0 % = the
+    report's sharing, 100 % = all on spot): stacked members' savings, feed-in of the
+    unshared rest and spot sales, the total, the best share marked."""
+    th = th or THEMES["light"]
+    fig = figure(t("spot_mix_title", lang), lang, 440, th)
+    if m is None or not np.isfinite(m.total).all():
+        fig.add_annotation(text=note or t("spot_need_prices_short", lang), x=0.5, y=0.5,
+                           xref="paper", yref="paper", showarrow=False,
+                           font=dict(size=13, color=th["muted"]))
+        fig.update_layout(xaxis_visible=False, yaxis_visible=False)
+        return fig
+    x = 100 * m.levels
+    cur = _cur(lang)
+    hover = "%{y:,.0f} " + cur
+    for y, name, colour in ((m.members, t("spot_mix_members", lang), th["members"]),
+                            (m.feed_in, t("spot_mix_feed_in", lang), th["source"]),
+                            (m.spot, t("spot_mix_spot", lang), th["unshared"])):
+        fig.add_scatter(x=x, y=y, name=name, mode="lines", stackgroup="mix",
+                        line=dict(color=colour, width=0.6),
+                        fillcolor=rgba(colour, th["area_alpha"]), hovertemplate=hover)
+    tot = m.total
+    fig.add_scatter(x=x, y=tot, name=t("spot_mix_total", lang), mode="lines+markers",
+                    line=dict(color=th["total"], width=2), marker=dict(size=6),
+                    hovertemplate=hover)
+    b = m.best
+    fig.add_annotation(x=x[b], y=tot[b], text=f"<b>{t('spot_mix_best', lang)}</b><br>"
+                       f"{_kc(tot[b], lang)}", showarrow=True, arrowhead=0, ax=40 if b < 6 else -40,
+                       ay=-36, font=dict(size=11, color=th["ink"]), bgcolor=th["label_bg"])
+    fig.update_layout(
+        hovermode="x unified",
+        xaxis=dict(title=t("spot_mix_x", lang), range=[0, 100], dtick=10, ticksuffix=" %",
+                   showgrid=True, hoverformat=".0f"),
+        yaxis=dict(title=t("spot_kc", lang), tickformat=",.0f", showgrid=True,
+                   rangemode="tozero"),
+        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="left", x=0,
+                    traceorder="normal", font=dict(size=11)),
+    )
     return fig
 
 

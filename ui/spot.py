@@ -10,17 +10,18 @@ from dash import Input, Output, State, callback, clientside_callback, ctx, no_up
 import jobs
 import store
 from figures import (
-    fig_spot_daily, fig_spot_intraday, fig_spot_members, fig_spot_monthly, fig_spot_waterfall,
-    theme, top_dests,
+    fig_spot_daily, fig_spot_intraday, fig_spot_members, fig_spot_mix, fig_spot_monthly,
+    fig_spot_waterfall, theme, top_dests,
 )
 from i18n import t
-from spot import compare
+from spot import compare, mix, replays
 
 from . import members, views
 from .compute import _refused, _start_outputs, _started
 from .layout import SPOT_FIGURES, job_ids, spot_fig_id
 
 _SPOT = job_ids("spot")
+_EXACT = job_ids("exact")
 HIDDEN = {"display": "none"}
 
 
@@ -84,13 +85,15 @@ def start_spot(n, tab, key, job_id, lang):
 
 _INPUTS = dict(
     key=Input("data-key", "data"), rev=Input(_SPOT["rev"], "data"), tab=Input("tabs", "value"),
+    fit_rev=Input(_EXACT["rev"], "data"), pair_changed=Input("pair-keys", "cellValueChanged"),
     selected=Input("members", "selectedRows"), changed=Input("members", "cellValueChanged"),
     src_changed=Input("producers", "cellValueChanged"), feed_in=Input("feed-in", "value"),
     default=Input("price-default", "value"), fee=Input("spot-fee", "value"),
     curtail=Input("spot-curtail", "value"), lang=Input("lang", "value"),
     theme_name=Input("theme", "data"),
 )
-_STATE = dict(rows=State("members", "rowData"), src_rows=State("producers", "rowData"))
+_STATE = dict(rows=State("members", "rowData"), src_rows=State("producers", "rowData"),
+              pair_rows=State("pair-keys", "rowData"))
 
 
 def comparison(entry, rows, src_rows, feed_in, default, fee, curtail):
@@ -101,8 +104,35 @@ def comparison(entry, rows, src_rows, feed_in, default, fee, curtail):
                    "on" in (curtail or []))
 
 
+def part_on_spot(entry, cmp, rows, pair_rows, lang):
+    """(the levels valued, None) or (None, why there is no curve): the rest is shared by
+    today's EDC method with the keys of the panel (empty cells: the estimate)."""
+    data, fit = entry.data, entry.fit
+    if not cmp.priced:
+        return None, None
+    if len(data.source_eans) > 1:
+        typed = members.pair_keys(data, pair_rows)
+        problem = members.pair_problem(typed, fit)
+        merged = members.merged_pair_keys(typed, fit)
+        args = (None, tuple(tuple(r) for r in merged))
+        missing = any(k is None for r in merged for k in r)
+    else:
+        typed = members.keys(data, rows)
+        problem = members.key_problem(typed, fit)
+        merged = members.merged_keys(typed, fit)
+        args = (tuple(merged), None)
+        missing = any(k is None for k in merged)
+    if problem:
+        return None, t(problem, lang)
+    if missing:
+        return None, t("spot_mix_wait", lang)
+    rep = replays(data, entry.spot, args[0], fit.rounds if fit else 5, args[1])
+    return mix(cmp, rep), None
+
+
 _OUTPUTS = dict(
     body=Output("spot-body", "style"), info=Output("spot-info", "children"),
+    verdict=Output("spot-verdict", "children"),
     tiles=Output("spot-tiles", "children"), table=Output("spot-table", "children"),
     **{name: Output(spot_fig_id(name), "figure") for name in SPOT_FIGURES if name != "hourly"},
     **{f"{name}_h": Output(spot_fig_id(name), "style")
@@ -112,8 +142,8 @@ _OUTPUTS = dict(
 
 @callback(output=_OUTPUTS, inputs=_INPUTS,
           state=dict(**_STATE, sel_day=State("day-picker", "date")))
-def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default, fee, curtail,
-                lang, theme_name, rows, src_rows, sel_day):
+def render_spot(key, rev, tab, fit_rev, pair_changed, selected, changed, src_changed, feed_in,
+                default, fee, curtail, lang, theme_name, rows, src_rows, pair_rows, sel_day):
     """Tiles, figures and the table of the spot tab (only while it is open)."""
     if tab != "spot":
         raise dash.exceptions.PreventUpdate
@@ -123,22 +153,21 @@ def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default,
         return {**empty, "body": HIDDEN, "info": []}
     data = entry.data
     cmp = comparison(entry, rows, src_rows, feed_in, default, fee, curtail)
+    m, why = part_on_spot(entry, cmp, rows, pair_rows, lang)
     enabled = members.enabled(data, selected)
     names = members.names(data, lang, src_rows, rows)
     th = theme(theme_name)
     top = top_dests(data.frame, data)
     figs = dict(
+        mix=fig_spot_mix(m, lang, th, note=why),
         waterfall=fig_spot_waterfall(cmp, lang, th),
         members=fig_spot_members(cmp, data, names, enabled, lang=lang, th=th, top=top),
         daily=fig_spot_daily(cmp, lang=lang, sel_day=str(sel_day)[:10] if sel_day else None,
                              th=th),
         monthly=fig_spot_monthly(cmp, lang=lang, th=th),
     )
-    # side by side: one height for the waterfall and the members chart
-    h = max(figs["waterfall"].layout.height, figs["members"].layout.height)
-    for name in ("waterfall", "members"):
-        figs[name].update_layout(height=h)
     out = dict(body={}, info=views.spot_info(entry.spot, data, lang),
+               verdict=views.spot_verdict(cmp, m, lang, why),
                tiles=views.spot_tiles(cmp, entry.bill, lang),
                table=views.spot_table(cmp, data, names, lang, top, enabled), **figs)
     for name, fig in figs.items():
@@ -148,8 +177,8 @@ def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default,
 
 @callback(Output(spot_fig_id("hourly"), "figure"), Output(spot_fig_id("hourly"), "style"),
           inputs=dict(day=Input("day-picker", "date"), **_INPUTS), state=_STATE)
-def spot_hourly(day, key, rev, tab, selected, changed, src_changed, feed_in, default, fee,
-                curtail, lang, theme_name, rows, src_rows):
+def spot_hourly(day, key, rev, tab, fit_rev, pair_changed, selected, changed, src_changed,
+                feed_in, default, fee, curtail, lang, theme_name, rows, src_rows, pair_rows):
     """The selected day: the spot price against the members' prices, and the surplus."""
     if tab != "spot":
         raise dash.exceptions.PreventUpdate

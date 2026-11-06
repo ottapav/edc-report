@@ -265,7 +265,12 @@ body {
 
 /* ---- spot tab: tiles, two pairs of figures, the daily plot, the table ---- */
 .spot-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-.spot-body > .tiles-card, .spot-body > .spot-daily-card, .spot-body > .table-card { grid-column: 1 / -1; }
+.spot-body > .tiles-card, .spot-body > .spot-daily-card, .spot-body > .spot-members-card,
+.spot-body > .table-card { grid-column: 1 / -1; }
+.loss-box.verdict { margin: 0 0 14px; }
+.loss-box.verdict.spot { background: var(--warn-bg); border-color: var(--warn-line); border-left-color: var(--warn); }
+.verdict-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.verdict p { margin: 4px 0 0; font-size: 13px; }
 .spot-body .tiles { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .spot-body .tile-value { font-size: 19px; white-space: nowrap; }
 

@@ -247,6 +247,41 @@ def test_missing_prices_leave_intervals_out_and_unknown_prices_give_nan():
     assert m["supplier"].isna().all() and m["mean_spot"].notna().all()
 
 
+@pytest.mark.parametrize("producers", [1, 2])
+def test_part_on_spot_is_anchored_to_the_report_and_to_all_on_spot(producers):
+    P, D, S, keys = synthetic_group(5, 96 * 40, 5, seed=3)
+    P2 = np.stack([P // 2, P - P // 2], axis=1) if producers > 1 else P
+    data = core.load_report(all_report_csv(P2, D, S, start="2025-09-20"))
+    sp = _prices(data)
+    c = spot.compare(data, sp, [4.2, 3.9, 5.1, 4.4, 4.0], [1.2] * producers, 250)
+    pair = None if producers == 1 else tuple(tuple(keys) for _ in range(2))
+    rep = spot.replays(data, sp, tuple(keys), 5, pair)
+    m = spot.mix(c, rep)
+    assert m.total[0] == pytest.approx(c.sharing_value)           # 0 %: the report
+    assert m.total[-1] == pytest.approx(c.spot_revenue)           # 100 %: all on spot
+    assert m.shared_kwh[0] == pytest.approx(c.shared.sum()) and m.shared_kwh[-1] == 0
+    assert (np.diff(m.shared_kwh) <= 1e-9).all()                  # less shared, the more sold
+    assert m.feed_in[0] == pytest.approx(c.at_feed_in.sum())
+    # supplier prices far above spot: sharing all of it is best, each 10 % costs money
+    assert m.best == 0 and m.step_cost > 0
+    # spot dearer than the supplier price: selling all of it is best
+    dear = spot.compare(data, sp, [0.1] * 5, [0.0] * producers)
+    assert spot.mix(dear, rep).best == len(spot.LEVELS) - 1
+
+
+def test_choosing_every_15_min_is_an_upper_bound():
+    data = _data()
+    sp = _prices(data)
+    low = spot.compare(data, sp, [0.5] * 5, [1.0])            # spot often above 0.5 Kč
+    assert low.spot_better_intervals > 0 and low.spot_better_kc > 0
+    gain = np.clip(low.value[:, None] - low.prices[None, :], 0, None) * low.SH
+    assert low.spot_better_kc == pytest.approx(gain.sum())
+    high = spot.compare(data, sp, [9.0] * 5, [1.0])
+    assert high.spot_better_intervals == 0 and high.spot_better_kc == 0
+    text = str(views.spot_verdict(high, None, "en"))
+    assert "Sharing pays" in text and "In no quarter-hour" in text
+
+
 def test_hourly_and_quarter_intervals_are_counted():
     data = _data(days=20, start="2025-09-25")
     sp = spot.SpotPrices.build(spot.fetch_prices(date(2025, 9, 25), date(2025, 10, 14),
@@ -347,12 +382,21 @@ def test_the_tab_fetches_once_and_renders(entry_key, monkeypatch):
     with pytest.raises(dash.exceptions.PreventUpdate):     # prices there: no new fetch
         run(ui_spot.start_spot, "tabs.value", n=0, tab="spot", key=entry_key, job_id=None,
             lang="cs")
-    out = ui_spot.render_spot(entry_key, 1, "spot", None, None, None, "1,1", "4,2", "200",
-                              ["on"], "cs", "light", None, None, "2025-10-05")
+    out = ui_spot.render_spot(entry_key, 1, "spot", 0, None, None, None, None, "1,1", "4,2",
+                              "200", ["on"], "cs", "light", None, None, None, "2025-10-05")
     assert out["body"] == {} and out["tiles"] and out["table"]
-    assert all(out[n].layout.title.text for n in ("waterfall", "members", "daily", "monthly"))
-    fig, _style = ui_spot.spot_hourly("2025-10-05", entry_key, 1, "spot", None, None, None,
-                                      "1,1", "4,2", "200", [], "en", "dark", None, None)
+    assert all(out[n].layout.title.text
+               for n in ("mix", "waterfall", "members", "daily", "monthly"))
+    # no keys yet (estimate still running): the curve says so, the verdict is there
+    assert "odhadu klíčů" in out["mix"].layout.annotations[0].text
+    assert "Vyplatí se" in str(out["verdict"])
+    rows = [{"ean": e, "key": 15} for e in entry.data.dest_eans]
+    out = ui_spot.render_spot(entry_key, 1, "spot", 0, None, None, None, None, "1,1", "4,2",
+                              "200", [], "cs", "light", rows, None, None, "2025-10-05")
+    assert len(out["mix"].data) == 4 and "Vyplatí se sdílet" in str(out["verdict"])
+    fig, _style = ui_spot.spot_hourly("2025-10-05", entry_key, 1, "spot", 0, None, None, None,
+                                      None, "1,1", "4,2", "200", [], "en", "dark", None, None,
+                                      None)
     assert len(fig.data) >= 4
 
 
@@ -389,3 +433,11 @@ def test_the_export_has_a_spot_sheet_once_the_prices_are_there(entry_key):
     c = ui_spot.comparison(entry, None, None, "1,2", "4,5", "250", ["on"])
     assert values["Sdílení − spot [Kč]"] == pytest.approx(c.gain)
     assert values["Poplatek obchodníka [Kč/MWh]"] == pytest.approx(250)
+    # the curve needs keys: with the estimate missing it is left out
+    assert "Podíl výroby na spotu, zbytek sdílen" not in values
+    rows = [{"ean": e, "key": 15} for e in entry.data.dest_eans]
+    url = ui_export.summary_file(entry_key, None, rows, None, "cs", "", [], None,
+                                 ("1,2", "4,5", "250", []))
+    ws = load_workbook(io.BytesIO(store.get_file(url.split("/")[2]).content))["Spot"]
+    titles = [r[0] for r in ws.iter_rows(values_only=True) if r and r[0]]
+    assert "Podíl výroby na spotu, zbytek sdílen" in titles

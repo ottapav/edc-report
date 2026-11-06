@@ -34,7 +34,7 @@ The interface is available in Czech, English and German (switch in the top bar; 
 - [How the allocation keys are estimated](#how-the-allocation-keys-are-estimated)
 - [Exact static method and timing](#exact-static-method-and-timing)
 - [Billing by contribution (the Shapley value)](#billing-by-contribution-the-shapley-value)
-- [Spot market instead of sharing](#spot-market-instead-of-sharing)
+- [Share or sell on spot](#share-or-sell-on-spot)
 - [Architecture](#architecture)
 - [Performance](#performance)
 - [Deployment on Render](#deployment-on-render)
@@ -122,10 +122,15 @@ The interface is available in Czech, English and German (switch in the top bar; 
   effective price per kWh; per producer the energy it shared, its income, its share and the
   feed-in value it gave up.
 
-**Spot market instead of sharing** (second tab; all report):
+**Share or sell on spot?** (second tab; all report):
 
-* What the surplus would earn if the producers sold all of it on the OTE day-ahead market,
-  while the members bought all their electricity from their supplier. The OTE prices of the
+* The answer first: does sharing pay, or selling part or all of the production on the OTE
+  day-ahead market (the members then buy what they no longer get from their supplier)? A
+  box says which, by how much, what every 10 % moved to spot costs, how much choosing
+  every 15 min could add at most, and from which internal price sharing pays the producer.
+* **Part on spot:** the value for 0, 10, …, 100 % of the production sold on spot, the rest
+  shared by today's EDC method with the keys of the panel (estimated or typed); 0 % is the
+  report's sharing, 100 % all on spot. The OTE prices of the
   report's period are downloaded when the tab opens; the comparison then follows every
   price, fee or tick typed, with no button.
 * Inputs: the supplier prices and feed-in prices of the panel (the defaults can be typed in
@@ -430,7 +435,7 @@ The cost grows with the number of members, the size of the production and demand
 hundredths of kWh, and the number of distinct prices. With several producers the closed
 forms rarely apply, so more intervals need the quadrature. Expect several times longer on the free Render instance.
 
-## Spot market instead of sharing
+## Share or sell on spot
 
 `spot.py` compares the report's sharing with selling the producers' whole surplus on the
 OTE day-ahead market.
@@ -458,7 +463,17 @@ earns *v* = spot price − fee (with curtailment never below 0). Per 15 min the 
 
     G = Σ_j (p_j − v) · shared_j + Σ_i (f_i − v) · unshared_i,
 
-which is the value with sharing minus the spot revenue. A producer's **break-even price**
+which is the value with sharing minus the spot revenue.
+
+**Part on spot.** Selling a share *r* of the production is a reserve for sale: *r · P*
+goes to spot in every 15 min and the rest is shared by EDC's method with the same keys
+and rounds (`keyfit.replay_edc`, several producers `replay_edc_multi` with the pair keys),
+for *r* = 0, 10, …, 100 % (≈ 2 s for 150 members over a year, then memoised). The replay is
+anchored to the report member by member, so 0 % is exactly the report and 100 % exactly
+all on spot. Choosing every 15 min where each shared kWh goes (spot when spot − fee is
+above the member's supplier price) gives an upper bound; EDC sharing cannot do that.
+
+A producer's **break-even price**
 of the shared electricity is (spot revenue − f · unshared) / shared: with an internal price
 between it and the members' supplier price both sides are better off than on spot. The
 members' shares and payments are internal transfers and do not enter G; after the billing

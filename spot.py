@@ -1,5 +1,6 @@
-"""Spot market instead of sharing: the producers sell their whole surplus on the OTE
-day-ahead market, the members buy all their electricity from their supplier.
+"""Share or sell on the spot market: the producers sell part or all of their surplus
+on the OTE day-ahead market instead of sharing it, and the members buy what they no
+longer get from their supplier. Which pays more?
 
 Prices
 ------
@@ -30,6 +31,16 @@ from sharing is
 
 and the producer's *break-even price* of the shared energy is what it must get per kWh
 to earn as much as on spot: (spot revenue − f · unshared) / shared.
+
+Part on spot
+------------
+Selling a share ``r`` of the production on spot is a reserve for sale: in every 15 min
+``r · P`` goes to the spot market and the rest is shared by today's EDC method with the
+same keys (:func:`replays`, as the exact method's reserve). The replay is anchored to the
+report (``r = 0`` is the report's sharing, ``r = 1`` all on spot); :func:`mix` values every
+level. Deciding every 15 min where each kWh goes would add at most
+:attr:`Comparison.spot_better_kc` (an upper bound: EDC sharing cannot be switched per
+interval).
 """
 
 from __future__ import annotations
@@ -50,8 +61,9 @@ import numpy as np
 import pandas as pd
 
 from edc_data import (
-    SharingData, key_shared, key_unshared, memoized, shared_source,
+    SharingData, key_shared, key_unshared, memoized, producer_arrays, shared_source,
 )
+from keyfit import replay_edc, replay_edc_multi
 
 OTE_URL = "https://www.ote-cr.cz/services/PublicDataService"
 CNB_MONTH_URL = "https://api.cnb.cz/cnbapi/exrates/daily-currency-month"
@@ -518,6 +530,27 @@ class Comparison:
         return self._avg(self.spot_revenue - float(self.at_feed_in.sum()),
                          float(self.supplied.sum()))
 
+    # --- 15 min by 15 min: where spot pays more than sharing ---
+    @cached_property
+    def _spot_better(self) -> np.ndarray:
+        """(T, n) Kč a member's shared kWh would have earned more on spot (≥ 0)."""
+        with np.errstate(invalid="ignore"):
+            return np.clip(self.value[:, None] - self.prices[None, :], 0, None) * self.SH
+
+    @property
+    def spot_better_kc(self) -> float:
+        """Kč: selling the shared energy on spot in the intervals where that pays more
+        than the member's supplier price (an upper bound: EDC cannot switch per 15 min)."""
+        return float(np.nansum(self._spot_better))
+
+    @property
+    def spot_better_kwh(self) -> float:
+        return float(self.SH[self._spot_better > 0].sum())
+
+    @property
+    def spot_better_intervals(self) -> int:
+        return int((self._spot_better > 0).any(axis=1).sum())
+
     # --- negative prices ---
     @cached_property
     def _negative(self) -> np.ndarray:
@@ -638,3 +671,97 @@ def monthly(cmp: Comparison) -> pd.DataFrame:
     if np.isnan(cmp.feed_ins).any():
         out["feed_in"] = np.nan
     return out
+
+
+# ---------------------------------------------------------------------------
+# Part of the production on spot, the rest shared
+# ---------------------------------------------------------------------------
+
+#: shares of the production sold on spot (the rest is shared)
+LEVELS = tuple(round(x, 2) for x in np.linspace(0, 1, 11))
+
+
+@dataclass
+class Replays:
+    """Today's EDC sharing with a share of the production sold first, per level."""
+
+    levels: tuple
+    shared: np.ndarray        # (L, n) kWh each member got
+    supplied: np.ndarray      # (L, np) kWh each producer shared
+
+
+@memoized
+def replays(data: SharingData, spot: SpotPrices, keys: tuple | None, rounds: int,
+            pair_keys: tuple | None = None) -> Replays:
+    """EDC's method (``rounds`` rounds) with ``keys`` (several producers: ``pair_keys``)
+    after ``r`` of every producer's production went to spot, for every level of
+    :data:`LEVELS`; intervals without a spot price are left out, as in the comparison."""
+    P2, D = producer_arrays(data)
+    valid = ~np.isnan(np.asarray(spot.price, dtype=float))
+    P2, D = P2[valid], D[valid]
+    shared, supplied = [], []
+    for r in LEVELS:
+        P_eff = P2 - np.round(P2 * r).astype(np.int64)
+        if pair_keys is not None:
+            s, q = replay_edc_multi(P_eff, D, np.asarray(pair_keys, dtype=float), rounds)
+        else:
+            s = replay_edc(P_eff.sum(axis=1), D, keys, rounds)
+            tot = P_eff.sum(axis=1, keepdims=True)
+            q = s.sum(axis=1, keepdims=True) * np.where(tot > 0, P_eff / np.where(tot > 0, tot, 1),
+                                                        1 / P_eff.shape[1])
+        shared.append(s.sum(axis=0) / 100)
+        supplied.append(q.sum(axis=0) / 100)
+    return Replays(LEVELS, np.array(shared, dtype=float), np.array(supplied, dtype=float))
+
+
+@dataclass
+class Mix:
+    """Kč per level of :data:`LEVELS`: the members' savings on what is still shared, the
+    feed-in price of the surplus nobody takes, the spot sales; and the best level."""
+
+    levels: np.ndarray
+    members: np.ndarray
+    feed_in: np.ndarray
+    spot: np.ndarray
+    shared_kwh: np.ndarray
+
+    @property
+    def total(self) -> np.ndarray:
+        return self.members + self.feed_in + self.spot
+
+    @property
+    def best(self) -> int:
+        """Index of the best level (the lowest share of spot among equals)."""
+        tot = self.total
+        return int(np.flatnonzero(tot >= np.nanmax(tot) - 0.005)[0])
+
+    @property
+    def step_cost(self) -> float:
+        """Kč the group loses on average per 10 % of the production moved to spot (from
+        the best level towards all on spot; negative: it gains)."""
+        tot = self.total
+        steps = len(tot) - 1
+        return float((tot[0] - tot[-1]) / steps) if steps else 0.0
+
+
+def mix(cmp: Comparison, rep: Replays) -> Mix:
+    """Value the levels with the comparison's prices. The replay is anchored to the
+    report: at 0 % each member gets what the report gave it (the replay scaled by the
+    report / replay ratio), at 100 % nothing; what a producer shares follows the same
+    way, so the unshared rest is its production left after the spot sale and sharing."""
+    lv = np.asarray(rep.levels, dtype=float)
+    base = rep.shared[0]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.where(base > 0, rep.shared / np.where(base > 0, base, 1),
+                         (1 - lv)[:, None])
+    S = cmp.shared[None, :] * ratio                                   # (L, n)
+    pbase = rep.supplied[0]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        Q = np.where(pbase > 0, rep.supplied / np.where(pbase > 0, pbase, 1),
+                     (1 - lv)[:, None]) * cmp.supplied[None, :]
+        tot = Q.sum(axis=1, keepdims=True)
+        Q = np.where(tot > 0, Q * S.sum(axis=1, keepdims=True) / np.where(tot > 0, tot, 1), 0)
+    production = cmp.supplied + cmp.unshared                          # (np,)
+    U = np.clip((1 - lv)[:, None] * production[None, :] - Q, 0, None)
+    return Mix(levels=lv, members=S @ cmp.prices, feed_in=U @ cmp.feed_ins,
+               spot=lv * cmp.spot_revenue, shared_kwh=S.sum(axis=1))

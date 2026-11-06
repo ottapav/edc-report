@@ -16,7 +16,7 @@ from figures import colour_map
 from i18n import fmt_date, fmt_duration, fmt_num, fmt_pct, fmt_signed, t, tn
 from keyfit import KeyFit
 from recompute import Recomputed, grid_loss
-from spot import Comparison, SpotPrices, missing_surplus
+from spot import Comparison, Mix, SpotPrices, missing_surplus
 
 from . import members
 from .widgets import (
@@ -470,6 +470,46 @@ def spot_tiles(cmp: Comparison, bill: Billing | None, lang: str) -> list:
     if not cmp.priced:
         out.insert(0, hint(t("spot_need_prices", lang), "stale"))
     return out
+
+
+def spot_verdict(cmp: Comparison, m: Mix | None, lang: str, curve_note: str | None = None):
+    """The answer: does sharing or selling on spot pay more, for all of the production
+    and for a part of it; how much a choice every 15 min could add; what price of the
+    shared electricity suits both sides."""
+    if not cmp.priced or not cmp.valid.any():
+        return []
+    pct = lambda x: f"{fmt_num(100 * x, lang)}{NBSP}%"  # noqa: E731
+    gain = cmp.gain
+    best = m.levels[m.best] if m is not None else (0.0 if gain >= 0 else 1.0)
+    if best <= 0:
+        title, cls = t("verdict_share", lang), "loss-box ok verdict"
+    elif best >= 1:
+        title, cls = t("verdict_spot", lang), "loss-box verdict spot"
+    else:
+        title, cls = t("verdict_mix", lang).format(pct=pct(best)), "loss-box verdict spot"
+    lines = [t("verdict_all", lang).format(v=_kc(cmp.sharing_value, lang),
+                                           r=_kc(cmp.spot_revenue, lang),
+                                           g=_kc(gain, lang, signed=True))]
+    if m is None:
+        if curve_note:
+            lines.append(curve_note)
+    elif 0 < best < 1:
+        tot = m.total
+        lines.append(t("verdict_part_mix", lang).format(
+            pct=pct(best), v=_kc(tot[m.best], lang), g=_kc(tot[m.best] - tot[0], lang, True)))
+    elif best <= 0:
+        lines.append(t("verdict_part_share", lang).format(kc=_kc(m.step_cost, lang)))
+    if cmp.spot_better_intervals:
+        lines.append(t("verdict_quarter", lang).format(
+            n=fmt_num(cmp.spot_better_intervals, lang), kc=_kc(cmp.spot_better_kc, lang),
+            kwh=fmt_num(cmp.spot_better_kwh, lang, 1)))
+    else:
+        lines.append(t("verdict_quarter_none", lang))
+    if np.isfinite(cmp.break_even_avg) and best < 1:
+        lines.append(t("verdict_sides", lang).format(unit=_unit(cmp.break_even_avg, lang),
+                                                    p=_unit(cmp.supplier_avg, lang)))
+    return html.Div(className=cls, children=[
+        html.Div(title, className="verdict-title"), *[html.P(x) for x in lines]])
 
 
 def spot_table(cmp: Comparison, data: SharingData, names: dict, lang: str, top=None,
