@@ -1,5 +1,12 @@
 # EDC sharing report
 
+[![Live app](https://img.shields.io/badge/live-edc--report.uceeb.cvut.cz-339933)](https://edc-report.uceeb.cvut.cz/)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](.python-version)
+[![Dash 4.4](https://img.shields.io/badge/Dash-4.4.1-119DFF?logo=plotly&logoColor=white)](requirements.txt)
+[![Deployed on Render](https://img.shields.io/badge/deployed%20on-Render-46E3B7?logo=render&logoColor=white)](render.yaml)
+[![UI: cs | en | de](https://img.shields.io/badge/UI-cs%20%7C%20en%20%7C%20de-555555)](#features)
+[![Last commit](https://img.shields.io/github/last-commit/ottapav/edc-report)](https://github.com/ottapav/edc-report/commits/main)
+
 Interactive web app (Dash) that displays the electricity-sharing data of a Czech sharing
 group. The input is the CSV report generated on [edc-cr.cz](https://www.edc-cr.cz), the portal
 of the *Elektroenergetické datové centrum* (EDC). Upload the CSV and you get the group's
