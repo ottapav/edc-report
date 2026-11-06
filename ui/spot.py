@@ -11,10 +11,10 @@ import jobs
 import store
 from figures import (
     fig_spot_daily, fig_spot_intraday, fig_spot_members, fig_spot_mix, fig_spot_monthly,
-    fig_spot_waterfall, theme, top_dests,
+    fig_spot_parties, theme, top_dests,
 )
 from i18n import t
-from spot import compare, mix, replays
+from spot import compare, mix, replays, split
 
 from . import members, views
 from .compute import refused, start_outputs, started
@@ -22,6 +22,7 @@ from .layout import SPOT_FIGURES, job_ids, spot_fig_id
 
 _SPOT = job_ids("spot")
 _EXACT = job_ids("exact")
+_BILL = job_ids("bill")
 HIDDEN = {"display": "none"}
 
 
@@ -92,9 +93,11 @@ _INPUTS = dict(
     curtail=Input("spot-curtail", "value"), lang=Input("lang", "value"),
     theme_name=Input("theme", "data"),
 )
-#: and what the part on spot depends on besides: the keys (estimated, typed)
+#: and what the part on spot and who gets what depend on besides: the keys (estimated,
+#: typed) and the billing by contribution
 _KEY_INPUTS = dict(fit_rev=Input(_EXACT["rev"], "data"),
-                   pair_changed=Input("pair-keys", "cellValueChanged"))
+                   pair_changed=Input("pair-keys", "cellValueChanged"),
+                   bill_rev=Input(_BILL["rev"], "data"))
 _STATE = dict(rows=State("members", "rowData"), src_rows=State("producers", "rowData"))
 
 
@@ -135,6 +138,7 @@ def part_on_spot(entry, cmp, rows, pair_rows, lang):
 _OUTPUTS = dict(
     body=Output("spot-body", "style"), info=Output("spot-info", "children"),
     verdict=Output("spot-verdict", "children"),
+    bill_box=Output("spot-bill-box", "style"), bill_note=Output("spot-bill-note", "children"),
     tiles=Output("spot-tiles", "children"), table=Output("spot-table", "children"),
     **{name: Output(spot_fig_id(name), "figure") for name in SPOT_FIGURES if name != "hourly"},
     **{f"{name}_h": Output(spot_fig_id(name), "style")
@@ -146,7 +150,8 @@ _OUTPUTS = dict(
           state=dict(**_STATE, pair_rows=State("pair-keys", "rowData"),
                      sel_day=State("day-picker", "date")))
 def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default, fee, curtail,
-                lang, theme_name, fit_rev, pair_changed, rows, src_rows, pair_rows, sel_day):
+                lang, theme_name, fit_rev, pair_changed, bill_rev, rows, src_rows, pair_rows,
+                sel_day):
     """Tiles, figures and the table of the spot tab (only while it is open)."""
     if tab != "spot":
         raise dash.exceptions.PreventUpdate
@@ -157,23 +162,29 @@ def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default,
     data = entry.data
     cmp = comparison(entry, rows, src_rows, feed_in, default, fee, curtail)
     m, why = part_on_spot(entry, cmp, rows, pair_rows, lang)
+    # who gets what: the billing by contribution for these prices
+    sp = split(cmp, entry.bill)
+    billed = entry.bill is not None
+    need = None if sp is not None or not cmp.priced else views.need_bill(billed, lang)
     enabled = members.enabled(data, selected)
     names = members.names(data, lang, src_rows, rows)
     th = theme(theme_name)
     top = top_dests(data.frame, data)
     figs = dict(
+        parties=fig_spot_parties(cmp, sp, lang, th, note=need),
         mix=fig_spot_mix(m, lang, th, note=why,
                          rest=cmp.rest_on_spot_value if cmp.gain_unshared < 0 else None),
-        waterfall=fig_spot_waterfall(cmp, lang, th),
-        members=fig_spot_members(cmp, data, names, enabled, lang=lang, th=th, top=top),
-        daily=fig_spot_daily(cmp, lang=lang, sel_day=str(sel_day)[:10] if sel_day else None,
-                             th=th),
+        members=fig_spot_members(cmp, sp, data, names, enabled, lang=lang, th=th, top=top,
+                                 note=need),
+        daily=fig_spot_daily(cmp, sp, lang=lang,
+                             sel_day=str(sel_day)[:10] if sel_day else None, th=th),
         monthly=fig_spot_monthly(cmp, lang=lang, th=th),
     )
     out = dict(body={}, info=views.spot_info(entry.spot, data, lang),
-               verdict=views.spot_verdict(cmp, m, lang, why),
-               tiles=views.spot_tiles(cmp, entry.bill, lang),
-               table=views.spot_table(cmp, data, names, lang, top, enabled), **figs)
+               verdict=views.spot_verdict(cmp, m, sp, lang, why, billed),
+               bill_box=HIDDEN if need is None else {}, bill_note=need or "",
+               tiles=views.spot_tiles(cmp, sp, lang, billed),
+               table=views.spot_table(cmp, sp, data, names, lang, top, enabled, billed), **figs)
     for name, fig in figs.items():
         out[f"{name}_h"] = {"height": f"{fig.layout.height}px"}
     return out
@@ -193,6 +204,20 @@ def spot_hourly(day, key, rev, tab, selected, changed, src_changed, feed_in, def
     fig = fig_spot_intraday(cmp, str(day)[:10] if day else None, lang=lang,
                             th=theme(theme_name))
     return fig, {"height": f"{fig.layout.height}px"}
+
+
+# The billing's progress, shown in the spot card too (its button there starts it).
+clientside_callback(
+    """
+    function(cls, style, text) { return [cls, style, text]; }
+    """,
+    Output("spot-bill-progress", "className"),
+    Output("spot-bill-bar", "style"),
+    Output("spot-bill-text", "children"),
+    Input(_BILL["progress"], "className"),
+    Input(_BILL["bar"], "style"),
+    Input(_BILL["text"], "children"),
+)
 
 
 # The selected day's marker on the daily plot, in the browser (like the sharing tab).

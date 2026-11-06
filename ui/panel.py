@@ -68,6 +68,7 @@ LABELS = [
     ("lbl-spot-feed-in", "children", "feed_in"),
     ("lbl-spot-price-default", "children", "price_default"),
     ("spot-table-title", "children", "spot_table_title"),
+    ("spot-bill-btn", "children", "spot_bill_btn"),
 ]
 
 

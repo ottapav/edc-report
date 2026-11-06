@@ -15,7 +15,7 @@ import spot
 import store
 from conftest import all_report_csv, synthetic_group
 from figures import (
-    fig_spot_daily, fig_spot_intraday, fig_spot_members, fig_spot_monthly, fig_spot_waterfall,
+    fig_spot_daily, fig_spot_intraday, fig_spot_members, fig_spot_monthly, fig_spot_parties,
 )
 from ui import compute, layout, views
 from ui import spot as ui_spot
@@ -278,30 +278,75 @@ def test_choosing_every_15_min_is_an_upper_bound():
     assert low.spot_better_kc == pytest.approx(gain.sum())
     high = spot.compare(data, sp, [9.0] * 5, [1.0])
     assert high.spot_better_intervals == 0 and high.spot_better_kc == 0
-    text = str(views.spot_verdict(high, None, "en"))
-    assert "Sharing pays" in text and "In no quarter-hour" in text
+    text = str(views.spot_verdict(high, None, None, "en"))
+    assert "for the group" in text.lower() and "In no quarter-hour" in text
 
 
-def test_the_verdict_names_the_option_worth_most():
+def test_the_verdict_names_the_option_worth_most_for_the_group():
+    """Without the billing the verdict is about the group as a whole."""
     data = _data()
     sp = _prices(data)
     keys = tuple([0.15] * 5)
     cases = {                       # supplier, feed-in -> verdict
-        (4.5, 1.2): "Sharing pays",
-        (4.5, 0.0): "Sharing pays, and selling the unshared surplus on spot",
-        (0.2, 0.0): "Selling on spot pays",
+        (4.5, 1.2): ("Sharing pays for the group", "share"),
+        (4.5, 0.0): ("For the group, sharing and selling the unshared surplus on spot pays",
+                     "rest"),
+        (0.2, 0.0): ("Selling on spot pays for the group", "spot"),
     }
-    for (p, f), title in cases.items():
+    for (p, f), (title, best) in cases.items():
         c = spot.compare(data, sp, [p] * 5, [f])
         m = spot.mix(c, spot.replays(data, sp, keys, 5))
-        div = views.spot_verdict(c, m, "en")
+        div = views.spot_verdict(c, m, None, "en")
         assert div.children[0].children == title, (p, f)
-        options = [c.sharing_value, c.spot_revenue, float(m.total[m.best])]
+        options = {"share": c.sharing_value, "spot": c.spot_revenue,
+                   "mix": float(m.total[m.best])}
         if c.gain_unshared < 0:
-            options.append(c.rest_on_spot_value)
-        assert max(options) == pytest.approx(
-            {"Sharing pays": c.sharing_value, "Selling on spot pays": c.spot_revenue}.get(
-                title, c.rest_on_spot_value))
+            options["rest"] = c.rest_on_spot_value
+        assert max(options.values()) == pytest.approx(options[best])
+
+
+def _bill(key, price=4.3, feed=1.2):
+    """Run the billing by contribution of the stored report with one price for all."""
+    entry = store.get(key)
+    rows = [{"ean": e, "price": None} for e in entry.data.dest_eans]
+    job = jobs.JOBS[compute.start_bill(1, key, rows, [], feed, price, "cs")["job"]]
+    t0 = time.perf_counter()
+    while not job.done and time.perf_counter() - t0 < 60:
+        time.sleep(0.05)
+    assert entry.bill is not None
+    return entry
+
+
+def test_who_gets_what_follows_the_billing_by_contribution(entry_key):
+    """Producers with sharing are paid what the billing says; the members save their
+    fair share; both add up to the group's value; on spot only the producers get money."""
+    entry = _bill(entry_key)
+    entry.spot = _prices(entry.data)
+    data = entry.data
+    c = spot.compare(data, entry.spot, [4.3] * 5, [1.2], 250)
+    sp = spot.split(c, entry.bill)
+    bill = entry.bill.settlement
+    assert sp.member_saving == pytest.approx(bill.share, abs=1e-6)
+    assert sp.producer_shared == pytest.approx(bill.producer_income, abs=0.01)   # haléř
+    assert sp.producers_sharing + sp.members_saving == pytest.approx(c.sharing_value)
+    assert sp.producers_spot == pytest.approx(c.spot_revenue)
+    assert sp.member_payment + sp.member_saving == pytest.approx(c.at_supplier)
+    assert sp.producers_rest == pytest.approx(
+        float(sp.producer_shared.sum() + c.unshared_at_spot.sum()))
+    daily = sp.daily.sum()
+    assert daily["members"] == pytest.approx(sp.members_saving)
+    assert daily["producers"] == pytest.approx(sp.producers_sharing - sp.producers_spot)
+    # other prices than billed: no split (the tab asks to compute the billing again)
+    assert spot.split(spot.compare(data, entry.spot, [4.4] * 5, [1.2]), entry.bill) is None
+    # gaps in the spot prices: the shares are scaled to the compared intervals
+    gap = _prices(data)
+    gap.price[:200] = np.nan
+    cg = spot.compare(data, gap, [4.3] * 5, [1.2], 250)
+    sg = spot.split(cg, entry.bill)
+    assert sg.producers_sharing + sg.members_saving == pytest.approx(cg.sharing_value)
+    div = views.spot_verdict(c, None, sp, "en")
+    assert div.children[0].children == "Sharing pays"
+    assert "Producers: with sharing they get" in str(div) and "Members: with sharing" in str(div)
 
 
 def test_hourly_and_quarter_intervals_are_counted():
@@ -311,7 +356,7 @@ def test_hourly_and_quarter_intervals_are_counted():
     assert sp.n_missing == 0 and sp.n_hourly == 6 * 96
 
 
-def test_figures_views_and_table_build():
+def test_figures_views_and_table_build(entry_key):
     data = _data()
     sp = _prices(data)
     names = {**{e: e[-3:] for e in data.dest_eans}, **{e: "PV" for e in data.source_eans},
@@ -319,13 +364,30 @@ def test_figures_views_and_table_build():
     enabled = set(data.dest_eans[:3])
     for prices in ([4.0] * 5, [None] * 5):
         c = spot.compare(data, sp, prices, [1.0])
-        for fig in (fig_spot_waterfall(c, "cs"), fig_spot_members(c, data, names, enabled),
-                    fig_spot_daily(c, sel_day="2025-10-05"),
+        for fig in (fig_spot_parties(c, None, "cs", note="x"),
+                    fig_spot_members(c, None, data, names, enabled, note="x"),
+                    fig_spot_daily(c, None, sel_day="2025-10-05"),
                     fig_spot_intraday(c, "2025-10-05", lang="de"), fig_spot_monthly(c)):
             assert fig.layout.title.text
         views.spot_tiles(c, None, "en")
-        views.spot_table(c, data, names, "cs", None, enabled)
+        assert "billing" in str(views.spot_table(c, None, data, names, "en", None, enabled))
         views.spot_info(sp, data, "cs")
+    # with the billing: who gets what
+    entry = _bill(entry_key)
+    entry.spot = _prices(entry.data)
+    d2 = entry.data
+    names2 = {**{e: e[-3:] for e in d2.dest_eans}, **{e: "PV" for e in d2.source_eans}}
+    c = spot.compare(d2, entry.spot, [4.3] * 5, [1.2])
+    s2 = spot.split(c, entry.bill)
+    fig = fig_spot_parties(c, s2, "en")
+    assert [tr.name for tr in fig.data] == ["producers get", "members save"]
+    assert fig.data[0].y[-1] == pytest.approx(c.spot_revenue) and fig.data[1].y[-1] == 0
+    assert len(fig_spot_members(c, s2, d2, names2, set(d2.dest_eans)).data) == 2
+    assert [tr.name for tr in fig_spot_daily(c, s2).data][:2] == [
+        "výrobny (sdílení − spot)", "členové (úspora)"]
+    tiles_ = str(views.spot_tiles(c, s2, "cs"))
+    assert "Výrobny se sdílením" in tiles_ and "Členové ušetří" in tiles_
+    assert "Výrobny" in str(views.spot_table(c, s2, d2, names2, "cs"))
 
 
 # ---------------------------------------------------------------------------
@@ -407,18 +469,29 @@ def test_the_tab_fetches_once_and_renders(entry_key, monkeypatch):
     args = dict(key=entry_key, rev=1, tab="spot", selected=None, changed=None,
                 src_changed=None, feed_in="1,1", default="4,2", fee="200", curtail=["on"],
                 lang="cs", theme_name="light", rows=None, src_rows=None)
-    out = ui_spot.render_spot(**args, fit_rev=0, pair_changed=None, pair_rows=None,
+    out = ui_spot.render_spot(**args, fit_rev=0, pair_changed=None, bill_rev=0, pair_rows=None,
                               sel_day="2025-10-05")
     assert out["body"] == {} and out["tiles"] and out["table"]
     assert all(out[n].layout.title.text
-               for n in ("mix", "waterfall", "members", "daily", "monthly"))
+               for n in ("parties", "mix", "members", "daily", "monthly"))
     # no keys yet (estimate still running): the curve says so, the verdict is there
     assert "odhadu klíčů" in out["mix"].layout.annotations[0].text
-    assert "Vyplatí se" in str(out["verdict"])
+    assert "vyplatí" in str(out["verdict"])
+    # no billing yet: the card offers it, the verdict is about the group
+    assert out["bill_box"] == {} and "vyúčtování podle přínosu" in out["bill_note"]
     rows = [{"ean": e, "key": 15} for e in entry.data.dest_eans]
     out = ui_spot.render_spot(**{**args, "rows": rows, "curtail": []}, fit_rev=0,
-                              pair_changed=None, pair_rows=None, sel_day="2025-10-05")
-    assert len(out["mix"].data) == 4 and "Vyplatí se sdílet" in str(out["verdict"])
+                              pair_changed=None, bill_rev=0, pair_rows=None,
+                              sel_day="2025-10-05")
+    assert len(out["mix"].data) == 4 and "Skupině se vyplatí sdílet" in str(out["verdict"])
+    # after the billing with the same prices: who gets what, the card's button hides
+    _bill(entry_key, price=4.2, feed=1.1)
+    out = ui_spot.render_spot(**{**args, "rows": rows, "curtail": []}, fit_rev=0,
+                              pair_changed=None, bill_rev=1, pair_rows=None,
+                              sel_day="2025-10-05")
+    assert out["bill_box"] == {"display": "none"}
+    assert "Výrobny: se sdílením dostanou" in str(out["verdict"])
+    assert [tr.name for tr in out["parties"].data] == ["výrobny dostanou", "členové ušetří"]
     fig, _style = ui_spot.spot_hourly(day="2025-10-05", **{**args, "lang": "en",
                                                            "theme_name": "dark"})
     assert len(fig.data) >= 4
@@ -436,7 +509,8 @@ def test_layout_has_the_tabs_and_the_spot_card():
                 walk(k)
     walk(layout.layout())
     assert {"tabs", "tab-sharing", "tab-spot", "pane-sharing", "pane-spot", "spot-btn",
-            "spot-fee", "spot-curtail", "spot-feed-in", "spot-price-default", "spot-table"} <= ids
+            "spot-fee", "spot-curtail", "spot-feed-in", "spot-price-default", "spot-table",
+            "spot-bill-btn", "spot-bill-box"} <= ids
     assert {layout.spot_fig_id(n) for n in layout.SPOT_FIGURES} <= ids
 
 
@@ -455,8 +529,10 @@ def test_the_export_has_a_spot_sheet_once_the_prices_are_there(entry_key):
     ws = wb["Spot"]
     values = {r[0]: r[1] for r in ws.iter_rows(values_only=True) if r and r[0]}
     c = ui_spot.comparison(entry, None, None, "1,2", "4,5", "250", ["on"])
-    assert values["Sdílení − spot [Kč]"] == pytest.approx(c.gain)
-    assert values["Poplatek obchodníka [Kč/MWh]"] == pytest.approx(250)
+    assert values["Skupina: sdílení − spot"] == pytest.approx(c.gain)
+    assert values["Poplatek za prodej na spotu [Kč/MWh]"] == pytest.approx(250)
+    assert "Kdo kolik dostane" in values                      # no billing: a note
+    assert "Výrobny se sdílením" not in values
     # the curve needs keys: with the estimate missing it is left out
     assert "Podíl výroby na spotu, zbytek sdílen" not in values
     rows = [{"ean": e, "key": 15} for e in entry.data.dest_eans]
@@ -465,3 +541,14 @@ def test_the_export_has_a_spot_sheet_once_the_prices_are_there(entry_key):
     ws = load_workbook(io.BytesIO(store.get_file(url.split("/")[2]).content))["Spot"]
     titles = [r[0] for r in ws.iter_rows(values_only=True) if r and r[0]]
     assert "Podíl výroby na spotu, zbytek sdílen" in titles
+    # with the billing for these prices: the producers' and members' tables
+    _bill(entry_key, price=4.5, feed=1.2)
+    url = ui_export.summary_file(entry_key, None, rows, None, "cs", "", [], None,
+                                 ("1,2", "4,5", "250", []))
+    ws = load_workbook(io.BytesIO(store.get_file(url.split("/")[2]).content))["Spot"]
+    values = {r[0]: r[1] for r in ws.iter_rows(values_only=True) if r and r[0]}
+    sp_ = spot.split(ui_spot.comparison(entry, rows, None, "1,2", "4,5", "250", []),
+                     entry.bill)
+    assert values["Výrobny se sdílením"] == pytest.approx(sp_.producers_sharing)
+    assert values["Členové ušetří"] == pytest.approx(sp_.members_saving)
+    assert "Výrobny" in values and "Členové" in values

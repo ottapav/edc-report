@@ -16,7 +16,7 @@ from figures import colour_map
 from i18n import fmt_date, fmt_duration, fmt_num, fmt_pct, fmt_signed, t, tn
 from keyfit import KeyFit
 from recompute import Recomputed, grid_loss
-from spot import Comparison, Mix, SpotPrices, missing_surplus
+from spot import Comparison, Mix, Split, SpotPrices, missing_surplus
 
 from . import members
 from .widgets import (
@@ -415,56 +415,60 @@ def _unit(x, lang: str) -> str:
         f"{fmt_num(x, lang, 2)} {t('currency', lang)}/kWh")
 
 
-def spot_tiles(cmp: Comparison, bill: Billing | None, lang: str) -> list:
-    """Spot revenue, value with sharing, the gain and its two parts, the price window
-    of the shared electricity, the surplus at negative prices."""
+def need_bill(billed: bool, lang: str) -> str:
+    """Why there is no split between producers and members: no billing by contribution
+    yet, or one computed with other prices."""
+    return t("spot_bill_stale" if billed else "spot_bill_missing", lang)
+
+
+def spot_tiles(cmp: Comparison, sp: Split | None, lang: str, billed: bool = False) -> list:
+    """The producers with sharing (paid by the billing by contribution) and on spot,
+    what sharing brings them, what the members save, the group's gain, the surplus at
+    negative prices. Without the billing the producers' and members' tiles say so."""
     surplus = cmp.surplus_kwh
-    gain = cmp.gain
-    up = np.isfinite(gain) and gain >= 0
-    rel = (f"{fmt_signed(100 * gain / abs(cmp.spot_revenue), lang, 0)}{NBSP}%"
-           if np.isfinite(gain) and abs(cmp.spot_revenue) > 0 else "—")
-    # no price suits both when the producer needs more than the members pay their supplier
-    no_window = bool(cmp.break_even_avg > cmp.supplier_avg)
-    window = (f"{fmt_num(cmp.break_even_avg, lang, 2)}–{fmt_num(cmp.supplier_avg, lang, 2)}"
-              if np.isfinite(cmp.break_even_avg) and np.isfinite(cmp.supplier_avg) else "—")
-    bill_line = NBSP
-    if bill is not None and float(bill.shared.sum()) > 0:
-        bill_line = t("spot_bill_unit", lang).format(
-            unit=_unit(float(bill.producer_income.sum() / bill.shared.sum()), lang))
+    need = need_bill(billed, lang)
     if cmp.curtail:
         neg_sub = t("spot_neg_curtailed", lang).format(n=fmt_num(cmp.negative_intervals, lang))
     else:
         neg_sub = t("spot_neg_cost", lang).format(n=fmt_num(cmp.negative_intervals, lang),
                                                   cost=_kc(cmp.negative_cost, lang))
-    items = [
-        tile(t("spot_t_revenue", lang), _kc(cmp.spot_revenue, lang),
-             two_lines(t("spot_t_revenue_sub", lang).format(
-                 kwh=fmt_num(surplus, lang), unit=_unit(cmp.capture, lang)),
-                 t("spot_t_mean", lang).format(unit=_unit(cmp.mean_spot, lang))), GREY),
-        tile(t("spot_t_sharing", lang), _kc(cmp.sharing_value, lang),
-             two_lines(t("spot_t_saved", lang).format(kc=_kc(float(cmp.at_supplier.sum()), lang)),
-                       t("spot_t_feed", lang).format(kc=_kc(float(cmp.at_feed_in.sum()), lang))),
-             GREEN),
-        tile(t("spot_t_gain" if up or not np.isfinite(gain) else "spot_t_loss", lang),
-             _kc(gain, lang, signed=True),
-             two_lines(t("spot_t_gain_sub", lang).format(
-                 unit=_unit(gain / surplus if surplus > 0 else float("nan"), lang)),
-                 t("spot_t_gain_rel", lang).format(pct=rel)),
-             GREEN if up else RED),
-        tile(t("spot_t_shared", lang), _kc(cmp.gain_shared, lang, signed=True),
-             two_lines(t("spot_t_vs", lang).format(a=_unit(cmp.supplier_avg, lang),
-                                                   b=_unit(cmp.capture_shared, lang)),
-                       f"{fmt_num(float(cmp.shared.sum()), lang)} kWh"), BLUE),
-        tile(t("spot_t_unshared", lang), _kc(cmp.gain_unshared, lang, signed=True),
-             two_lines(t("spot_t_vs_feed", lang).format(a=_unit(cmp.feed_in_avg, lang),
-                                                        b=_unit(cmp.capture_unshared, lang)),
-                       f"{fmt_num(float(cmp.unshared.sum()), lang)} kWh"), LIGHT_GREY),
-        tile(f"{t('spot_t_window', lang)} [{t('currency', lang)}/kWh]", window,
-             two_lines(t("spot_t_window_none" if no_window else "spot_t_window_sub", lang),
-                       bill_line), RED if no_window else None),
-        tile(t("spot_t_negative", lang), f"{fmt_num(cmp.negative_kwh, lang)} kWh",
-             two_lines(neg_sub), RED),
-    ]
+    spot_tile = tile(t("spot_t_prod_spot", lang), _kc(cmp.spot_revenue, lang),
+                     two_lines(t("spot_t_revenue_sub", lang).format(
+                         kwh=fmt_num(surplus, lang), unit=_unit(cmp.capture, lang)),
+                         t("spot_t_mean", lang).format(unit=_unit(cmp.mean_spot, lang))), GREY)
+    gain = cmp.gain
+    group_tile = tile(t("spot_t_group", lang), _kc(gain, lang, signed=True),
+                      two_lines(t("spot_t_group_shared", lang).format(
+                          kc=_kc(cmp.gain_shared, lang, signed=True)),
+                          t("spot_t_group_unshared", lang).format(
+                              kc=_kc(cmp.gain_unshared, lang, signed=True))),
+                      GREEN if np.isfinite(gain) and gain >= 0 else RED)
+    neg_tile = tile(t("spot_t_negative", lang), f"{fmt_num(cmp.negative_kwh, lang)} kWh",
+                    two_lines(neg_sub), RED)
+    if sp is None:
+        items = [tile(t("spot_t_prod_sharing", lang), "—", two_lines(need), GREEN), spot_tile,
+                 tile(t("spot_t_prod_gain", lang), "—", two_lines(need), None),
+                 tile(t("spot_t_members", lang), "—", two_lines(need), BLUE),
+                 group_tile, neg_tile]
+    else:
+        d = sp.producers_sharing - sp.producers_spot
+        rel = (f"{fmt_signed(100 * d / abs(sp.producers_spot), lang, 0)}{NBSP}%"
+               if abs(sp.producers_spot) > 0 else "—")
+        items = [
+            tile(t("spot_t_prod_sharing", lang), _kc(sp.producers_sharing, lang),
+                 two_lines(t("spot_t_prod_unit", lang).format(unit=_unit(sp.unit_price_avg, lang)),
+                           t("spot_t_feed", lang).format(
+                               kc=_kc(float(sp.producer_unshared.sum()), lang))), GREEN),
+            spot_tile,
+            tile(t("spot_t_prod_gain" if d >= 0 else "spot_t_prod_loss", lang),
+                 _kc(d, lang, signed=True),
+                 two_lines(t("spot_t_prod_need", lang).format(
+                     unit=_unit(cmp.break_even_avg, lang)),
+                     t("spot_t_gain_rel", lang).format(pct=rel)), GREEN if d >= 0 else RED),
+            tile(t("spot_t_members", lang), _kc(sp.members_saving, lang),
+                 two_lines(t("spot_t_members_sub", lang), t("spot_t_members_spot", lang)), BLUE),
+            group_tile, neg_tile,
+        ]
     note = t("spot_note", lang).format(fee=fmt_num(1000 * cmp.fee, lang))
     out = tiles(items, note)
     if not cmp.priced:
@@ -472,28 +476,58 @@ def spot_tiles(cmp: Comparison, bill: Billing | None, lang: str) -> list:
     return out
 
 
-def spot_verdict(cmp: Comparison, m: Mix | None, lang: str, curve_note: str | None = None):
-    """The answer: which pays most of sharing everything (the report), sharing and
-    selling the unshared rest on spot, selling a share of the production on spot and
-    sharing the rest (``m``), and selling everything on spot; how much a choice every
-    15 min could add; what price of the shared electricity suits both sides."""
+def spot_verdict(cmp: Comparison, m: Mix | None, sp: Split | None, lang: str,
+                 curve_note: str | None = None, billed: bool = False):
+    """The answer. With the billing: what the producers get with sharing (paid by the
+    billing by contribution) and on spot, what the members save, the group. Without it:
+    the group only. Then selling the unshared rest or a part of the production on spot,
+    the choice every 15 min, the producers' break-even price."""
     if not cmp.priced or not cmp.valid.any():
         return []
     pct = lambda x: f"{fmt_num(100 * x, lang)}{NBSP}%"  # noqa: E731
     best_r = m.levels[m.best] if m is not None else None
-    options = {"share": cmp.sharing_value, "spot": cmp.spot_revenue}
+    group = {"share": cmp.sharing_value, "spot": cmp.spot_revenue}
     if cmp.gain_unshared < 0:
-        options["rest"] = cmp.rest_on_spot_value
+        group["rest"] = cmp.rest_on_spot_value
     if best_r is not None and 0 < best_r < 1:
-        options["mix"] = float(m.total[m.best])
-    best = max(options, key=lambda k: (options[k], k == "share"))
-    title = {"share": t("verdict_share", lang), "spot": t("verdict_spot", lang),
-             "rest": t("verdict_rest", lang),
-             "mix": t("verdict_mix", lang).format(pct=pct(best_r or 0))}[best]
-    cls = "loss-box ok verdict" if best in ("share", "rest") else "loss-box verdict spot"
-    lines = [t("verdict_all", lang).format(v=_kc(cmp.sharing_value, lang),
-                                           r=_kc(cmp.spot_revenue, lang),
-                                           g=_kc(cmp.gain, lang, signed=True))]
+        group["mix"] = float(m.total[m.best])
+    group_best = max(group, key=lambda k: (group[k], k == "share"))
+    lines = []
+    if sp is not None:
+        producers = {"share": sp.producers_sharing, "spot": sp.producers_spot}
+        if cmp.gain_unshared < 0:
+            producers["rest"] = sp.producers_rest
+        best = max(producers, key=lambda k: (producers[k], k == "share"))
+        if best == "spot":
+            key = "verdict_spot" if group_best == "spot" else "verdict_split"
+        else:
+            key = "verdict_share" if best == "share" else "verdict_rest"
+        title = t(key, lang)
+        ok = best != "spot"
+        lines.append(t("verdict_producers", lang).format(
+            x=_kc(sp.producers_sharing, lang), unit=_unit(sp.unit_price_avg, lang),
+            u=_kc(float(sp.producer_unshared.sum()), lang), r=_kc(sp.producers_spot, lang),
+            d=_kc(sp.producers_sharing - sp.producers_spot, lang, signed=True)))
+        lines.append(t("verdict_members", lang).format(s=_kc(sp.members_saving, lang)))
+        lines.append(t("verdict_group_line", lang).format(
+            v=_kc(cmp.sharing_value, lang), r=_kc(cmp.spot_revenue, lang),
+            g=_kc(cmp.gain, lang, signed=True)))
+    else:
+        title = (t("verdict_group_mix", lang).format(pct=pct(best_r)) if group_best == "mix"
+                 else t(f"verdict_group_{group_best}", lang))
+        ok = group_best in ("share", "rest")
+        lines.append(t("verdict_all", lang).format(v=_kc(cmp.sharing_value, lang),
+                                                   r=_kc(cmp.spot_revenue, lang),
+                                                   g=_kc(cmp.gain, lang, signed=True)))
+        lines.append(need_bill(billed, lang))
+    if cmp.unshared.sum() > 0:
+        units = dict(a=_unit(cmp.feed_in_avg, lang), b=_unit(cmp.capture_unshared, lang))
+        if cmp.gain_unshared < 0:
+            w = sp.producers_rest if sp is not None else cmp.rest_on_spot_value
+            lines.append(t("verdict_rest_spot_producers" if sp is not None else "verdict_rest_spot",
+                           lang).format(kc=_kc(-cmp.gain_unshared, lang), w=_kc(w, lang), **units))
+        else:
+            lines.append(t("verdict_rest_feed", lang).format(**units))
     if m is None:
         if curve_note:
             lines.append(curve_note)
@@ -503,29 +537,31 @@ def spot_verdict(cmp: Comparison, m: Mix | None, lang: str, curve_note: str | No
             pct=pct(best_r), v=_kc(tot[m.best], lang), g=_kc(tot[m.best] - tot[0], lang, True)))
     elif best_r <= 0:
         lines.append(t("verdict_part_share", lang).format(kc=_kc(m.step_cost, lang)))
-    if cmp.unshared.sum() > 0:
-        units = dict(a=_unit(cmp.feed_in_avg, lang), b=_unit(cmp.capture_unshared, lang))
-        lines.append(t("verdict_rest_spot", lang).format(
-            kc=_kc(-cmp.gain_unshared, lang), w=_kc(cmp.rest_on_spot_value, lang), **units)
-            if cmp.gain_unshared < 0 else t("verdict_rest_feed", lang).format(**units))
     if cmp.spot_better_intervals:
         lines.append(t("verdict_quarter", lang).format(
             n=fmt_num(cmp.spot_better_intervals, lang), kc=_kc(cmp.spot_better_kc, lang),
             kwh=fmt_num(cmp.spot_better_kwh, lang, 1)))
     else:
         lines.append(t("verdict_quarter_none", lang))
-    if best == "share" and np.isfinite(cmp.break_even_avg):    # all shared vs all on spot
-        lines.append(t("verdict_sides", lang).format(unit=_unit(cmp.break_even_avg, lang),
-                                                    p=_unit(cmp.supplier_avg, lang)))
+    if np.isfinite(cmp.break_even_avg):
+        if sp is not None:
+            lines.append(t("verdict_break_even", lang).format(
+                unit=_unit(cmp.break_even_avg, lang), paid=_unit(sp.unit_price_avg, lang)))
+        elif group_best == "share":
+            lines.append(t("verdict_sides", lang).format(unit=_unit(cmp.break_even_avg, lang),
+                                                        p=_unit(cmp.supplier_avg, lang)))
+    cls = "loss-box ok verdict" if ok else "loss-box verdict spot"
     return html.Div(className=cls, children=[
         html.Div(title, className="verdict-title"), *[html.P(x) for x in lines]])
 
 
-def spot_table(cmp: Comparison, data: SharingData, names: dict, lang: str, top=None,
-               enabled: set[str] | None = None) -> list:
-    """Per member: shared energy at the supplier price and on spot; per producer: the
-    unshared surplus at the feed-in price and on spot; then what each producer would earn
-    on spot and its break-even price."""
+def spot_table(cmp: Comparison, sp: Split | None, data: SharingData, names: dict, lang: str,
+               top=None, enabled: set[str] | None = None, billed: bool = False) -> list:
+    """Per producer: paid with sharing (shared electricity by the billing by contribution,
+    the unshared surplus at the feed-in price) and on spot; per member: what it pays the
+    producers and what it saves (on spot nothing)."""
+    if sp is None:
+        return [hint(need_bill(billed, lang), "stale")]
     enabled = set(data.dest_eans) if enabled is None else enabled
     cmap = colour_map(data, top)
     kc = lambda x: fmt_num(x, lang, 2) if np.isfinite(x) else "—"  # noqa: E731
@@ -536,36 +572,45 @@ def spot_table(cmp: Comparison, data: SharingData, names: dict, lang: str, top=N
             return num("—")
         return cell(f"<b>{fmt_signed(g, lang, 2)}</b>", "num pos" if g >= 0 else "num neg")
 
-    head = [_name_head(lang), t("spot_col_price", lang), t("spot_col_kwh", lang),
-            t("spot_col_sharing", lang), t("spot_col_spot", lang), t("spot_col_gain", lang),
-            t("spot_col_unit", lang)]
-    rows = []
-    for j, e in enumerate(data.dest_eans):
-        rows.append(("" if e in enabled else "off",
-                     name_cell(names[e], e, cmap[e]) + num(kc(cmp.prices[j]))
-                     + num(fmt_num(cmp.shared[j], lang, 1)) + num(kc(cmp.at_supplier[j]))
-                     + num(kc(cmp.shared_at_spot[j])) + gain_cell(cmp.member_gain[j])
-                     + num(per(cmp.shared_at_spot[j], cmp.shared[j]))))
+    p_head = [_name_head(lang), t("spot_col_shared_kwh", lang), t("spot_col_unshared_kwh", lang),
+              t("spot_col_paid_shared", lang), t("spot_col_paid_unshared", lang),
+              t("spot_col_sharing", lang), t("spot_col_spot", lang), t("spot_col_gain", lang),
+              t("spot_col_paid_unit", lang)]
+    p_rows = [("", name_cell(names[src], src, GREEN)
+               + num(fmt_num(sp.supplied[i], lang, 1)) + num(fmt_num(cmp.unshared[i], lang, 1))
+               + num(kc(sp.producer_shared[i])) + num(kc(sp.producer_unshared[i]))
+               + num(kc(sp.producer_sharing[i])) + num(kc(sp.producer_spot[i]))
+               + gain_cell(sp.producer_gain[i]) + num(kc(sp.unit_price[i])))
+              for i, src in enumerate(data.source_eans)]
+    p_foot = []
+    if len(data.source_eans) > 1:
+        p_foot = [cell("<b>Σ</b>") + num(fmt_num(float(sp.supplied.sum()), lang, 1), True)
+                  + num(fmt_num(float(cmp.unshared.sum()), lang, 1), True)
+                  + num(kc(float(sp.producer_shared.sum())), True)
+                  + num(kc(float(sp.producer_unshared.sum())), True)
+                  + num(kc(sp.producers_sharing), True) + num(kc(sp.producers_spot), True)
+                  + gain_cell(sp.producers_sharing - sp.producers_spot)
+                  + num(kc(sp.unit_price_avg), True)]
+    m_head = [_name_head(lang), t("spot_col_price", lang), t("spot_col_kwh", lang),
+              t("spot_col_pays", lang), t("spot_col_pays_unit", lang), t("spot_col_saves", lang)]
+    m_rows = [("" if e in enabled else "off",
+               name_cell(names[e], e, cmap[e]) + num(kc(cmp.prices[j]))
+               + num(fmt_num(cmp.shared[j], lang, 1)) + num(kc(sp.member_payment[j]))
+               + num(per(sp.member_payment[j], cmp.shared[j]))
+               + cell(f"<b>{fmt_num(sp.member_saving[j], lang, 2)}</b>", "num pos"))
+              for j, e in enumerate(data.dest_eans)]
     kwh = float(cmp.shared.sum())
-    foot = [cell("<b>Σ</b>") + cell("") + num(fmt_num(kwh, lang, 1), True)
-            + num(kc(float(cmp.at_supplier.sum())), True)
-            + num(kc(float(cmp.shared_at_spot.sum())), True) + gain_cell(cmp.gain_shared)
-            + num(per(float(cmp.shared_at_spot.sum()), kwh), True)]
-    for i, src in enumerate(data.source_eans):
-        foot.append(name_cell(t("spot_row_unshared", lang).format(name=names[src]), src, GREEN)
-                    + num(kc(cmp.feed_ins[i])) + num(fmt_num(cmp.unshared[i], lang, 1))
-                    + num(kc(cmp.at_feed_in[i])) + num(kc(cmp.unshared_at_spot[i]))
-                    + gain_cell(cmp.unshared_gain[i])
-                    + num(per(cmp.unshared_at_spot[i], cmp.unshared[i])))
-    foot.append(cell(f"<b>{t('spot_total', lang)}</b>") + cell("")
-                + num(fmt_num(cmp.surplus_kwh, lang, 1), True)
-                + num(kc(cmp.sharing_value), True) + num(kc(cmp.spot_revenue), True)
-                + gain_cell(cmp.gain) + num(per(cmp.spot_revenue, cmp.surplus_kwh), True))
+    m_foot = [cell("<b>Σ</b>") + cell("") + num(fmt_num(kwh, lang, 1), True)
+              + num(kc(float(sp.member_payment.sum())), True)
+              + num(per(float(sp.member_payment.sum()), kwh), True)
+              + cell(f"<b>{fmt_num(sp.members_saving, lang, 2)}</b>", "num pos")]
     notes = [hint(t("spot_producer_line", lang).format(
-        name=names[src], kwh=fmt_num(cmp.supplied[i] + cmp.unshared[i], lang),
-        kc=_kc(cmp.revenue[i], lang), unit=_unit(cmp.break_even[i], lang)))
+        name=names[src], unit=_unit(cmp.break_even[i], lang), paid=_unit(sp.unit_price[i], lang)))
         for i, src in enumerate(data.source_eans)]
-    return [table(head, rows, foot), hint(t("spot_table_hint", lang)), *notes]
+    return [html.H3(t("spot_table_producers", lang), className="sub-title"),
+            table(p_head, p_rows, p_foot), *notes,
+            html.H3(t("spot_table_members", lang), className="sub-title"),
+            table(m_head, m_rows, m_foot), hint(t("spot_table_hint", lang))]
 
 
 def bill_result(result: BillResult, n_producers: int, lang: str) -> list:
