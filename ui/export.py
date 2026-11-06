@@ -24,8 +24,9 @@ def _full_ean_label(lang):
 def summary_file(key, selected, rows, src_rows, lang, group, full_ean,
                  pair_rows=None, spot_inputs=None) -> str | None:
     """Prepare the workbook of the report ``key`` for this selection; return the link to
-    download it (None when the report is gone). ``spot_inputs``: (default feed-in,
-    default supplier price, fee, curtail) as typed, for the spot sheet."""
+    download it (None when the report is gone). ``spot_inputs``: (feed-in price,
+    supplier price, fee, curtail, supplier price mode, feed-in mode) as entered, for the
+    spot sheet."""
     entry = store.get(key)
     if entry is None:
         return None
@@ -36,7 +37,7 @@ def summary_file(key, selected, rows, src_rows, lang, group, full_ean,
         pairs = members.merged_pair_keys(members.pair_keys(data, pair_rows), entry.fit)
     spot_cmp = spot_mix = None
     if entry.spot is not None and data.fmt == "all":
-        spot_cmp = comparison(entry, rows, src_rows, *(spot_inputs or (None, None, None, None)))
+        spot_cmp = comparison(entry, rows, src_rows, *(spot_inputs or (None,) * 4))
         spot_mix, _why = part_on_spot(entry, spot_cmp, rows, pair_rows, lang)
     content = export.summary_xlsx(
         entry, members.enabled(data, selected), members.names(data, lang, src_rows, rows),
@@ -61,12 +62,15 @@ def summary_file(key, selected, rows, src_rows, lang, group, full_ean,
     State("price-default", "value"),
     State("spot-fee", "value"),
     State("spot-curtail", "value"),
+    State("price-mode", "value"),
+    State("feed-mode", "value"),
     prevent_initial_call=True,
 )
 def download_summary(n, key, selected, rows, src_rows, lang, group, full_ean, pair_rows=None,
-                     feed_in=None, default=None, fee=None, curtail=None):
+                     feed_in=None, default=None, fee=None, curtail=None, price_mode="uniform",
+                     feed_mode="uniform"):
     url = (summary_file(key, selected, rows, src_rows, lang, group, full_ean, pair_rows,
-                        (feed_in, default, fee, curtail)) if n else None)
+                        (feed_in, default, fee, curtail, price_mode, feed_mode)) if n else None)
     if url is None:
         raise dash.exceptions.PreventUpdate
     return url

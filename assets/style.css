@@ -248,6 +248,12 @@ body {
 .tbl td.pos { color: var(--good); font-weight: 600; }
 .tbl td.neg { color: var(--err); font-weight: 600; }
 
+/* ---- panel: electricity prices (one for all, or per member / producer) ---- */
+.price-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.price-field .seg { align-self: flex-start; }
+.price-field .price-in { width: 120px; }
+.price-field .hint { margin: 0; }
+
 /* ---- tabs: sharing / spot market ------------------------------------ */
 .tabs-parent { margin: 0; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); background: transparent !important;

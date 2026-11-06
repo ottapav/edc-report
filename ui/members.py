@@ -175,29 +175,43 @@ def pair_options() -> dict:
             "suppressHorizontalScroll": False}
 
 
-def prices(data: SharingData, rows: list[dict] | None, default) -> list[float | None]:
-    """Price column (Kč/kWh) in destination order; empty cells take ``default``."""
-    by_ean = {r.get("ean"): number(r.get("price")) for r in rows or []}
-    fallback = number(default)
-    out = []
-    for e in data.dest_eans:
-        v = by_ean.get(e)
-        v = fallback if v is None else v
-        out.append(None if v is None else max(0.0, v))
-    return out
+#: how a price is entered: one for everyone, or one per member / producer (grid column)
+PRICE_MODES = ("uniform", "each")
 
 
-def feed_ins(data: SharingData, src_rows: list[dict] | None, default) -> list[float | None]:
-    """Feed-in price (Kč/kWh) per producer in report order (producers grid); empty cells
-    take ``default``."""
-    typed = {r.get("ean"): number(r.get("price")) for r in src_rows or []}
-    fallback = number(default)
-    out = []
-    for e in data.source_eans:
-        v = typed.get(e)
-        v = fallback if v is None else v
-        out.append(None if v is None else max(0.0, v))
-    return out
+def _priced(eans, rows, uniform, mode) -> list[float | None]:
+    """Price (Kč/kWh, ≥ 0) per EAN: the uniform price for all, or each row's own
+    (``price`` column); None = not entered."""
+    if mode == "each":
+        typed = {r.get("ean"): number(r.get("price")) for r in rows or []}
+        values = [typed.get(e) for e in eans]
+    else:
+        values = [number(uniform)] * len(eans)
+    return [None if v is None else max(0.0, v) for v in values]
+
+
+def prices(data: SharingData, rows: list[dict] | None, uniform, mode: str = "uniform"
+           ) -> list[float | None]:
+    """Supplier price of every member (destination order), as chosen in the Prices
+    section: one for all members, or each member's own (Price column)."""
+    return _priced(data.dest_eans, rows, uniform, mode)
+
+
+def feed_ins(data: SharingData, src_rows: list[dict] | None, uniform, mode: str = "uniform"
+             ) -> list[float | None]:
+    """Feed-in price of every producer (report order): one for all, or each producer's
+    own (Feed-in column); a single producer has just the one price."""
+    return _priced(data.source_eans, src_rows, uniform,
+                   mode if len(data.source_eans) > 1 else "uniform")
+
+
+def fill_prices(rows: list[dict] | None, uniform) -> list[dict] | None:
+    """Rows with the empty price cells set to the uniform price (switching to a price per
+    member starts from it); None when there is nothing to fill."""
+    v = number(uniform)
+    if v is None or not rows or all(number(r.get("price")) is not None for r in rows):
+        return None
+    return [r if number(r.get("price")) is not None else {**r, "price": v} for r in rows]
 
 
 def reserve(value) -> float:
@@ -260,11 +274,13 @@ def _number_column(field: str, header: str, editable: bool, width: int, lang: st
             **extra}
 
 
-def columns(lang: str, editable: bool, pool: bool = False) -> list[dict]:
+def columns(lang: str, editable: bool, pool: bool = False, show_price: bool = False
+            ) -> list[dict]:
     """Grid columns; formatters depend on the language (decimal comma, default names).
     Keys and prices are editable only for an all report. With several producers
     (``pool``) the key column shows the pool's key, made of the keys per producer
-    (typed in their own grid), and cannot be edited here."""
+    (typed in their own grid), and cannot be edited here. The price column is there only
+    when the supplier price is entered per member (``show_price``)."""
     key = (_number_column("key", t("key_pool_col", lang), False, 64, lang, negative=True,
                           headerTooltip=t("key_pool_tip", lang))
            if pool else
@@ -277,7 +293,7 @@ def columns(lang: str, editable: bool, pool: bool = False) -> list[dict]:
         _TAIL_COLUMN,
         key,
         _number_column("price", t("price_col", lang), editable, 58, lang,
-                       headerTooltip=t("price_col_tip", lang)),
+                       headerTooltip=t("price_col_tip", lang), hide=not show_price),
     ]
 
 
@@ -290,13 +306,14 @@ def rows(data: SharingData) -> list[dict]:
             for e in data.dest_eans]
 
 
-def producer_columns(lang: str) -> list[dict]:
-    """Producers grid: name, EAN, feed-in price (typed like the members' keys and prices)."""
+def producer_columns(lang: str, show_price: bool = False) -> list[dict]:
+    """Producers grid: name, EAN, and the feed-in price when it is entered per producer
+    (typed like the members' keys and prices)."""
     return [
         _name_column(lang),
         _TAIL_COLUMN,
         _number_column("price", t("feed_col", lang), True, 64, lang,
-                       headerTooltip=t("feed_tip", lang)),
+                       headerTooltip=t("feed_tip", lang), hide=not show_price),
     ]
 
 

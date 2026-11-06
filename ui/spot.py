@@ -45,15 +45,6 @@ def _curtail_label(lang):
     return [{"label": t("spot_curtail", lang), "value": "on"}]
 
 
-# The default prices are typed in the billing card or in the spot card: one value.
-for _a, _b in (("feed-in", "spot-feed-in"), ("price-default", "spot-price-default")):
-    @callback(Output(_a, "value"), Output(_b, "value"), Input(_a, "value"), Input(_b, "value"),
-              prevent_initial_call=True)
-    def _sync(a, b, _a=_a):
-        value = a if ctx.triggered_id == _a or ctx.triggered_id is None else b
-        return (no_update if value == a else value), (no_update if value == b else value)
-
-
 def _running(job_id: str | None, key: str | None) -> bool:
     job = jobs.get(job_id)
     return job is not None and not job.done and job.data_key == key
@@ -88,7 +79,8 @@ _INPUTS = dict(
     key=Input("data-key", "data"), rev=Input(_SPOT["rev"], "data"), tab=Input("tabs", "value"),
     selected=Input("members", "selectedRows"), changed=Input("members", "cellValueChanged"),
     src_changed=Input("producers", "cellValueChanged"), feed_in=Input("feed-in", "value"),
-    default=Input("price-default", "value"), fee=Input("spot-fee", "value"),
+    default=Input("price-default", "value"), price_mode=Input("price-mode", "value"),
+    feed_mode=Input("feed-mode", "value"), fee=Input("spot-fee", "value"),
     curtail=Input("spot-curtail", "value"), lang=Input("lang", "value"),
     theme_name=Input("theme", "data"),
 )
@@ -98,12 +90,13 @@ _KEY_INPUTS = dict(fit_rev=Input(_EXACT["rev"], "data"),
 _STATE = dict(rows=State("members", "rowData"), src_rows=State("producers", "rowData"))
 
 
-def comparison(entry, rows, src_rows, feed_in, default, fee, curtail):
-    """The comparison for what is typed in the panel and the two cards."""
+def comparison(entry, rows, src_rows, feed_in, default, fee, curtail, price_mode="uniform",
+               feed_mode="uniform"):
+    """The comparison for the prices of the panel and the fee of the spot card."""
     data = entry.data
-    return compare(data, entry.spot, members.prices(data, rows, default),
-                   members.feed_ins(data, src_rows, feed_in), members.number(fee) or 0.0,
-                   "on" in (curtail or []))
+    return compare(data, entry.spot, members.prices(data, rows, default, price_mode),
+                   members.feed_ins(data, src_rows, feed_in, feed_mode),
+                   members.number(fee) or 0.0, "on" in (curtail or []))
 
 
 def part_on_spot(entry, cmp, rows, pair_rows, lang):
@@ -145,8 +138,9 @@ _OUTPUTS = dict(
 @callback(output=_OUTPUTS, inputs=dict(**_INPUTS, **_KEY_INPUTS),
           state=dict(**_STATE, pair_rows=State("pair-keys", "rowData"),
                      sel_day=State("day-picker", "date")))
-def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default, fee, curtail,
-                lang, theme_name, fit_rev, pair_changed, rows, src_rows, pair_rows, sel_day):
+def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default, price_mode,
+                feed_mode, fee, curtail, lang, theme_name, fit_rev, pair_changed, rows, src_rows,
+                pair_rows, sel_day):
     """Tiles, figures and the table of the spot tab (only while it is open)."""
     if tab != "spot":
         raise dash.exceptions.PreventUpdate
@@ -155,7 +149,8 @@ def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default,
     if entry is None or entry.spot is None or entry.data.fmt != "all":
         return {**empty, "body": HIDDEN, "info": []}
     data = entry.data
-    cmp = comparison(entry, rows, src_rows, feed_in, default, fee, curtail)
+    cmp = comparison(entry, rows, src_rows, feed_in, default, fee, curtail, price_mode,
+                     feed_mode)
     m, why = part_on_spot(entry, cmp, rows, pair_rows, lang)
     enabled = members.enabled(data, selected)
     names = members.names(data, lang, src_rows, rows)
@@ -172,7 +167,7 @@ def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default,
     )
     out = dict(body={}, info=views.spot_info(entry.spot, data, lang),
                verdict=views.spot_verdict(cmp, m, lang, why),
-               tiles=views.spot_tiles(cmp, entry.bill, lang),
+               tiles=views.spot_tiles(cmp, entry.bill.settlement if entry.bill else None, lang),
                table=views.spot_table(cmp, data, names, lang, top, enabled), **figs)
     for name, fig in figs.items():
         out[f"{name}_h"] = {"height": f"{fig.layout.height}px"}
@@ -181,15 +176,16 @@ def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default,
 
 @callback(Output(spot_fig_id("hourly"), "figure"), Output(spot_fig_id("hourly"), "style"),
           inputs=dict(day=Input("day-picker", "date"), **_INPUTS), state=_STATE)
-def spot_hourly(day, key, rev, tab, selected, changed, src_changed, feed_in, default, fee,
-                curtail, lang, theme_name, rows, src_rows):
+def spot_hourly(day, key, rev, tab, selected, changed, src_changed, feed_in, default,
+                price_mode, feed_mode, fee, curtail, lang, theme_name, rows, src_rows):
     """The selected day: the spot price against the members' prices, and the surplus."""
     if tab != "spot":
         raise dash.exceptions.PreventUpdate
     entry = store.get(key)
     if entry is None or entry.spot is None or entry.data.fmt != "all":
         return no_update, no_update
-    cmp = comparison(entry, rows, src_rows, feed_in, default, fee, curtail)
+    cmp = comparison(entry, rows, src_rows, feed_in, default, fee, curtail, price_mode,
+                     feed_mode)
     fig = fig_spot_intraday(cmp, str(day)[:10] if day else None, lang=lang,
                             th=theme(theme_name))
     return fig, {"height": f"{fig.layout.height}px"}

@@ -56,13 +56,15 @@ def _usable(entry, lang: str, part_reason: str) -> dict | None:
     return None
 
 
-def bill_inputs(data: SharingData, rows, src_rows, feed_default, default):
-    """(supplier prices, feed-in prices) for the billing from the two grids and the
-    defaults, or (None, i18n key of what is missing)."""
-    feed_ins = members.feed_ins(data, src_rows, feed_default)
+def bill_inputs(data: SharingData, rows, src_rows, feed_in, price, price_mode="uniform",
+                feed_mode="uniform"):
+    """(supplier prices, feed-in prices) for the billing as entered in the panel's Prices
+    section (one price for all, or per member / producer in the grids), or (None, i18n
+    key of what is missing)."""
+    feed_ins = members.feed_ins(data, src_rows, feed_in, feed_mode)
     if any(f is None for f in feed_ins):
         return None, "bill_need_feed_in"
-    prices = members.prices(data, rows, default)
+    prices = members.prices(data, rows, price, price_mode)
     if any(p is None for p in prices):
         return None, "bill_need_prices"
     return (prices, feed_ins), None
@@ -102,17 +104,20 @@ def start_exact(n, key, rows, reserve, lang, pair_rows=None):
     state=dict(key=State("data-key", "data"), rows=State("members", "rowData"),
                src_rows=State("producers", "rowData"),
                feed_in=State("feed-in", "value"), default=State("price-default", "value"),
+               price_mode=State("price-mode", "value"), feed_mode=State("feed-mode", "value"),
                lang=State("lang", "value")),
     prevent_initial_call=True,
 )
-def start_bill(n, key, rows, src_rows, feed_in, default, lang):
+def start_bill(n, key, rows, src_rows, feed_in, default, lang, price_mode="uniform",
+               feed_mode="uniform"):
     if not n:
         raise dash.exceptions.PreventUpdate
     entry = store.get(key)
     stop = _usable(entry, lang, "part_no_bill")
     if stop:
         return stop
-    inputs, missing = bill_inputs(entry.data, rows, src_rows, feed_in, default)
+    inputs, missing = bill_inputs(entry.data, rows, src_rows, feed_in, default, price_mode,
+                                  feed_mode)
     if missing:
         return refused(missing, lang)
     return started(jobs.start_bill(key, *inputs))
@@ -309,11 +314,12 @@ def exact_result(rev, key, lang, selected, changed, src_changed, rows, src_rows)
     inputs=dict(rev=Input(_BILL["rev"], "data"), key=Input("data-key", "data"),
                 lang=Input("lang", "value"), selected=Input("members", "selectedRows"),
                 feed_in=Input("feed-in", "value"), default=Input("price-default", "value"),
+                price_mode=Input("price-mode", "value"), feed_mode=Input("feed-mode", "value"),
                 **_EDITS),
     state=_GRIDS,
 )
 def bill_result(rev, key, lang, selected, feed_in, default, changed, src_changed, rows,
-                src_rows):
+                src_rows, price_mode="uniform", feed_mode="uniform"):
     """Summary of the last billing in its card, the settlement table below the columns,
     and a note when the prices have changed since."""
     entry = store.get(key)
@@ -323,7 +329,8 @@ def bill_result(rev, key, lang, selected, feed_in, default, changed, src_changed
     names = members.names(data, lang, src_rows, rows)
     table = views.bill_table(result.settlement, data, names, lang, top_dests(data.frame, data),
                              members.enabled(data, selected))
-    inputs, _missing = bill_inputs(data, rows, src_rows, feed_in, default)
+    inputs, _missing = bill_inputs(data, rows, src_rows, feed_in, default, price_mode,
+                                   feed_mode)
     totals = result.totals
     changed = inputs is None or any(
         abs(a - b) > 1e-9 for a, b in zip([*inputs[0], *inputs[1]],

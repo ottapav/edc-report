@@ -104,9 +104,14 @@ The interface is available in Czech, English and German (switch in the top bar; 
 
 **Billing by contribution (the Shapley value; proposal):**
 
-* **Prices:** each member's supplier price (the *Price* column of the grid, next to the keys)
-  and each producer's feed-in price (the producers' grid above it), or default prices for the
-  empty cells. Every number is typed the same way, with a decimal comma or point.
+* **Prices** (the panel's *Electricity prices* section, used by the billing and by the spot
+  tab): the members' **supplier price** (what a member pays its supplier for the
+  commodity, without distribution) and the producers' **feed-in price** (what a producer
+  gets for the surplus that was not shared). Each is either *one for all* (a single field)
+  or *per member* / *per producer*: then a *Price* column appears in the members' grid
+  (*Feed-in* in the producers' grid), starting from the single price, and every cell
+  counts. A single producer has one feed-in price. Every number is typed the same way, with
+  a decimal comma or point.
 * **Several producers:** the producers share as a pool (any producer can supply any member);
   each has its own feed-in price.
 * **Compute:** one button computes the exact Shapley values over the whole report in the
@@ -136,9 +141,8 @@ The interface is available in Czech, English and German (switch in the top bar; 
   report's sharing, 100 % all on spot. The OTE prices of the
   report's period are downloaded when the tab opens; the comparison then follows every
   price, fee or tick typed, with no button.
-* Inputs: the supplier prices and feed-in prices of the panel (the defaults can be typed in
-  the spot card or the billing card, they are the same), the trader's fee in CZK/MWh, and
-  whether the producer stops selling at a negative price.
+* Inputs: the supplier and feed-in prices of the panel (*Electricity prices*), the fee for
+  selling on spot in CZK/MWh, and whether the producer stops selling at a negative price.
 * Tiles: the surplus sold on spot (and what a kWh got on average), the value with sharing,
   the gain and its two parts (shared electricity: supplier price vs spot; unshared surplus:
   feed-in price vs spot), the price window of the shared electricity that suits both sides,

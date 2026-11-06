@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 import edc_data as core
+import i18n
 import jobs
 import spot
 import store
@@ -405,7 +406,8 @@ def test_the_tab_fetches_once_and_renders(entry_key, monkeypatch):
         run(ui_spot.start_spot, "tabs.value", n=0, tab="spot", key=entry_key, job_id=None,
             lang="cs")
     args = dict(key=entry_key, rev=1, tab="spot", selected=None, changed=None,
-                src_changed=None, feed_in="1,1", default="4,2", fee="200", curtail=["on"],
+                src_changed=None, feed_in="1,1", default="4,2", price_mode="uniform",
+                feed_mode="uniform", fee="200", curtail=["on"],
                 lang="cs", theme_name="light", rows=None, src_rows=None)
     out = ui_spot.render_spot(**args, fit_rev=0, pair_changed=None, pair_rows=None,
                               sel_day="2025-10-05")
@@ -424,6 +426,42 @@ def test_the_tab_fetches_once_and_renders(entry_key, monkeypatch):
     assert len(fig.data) >= 4
 
 
+def test_the_prices_section_switches_between_one_price_and_the_grid(entry_key):
+    from ui import panel
+    out = panel._price_modes("cs", entry_key, "uniform", "uniform")
+    assert out["price_in"] == {} and out["price_hint"] == {"display": "none"}
+    assert out["feed_radio"] == {"display": "none"}                # one producer: no choice
+    out = panel._price_modes("en", entry_key, "each", "each")
+    assert out["price_in"] == {"display": "none"} and out["price_hint"] == {}
+    assert out["feed_in"] == {}                                     # still one feed-in price
+    cols = panel._report_labels("cs", entry_key, "production", "each", "uniform")["columns"]
+    assert next(c for c in cols if c["field"] == "price")["hide"] is False
+    cols = panel._report_labels("cs", entry_key, "production")["columns"]
+    assert next(c for c in cols if c["field"] == "price")["hide"] is True
+    rows = [{"ean": e, "price": None} for e in store.get(entry_key).data.dest_eans]
+    assert [r["price"] for r in panel._start_each_price("each", rows, "4,2")] == [4.2] * 5
+
+
+def test_the_spot_tab_after_the_billing_shows_what_the_billing_pays(entry_key):
+    """The price window tile quotes the billing: the producer's income per kWh shared."""
+    entry = store.get(entry_key)
+    rows = [{"ean": e, "price": None} for e in entry.data.dest_eans]
+    job = jobs.JOBS[compute.start_bill(1, entry_key, rows, [], 1.2, 4.3, "cs")["job"]]
+    t0 = time.perf_counter()
+    while not job.done and time.perf_counter() - t0 < 60:
+        time.sleep(0.05)
+    assert entry.bill is not None
+    entry.spot = _prices(entry.data)
+    out = ui_spot.render_spot(key=entry_key, rev=1, tab="spot", selected=None, changed=None,
+                              src_changed=None, feed_in="1,2", default="4,3",
+                              price_mode="uniform", feed_mode="uniform", fee="0", curtail=[],
+                              lang="cs", theme_name="light", fit_rev=0, pair_changed=None,
+                              rows=rows, src_rows=None, pair_rows=None, sel_day=None)
+    bill = entry.bill.settlement
+    unit = float(bill.producer_income.sum() / bill.shared.sum())
+    assert f"vyúčtování podle přínosu: {i18n.fmt_num(unit, 'cs', 2)}" in str(out["tiles"])
+
+
 def test_layout_has_the_tabs_and_the_spot_card():
     ids = set()
 
@@ -436,7 +474,8 @@ def test_layout_has_the_tabs_and_the_spot_card():
                 walk(k)
     walk(layout.layout())
     assert {"tabs", "tab-sharing", "tab-spot", "pane-sharing", "pane-spot", "spot-btn",
-            "spot-fee", "spot-curtail", "spot-feed-in", "spot-price-default", "spot-table"} <= ids
+            "spot-fee", "spot-curtail", "spot-table", "price-mode", "feed-mode", "price-default",
+            "feed-in"} <= ids
     assert {layout.spot_fig_id(n) for n in layout.SPOT_FIGURES} <= ids
 
 
@@ -450,18 +489,18 @@ def test_the_export_has_a_spot_sheet_once_the_prices_are_there(entry_key):
     content = store.get_file(url.split("/")[2]).content
     assert "Spot" not in load_workbook(io.BytesIO(content)).sheetnames
     entry.spot = _prices(entry.data)
-    url = ui_export.summary_file(*args, None, ("1,2", "4,5", "250", ["on"]))
+    url = ui_export.summary_file(*args, None, ("1,2", "4,5", "250", ["on"], "uniform", "uniform"))
     wb = load_workbook(io.BytesIO(store.get_file(url.split("/")[2]).content))
     ws = wb["Spot"]
     values = {r[0]: r[1] for r in ws.iter_rows(values_only=True) if r and r[0]}
     c = ui_spot.comparison(entry, None, None, "1,2", "4,5", "250", ["on"])
     assert values["Sdílení − spot [Kč]"] == pytest.approx(c.gain)
-    assert values["Poplatek obchodníka [Kč/MWh]"] == pytest.approx(250)
+    assert values["Poplatek za prodej na spotu [Kč/MWh]"] == pytest.approx(250)
     # the curve needs keys: with the estimate missing it is left out
     assert "Podíl výroby na spotu, zbytek sdílen" not in values
     rows = [{"ean": e, "key": 15} for e in entry.data.dest_eans]
     url = ui_export.summary_file(entry_key, None, rows, None, "cs", "", [], None,
-                                 ("1,2", "4,5", "250", []))
+                                 ("1,2", "4,5", "250", [], "uniform", "uniform"))
     ws = load_workbook(io.BytesIO(store.get_file(url.split("/")[2]).content))["Spot"]
     titles = [r[0] for r in ws.iter_rows(values_only=True) if r and r[0]]
     assert "Podíl výroby na spotu, zbytek sdílen" in titles

@@ -47,7 +47,7 @@ def _row(ws, label):
 def _billed(key):
     entry = store.get(key)
     rows = [{"ean": e, "price": 4.0 + 0.3 * j} for j, e in enumerate(entry.data.dest_eans)]
-    job_id = compute.start_bill(1, key, rows, [], 1.2, None, "cs")["job"]
+    job_id = compute.start_bill(1, key, rows, [], 1.2, None, "cs", price_mode="each")["job"]
     job, t0 = jobs.get(job_id), time.perf_counter()
     while not job.done and time.perf_counter() - t0 < 60:
         time.sleep(0.05)

@@ -54,8 +54,12 @@ LABELS = [
     ("bill-title", "children", "bill_title"),
     ("bill-desc", "children", "bill_desc"),
     ("bill-btn", "children", "bill_btn"),
-    ("lbl-feed-in", "children", "feed_in"),
-    ("lbl-price-default", "children", "price_default"),
+    ("lbl-prices", "children", "prices_title"),
+    ("lbl-prices-hint", "children", "prices_hint"),
+    ("lbl-price", "children", "price_label"),
+    ("lbl-feed", "children", "feed_label"),
+    ("price-each-hint", "children", "price_each_hint"),
+    ("feed-each-hint", "children", "feed_each_hint"),
     ("pair-title", "children", "pair_title"),
     ("pair-hint", "children", "pair_hint"),
     # tabs, spot tab
@@ -65,8 +69,6 @@ LABELS = [
     ("spot-desc", "children", "spot_desc"),
     ("spot-btn", "children", "spot_btn"),
     ("lbl-spot-fee", "children", "spot_fee"),
-    ("lbl-spot-feed-in", "children", "feed_in"),
-    ("lbl-spot-price-default", "children", "price_default"),
     ("spot-table-title", "children", "spot_table_title"),
 ]
 
@@ -92,10 +94,11 @@ def _labels(lang):
         bill_title=Output("bill-btn", "title"),
         spot_title=Output("spot-btn", "title"),
     ),
-    inputs=dict(lang=Input("lang", "value"), key=Input("data-key", "data")),
+    inputs=dict(lang=Input("lang", "value"), key=Input("data-key", "data"),
+                price_mode=Input("price-mode", "value"), feed_mode=Input("feed-mode", "value")),
     state=dict(heat=State("heat-metric", "value")),
 )
-def _report_labels(lang, key, heat):
+def _report_labels(lang, key, heat, price_mode="uniform", feed_mode="uniform"):
     """Labels that also depend on the uploaded report."""
     entry = store.get(key)
     data = entry.data if entry else None
@@ -109,9 +112,10 @@ def _report_labels(lang, key, heat):
         heat_options=[{"label": t(f"heat_{m}", lang), "value": m} for m in metrics],
         heat_value=heat if heat in metrics else metrics[0],
         heat_box={"display": "none"} if len(metrics) < 2 else {},   # part report: no choice
-        columns=members.columns(lang, editable=not part, pool=multi and not part),
+        columns=members.columns(lang, editable=not part, pool=multi and not part,
+                                show_price=price_mode == "each" and not part),
         source_title=tn("panel_source", lang, len(data.source_eans) if data else 1),
-        producer_columns=members.producer_columns(lang),
+        producer_columns=members.producer_columns(lang, show_price=feed_mode == "each" and multi),
         exact_title=t("part_no_recompute", lang) if part else "",
         # several producers: say up front that the key estimate and the recompute pool them
         exact_pool=(html.P(t("pool_note", lang).format(n=len(data.source_eans)),
@@ -119,6 +123,56 @@ def _report_labels(lang, key, heat):
         bill_title=t("part_no_bill", lang) if part else "",
         spot_title=t("part_no_spot", lang) if part else "",
     )
+
+
+# Prices: one for all, or per member / producer (typed in the grid's price column).
+@callback(
+    output=dict(
+        price_options=Output("price-mode", "options"), feed_options=Output("feed-mode", "options"),
+        price_in=Output("price-default", "style"), feed_in=Output("feed-in", "style"),
+        price_hint=Output("price-each-hint", "style"), feed_hint=Output("feed-each-hint", "style"),
+        feed_radio=Output("feed-mode", "style"),
+    ),
+    inputs=dict(lang=Input("lang", "value"), key=Input("data-key", "data"),
+                price_mode=Input("price-mode", "value"), feed_mode=Input("feed-mode", "value")),
+)
+def _price_modes(lang, key, price_mode, feed_mode):
+    """The choice's labels; the one price or the hint to the grid column; a single
+    producer has one feed-in price and no choice."""
+    entry = store.get(key)
+    multi = entry is not None and len(entry.data.source_eans) > 1
+    feed_each = feed_mode == "each" and multi
+    hidden, shown = {"display": "none"}, {}
+    return dict(
+        price_options=[{"label": t("mode_uniform", lang), "value": "uniform"},
+                       {"label": t("mode_each_member", lang), "value": "each"}],
+        feed_options=[{"label": t("mode_uniform", lang), "value": "uniform"},
+                      {"label": t("mode_each_producer", lang), "value": "each"}],
+        price_in=hidden if price_mode == "each" else shown,
+        price_hint=shown if price_mode == "each" else hidden,
+        feed_in=hidden if feed_each else shown,
+        feed_hint=shown if feed_each else hidden,
+        feed_radio=shown if multi else hidden,
+    )
+
+
+@callback(Output("members", "rowData", allow_duplicate=True), Input("price-mode", "value"),
+          State("members", "rowData"), State("price-default", "value"), prevent_initial_call=True)
+def _start_each_price(mode, rows, uniform):
+    """Switching to a price per member: the empty cells start from the one price."""
+    filled = members.fill_prices(rows, uniform) if mode == "each" else None
+    if filled is None:
+        raise dash.exceptions.PreventUpdate
+    return filled
+
+
+@callback(Output("producers", "rowData", allow_duplicate=True), Input("feed-mode", "value"),
+          State("producers", "rowData"), State("feed-in", "value"), prevent_initial_call=True)
+def _start_each_feed(mode, rows, uniform):
+    filled = members.fill_prices(rows, uniform) if mode == "each" else None
+    if filled is None:
+        raise dash.exceptions.PreventUpdate
+    return filled
 
 
 # Theme: default from the system, the icon toggles and remembers the choice.

@@ -191,28 +191,38 @@ def _wait(job_id, seconds=60):
 
 
 def _billed(key, lang="cs", default=None):
-    """Run the billing of the stored report with prices 4.0, 4.3, … Kč/kWh."""
+    """Run the billing of the stored report with prices 4.0, 4.3, … Kč/kWh per member
+    (or ``default`` for all)."""
     entry = store.get(key)
     rows = [{"ean": e, "price": None if default else 4.0 + 0.3 * j}
             for j, e in enumerate(entry.data.dest_eans)]
-    job_id = compute.start_bill(1, key, rows, [], 1.2, default, lang)["job"]
+    job_id = compute.start_bill(1, key, rows, [], 1.2, default, lang,
+                                price_mode="uniform" if default else "each")["job"]
     _wait(job_id)
     return entry, rows, job_id
 
 
-def test_prices_from_the_grid_with_default():
+def test_prices_one_for_all_or_per_member():
     P, D, S, _ = synthetic_group(3, 96, 5, seed=1)
     d = core.load_report(all_report_csv(P, D, S))
     rows = [{"ean": d.dest_eans[0], "price": 4.5}, {"ean": d.dest_eans[1], "price": "3,9"},
             {"ean": d.dest_eans[2], "price": None}]
-    assert members.prices(d, rows, None) == [4.5, 3.9, None]
-    assert members.prices(d, rows, 4.1) == [4.5, 3.9, 4.1]
+    # one price for all members: the grid column does not count
+    assert members.prices(d, rows, "4,1") == [4.1, 4.1, 4.1]
+    assert members.prices(d, rows, None) == [None, None, None]
+    # per member: only the grid counts, an empty cell is missing
+    assert members.prices(d, rows, 4.1, "each") == [4.5, 3.9, None]
     assert compute.bill_inputs(d, rows, [], None, 4.1) == (None, "bill_need_feed_in")
-    assert compute.bill_inputs(d, rows, [], 1.2, None) == (None, "bill_need_prices")
-    assert compute.bill_inputs(d, rows, [], "1,2", 4.1) == (([4.5, 3.9, 4.1], [1.2]), None)
-    # a producer's own price (producers grid) wins over the default
+    assert compute.bill_inputs(d, rows, [], 1.2, 4.1, "each") == (None, "bill_need_prices")
+    assert compute.bill_inputs(d, rows, [], "1,2", 4.1) == (([4.1] * 3, [1.2]), None)
+    full = members.fill_prices(rows, "4,1")
+    assert [r["price"] for r in full] == [4.5, "3,9", 4.1]           # typed cells kept
+    assert members.fill_prices(full, 5) is None                       # nothing left to fill
+    assert compute.bill_inputs(d, full, [], 1.2, None, "each") == (([4.5, 3.9, 4.1], [1.2]),
+                                                                  None)
+    # a single producer has one feed-in price, whatever the choice
     src = [{"ean": d.source_eans[0], "price": "0,9"}]
-    assert compute.bill_inputs(d, rows, src, 1.2, 4.1)[0][1] == [0.9]
+    assert compute.bill_inputs(d, rows, src, 1.2, 4.1, "uniform", "each")[0][1] == [1.2]
 
 
 def test_bill_job_and_result(entry_key):
@@ -224,8 +234,11 @@ def test_bill_job_and_result(entry_key):
     assert out["result"] and out["table"] and out["stale"] == []
     # a changed price marks the billing as stale until the button is pressed again
     assert compute.bill_result(1, entry_key, "cs", None, 1.2, 4.4, None, None, rows, [])["stale"]
-    src = [{"ean": entry.data.source_eans[0], "price": 1.3}]
-    assert compute.bill_result(1, entry_key, "cs", None, 1.2, 4.3, None, None, rows, src)["stale"]
+    assert compute.bill_result(1, entry_key, "cs", None, 1.3, 4.3, None, None, rows, [])["stale"]
+    # per member, the grid's prices count: different from the 4.3 billed → stale
+    priced = [{**r, "price": 4.0} for r in rows]
+    assert compute.bill_result(1, entry_key, "cs", None, 1.2, 4.3, None, None, priced, [],
+                               price_mode="each")["stale"]
 
 
 def test_bill_needs_prices(entry_key):
@@ -328,8 +341,9 @@ def test_billing_of_several_producers(pool_key):
     entry = store.get(pool_key)
     data = entry.data
     rows = [{"ean": e, "price": 4.0 + 0.3 * j} for j, e in enumerate(data.dest_eans)]
-    src = [{"ean": e, "price": p} for e, p in zip(data.source_eans, [1.0, None, 2.0])]
-    job_id = compute.start_bill(1, pool_key, rows, src, 1.5, None, "cs")["job"]
+    src = [{"ean": e, "price": p} for e, p in zip(data.source_eans, [1.0, 1.5, 2.0])]
+    job_id = compute.start_bill(1, pool_key, rows, src, None, None, "cs", price_mode="each",
+                                feed_mode="each")["job"]
     _wait(job_id)
     res = entry.bill.totals
     assert res.feed_ins == [1.0, 1.5, 2.0] and len(res.producers) == 3

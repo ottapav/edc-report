@@ -115,6 +115,29 @@ def _pair_box() -> html.Div:
     ])
 
 
+def _price_field(kind: str, input_id: str) -> html.Div:
+    """One price: its label, the choice one for all / per member (or producer), and the
+    one price; per member it is typed in the grid's column above."""
+    return html.Div(id=f"{kind}-box", className="price-field", children=[
+        html.Label(id=f"lbl-{kind}", className="field-label"),
+        dcc.RadioItems(id=f"{kind}-mode", value="uniform", inline=True, className="seg"),
+        dcc.Input(id=input_id, type="text", inputMode="decimal", debounce=True,
+                  autoComplete="off", className="num-in price-in"),
+        html.P(id=f"{kind}-each-hint", className="hint", style={"display": "none"}),
+    ])
+
+
+def _prices_section() -> html.Section:
+    """Prices used by the billing and by the spot comparison: the members' supplier
+    price and the producers' feed-in price."""
+    return html.Section(className="panel-section prices-section", children=[
+        html.H3(id="lbl-prices"),
+        _price_field("price", "price-default"),
+        _price_field("feed", "feed-in"),
+        html.P(id="lbl-prices-hint", className="hint"),
+    ])
+
+
 def _panel() -> html.Aside:
     return html.Aside(className="panel", children=[
         html.Section(className="panel-section", children=[
@@ -131,6 +154,7 @@ def _panel() -> html.Aside:
                 html.Button(id="btn-clear-keys", n_clicks=0, className="mini"),
             ]),
         ]),
+        _prices_section(),
         html.Section(className="panel-section", children=[
             html.H3(id="lbl-day"),
             html.Div(className="day-row", children=[
@@ -198,16 +222,13 @@ def spot_fig_id(name: str) -> str:
 
 
 def _spot_pane() -> html.Div:
-    """The spot tab: the card that fetches the prices (with the trader's fee, the
-    curtailment switch and the default prices, the same as in the billing card), then
+    """The spot tab: the card that fetches the prices (with the fee for selling on spot
+    and the curtailment switch; the supplier and feed-in prices are in the panel), then
     the comparison."""
     curtail = dcc.Checklist(id="spot-curtail", options=[{"label": "", "value": "on"}],
                             value=[], className="checks")
     return html.Div(id="pane-spot", className="pane", style={"display": "none"}, children=[
-        job_card("spot", [_number_input("spot-fee", "lbl-spot-fee", value="0"),
-                          _number_input("spot-feed-in", "lbl-spot-feed-in"),
-                          _number_input("spot-price-default", "lbl-spot-price-default"),
-                          curtail],
+        job_card("spot", [_number_input("spot-fee", "lbl-spot-fee", value="0"), curtail],
                  [html.Div(id="spot-info")]),
         html.Div(id="spot-body", className="spot-body", style={"display": "none"}, children=[
             html.Section(className="card tiles-card", children=[
@@ -248,8 +269,7 @@ def _sharing_pane() -> list:
                  [html.Div(id="exact-pool"), _pair_box(), html.Div(id="fit-info"),
                   html.Div(id="exact-stale"),
                   html.Div(id="exact-result")], link=ARTICLE_URL),
-        job_card("bill", [_number_input("feed-in", "lbl-feed-in"),
-                          _number_input("price-default", "lbl-price-default")],
+        job_card("bill", [],
                  [html.Div(id="bill-stale"), html.Div(id="bill-result")]),
         # what the right column shows when both computations exist
         html.Div(id="right-view-box", className="right-view", style={"display": "none"},
