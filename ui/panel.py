@@ -58,6 +58,16 @@ LABELS = [
     ("lbl-price-default", "children", "price_default"),
     ("pair-title", "children", "pair_title"),
     ("pair-hint", "children", "pair_hint"),
+    # tabs, spot tab
+    ("tab-sharing", "label", "tab_sharing"),
+    ("tab-spot", "label", "tab_spot"),
+    ("spot-title", "children", "spot_title"),
+    ("spot-desc", "children", "spot_desc"),
+    ("spot-btn", "children", "spot_btn"),
+    ("lbl-spot-fee", "children", "spot_fee"),
+    ("lbl-spot-feed-in", "children", "feed_in"),
+    ("lbl-spot-price-default", "children", "price_default"),
+    ("spot-table-title", "children", "spot_table_title"),
 ]
 
 
@@ -80,6 +90,7 @@ def _labels(lang):
         exact_pool=Output("exact-pool", "children"),
         article_href=Output("exact-article", "href"),
         bill_title=Output("bill-btn", "title"),
+        spot_title=Output("spot-btn", "title"),
     ),
     inputs=dict(lang=Input("lang", "value"), key=Input("data-key", "data")),
     state=dict(heat=State("heat-metric", "value")),
@@ -106,6 +117,7 @@ def _report_labels(lang, key, heat):
         exact_pool=(html.P(t("pool_note", lang).format(n=len(data.source_eans)),
                            className="hint pool-note") if multi and not part else []),
         bill_title=t("part_no_bill", lang) if part else "",
+        spot_title=t("part_no_spot", lang) if part else "",
     )
 
 
@@ -137,7 +149,7 @@ clientside_callback(
 # Upload -> parse -> fill the panel, estimate the keys
 # ---------------------------------------------------------------------------
 
-_EXACT, _BILL = job_ids("exact"), job_ids("bill")
+_EXACT, _BILL, _SPOT = job_ids("exact"), job_ids("bill"), job_ids("spot")
 
 
 UPLOAD_OUTPUTS = dict(
@@ -161,6 +173,11 @@ UPLOAD_OUTPUTS = dict(
     bill_job=Output(_BILL["job"], "data", allow_duplicate=True),
     bill_poll_off=Output(_BILL["poll"], "disabled", allow_duplicate=True),
     bill_progress=Output(_BILL["progress"], "className", allow_duplicate=True),
+    # the spot prices belong to the old report's period (the open spot tab fetches anew)
+    spot_job=Output(_SPOT["job"], "data", allow_duplicate=True),
+    spot_poll_off=Output(_SPOT["poll"], "disabled", allow_duplicate=True),
+    spot_progress=Output(_SPOT["progress"], "className", allow_duplicate=True),
+    spot_busy=Output(_SPOT["btn"], "disabled", allow_duplicate=True),
 )
 
 
@@ -176,7 +193,8 @@ def _on_upload(contents, filename, lang, old_key):
         raise dash.exceptions.PreventUpdate
     store.drop(old_key)            # this browser replaces its report: free it, stop its jobs
     out = dict.fromkeys(UPLOAD_OUTPUTS, no_update)
-    out.update(fit_poll_off=True, bill_job=None, bill_poll_off=True, bill_progress="progress idle")
+    out.update(fit_poll_off=True, bill_job=None, bill_poll_off=True, bill_progress="progress idle",
+               spot_job=None, spot_poll_off=True, spot_progress="progress idle", spot_busy=False)
     try:
         _header, b64 = contents.split(",", 1)
         if len(b64) * 3 / 4 > config.MAX_UPLOAD_MB * 2**20:

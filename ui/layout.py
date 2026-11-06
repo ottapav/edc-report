@@ -1,9 +1,11 @@
 """The page: top bar, upload, the side panel and the report.
 
-The report has two cards that start a computation (the exact static method and the
-billing; :func:`job_card`), and two columns: the EDC report on the left, the exact
-method or the billing on the right. Paired cards of the two columns share CSS grid rows
-(see ``.compare.dual`` in ``assets/style.css``).
+The report has two tabs next to the panel. **Sharing**: two cards that start a
+computation (the exact static method and the billing; :func:`job_card`), and two
+columns: the EDC report on the left, the exact method or the billing on the right.
+Paired cards of the two columns share CSS grid rows (see ``.compare.dual`` in
+``assets/style.css``). **Spot market**: the surplus sold on the OTE day-ahead market
+instead of shared (a card that fetches the prices, tiles, figures, a table).
 """
 
 from __future__ import annotations
@@ -23,7 +25,11 @@ GRAPH_CONFIG = {
 }
 
 #: the computations with a card, a progress bar and a result revision counter
-JOB_KINDS = ("exact", "bill")
+JOB_KINDS = ("exact", "bill", "spot")
+#: the tabs of the report
+TABS = ("sharing", "spot")
+#: the figures of the spot tab
+SPOT_FIGURES = ("mix", "waterfall", "members", "daily", "hourly", "monthly")
 #: figures that appear in both columns, in row order; "fig-<name>" left, "fig-<name>-b" right
 PAIRED_FIGURES = ("overview", "pie", "daily", "hourly", "heat")
 
@@ -187,30 +193,74 @@ def _wide_card(id_: str) -> html.Section:
                                   html.Div(id=f"{id_}-table", className="table-wrap")])
 
 
+def spot_fig_id(name: str) -> str:
+    return f"fig-spot-{name}"
+
+
+def _spot_pane() -> html.Div:
+    """The spot tab: the card that fetches the prices (with the trader's fee, the
+    curtailment switch and the default prices, the same as in the billing card), then
+    the comparison."""
+    curtail = dcc.Checklist(id="spot-curtail", options=[{"label": "", "value": "on"}],
+                            value=[], className="checks")
+    return html.Div(id="pane-spot", className="pane", style={"display": "none"}, children=[
+        job_card("spot", [_number_input("spot-fee", "lbl-spot-fee", value="0"),
+                          _number_input("spot-feed-in", "lbl-spot-feed-in"),
+                          _number_input("spot-price-default", "lbl-spot-price-default"),
+                          curtail],
+                 [html.Div(id="spot-info")]),
+        html.Div(id="spot-body", className="spot-body", style={"display": "none"}, children=[
+            html.Section(className="card tiles-card", children=[
+                html.Div(id="spot-verdict"), html.Div(id="spot-tiles")]),
+            _graph(spot_fig_id("mix"), "spot-mix-card"),
+            _graph(spot_fig_id("waterfall"), "spot-waterfall-card"),
+            _graph(spot_fig_id("daily"), "spot-daily-card daily-card"),
+            _graph(spot_fig_id("hourly"), "spot-hourly-card"),
+            _graph(spot_fig_id("monthly"), "spot-monthly-card"),
+            _graph(spot_fig_id("members"), "spot-members-card"),
+            html.Section(className="card table-card", children=[
+                html.H2(id="spot-table-title"), html.Div(id="spot-table", className="table-wrap")]),
+        ]),
+    ])
+
+
+def _tabs() -> dcc.Tabs:
+    return dcc.Tabs(id="tabs", value="sharing", className="tabs", parent_className="tabs-parent",
+                    content_className="tabs-content", children=[
+                        dcc.Tab(id=f"tab-{name}", value=name, className="tab",
+                                selected_className="tab--selected") for name in TABS])
+
+
 def _report() -> html.Div:
     return html.Div(id="report", className="report hidden", children=[
         _panel(),
-        html.Main(className="main", children=[
-            html.Section(className="card", children=[
-                html.H2(id="info-title"), html.Div(id="info"), html.Div(id="notes")]),
-            job_card("exact", [_number_input("reserve", "lbl-reserve", value="0")],
-                     [html.Div(id="exact-pool"), _pair_box(), html.Div(id="fit-info"),
-                      html.Div(id="exact-stale"),
-                      html.Div(id="exact-result")], link=ARTICLE_URL),
-            job_card("bill", [_number_input("feed-in", "lbl-feed-in"),
-                              _number_input("price-default", "lbl-price-default")],
-                     [html.Div(id="bill-stale"), html.Div(id="bill-result")]),
-            # what the right column shows when both computations exist
-            html.Div(id="right-view-box", className="right-view", style={"display": "none"},
-                     children=[html.Span(id="lbl-right-view", className="field-label"),
-                               dcc.RadioItems(id="right-view", value="exact", inline=True,
-                                              className="seg")]),
-            html.Div(id="compare", className="compare single",
-                     children=[_column("a"), _column("b")]),
-            _wide_card("cmp"),          # exact method: EDC vs exact per destination
-            _wide_card("settle"),       # billing: settlement per member
-        ]),
+        html.Main(className="main", children=[_tabs(), html.Div(
+            id="pane-sharing", className="pane", children=_sharing_pane()), _spot_pane()]),
     ])
+
+
+def _sharing_pane() -> list:
+    """The sharing tab: the report's facts, the two computation cards, the columns."""
+    return [
+        html.Section(className="card", children=[
+            html.H2(id="info-title"), html.Div(id="info"), html.Div(id="notes")]),
+        job_card("exact", [_number_input("reserve", "lbl-reserve", value="0")],
+                 [html.Div(id="exact-pool"), _pair_box(), html.Div(id="fit-info"),
+                  html.Div(id="exact-stale"),
+                  html.Div(id="exact-result")], link=ARTICLE_URL),
+        job_card("bill", [_number_input("feed-in", "lbl-feed-in"),
+                          _number_input("price-default", "lbl-price-default")],
+                 [html.Div(id="bill-stale"), html.Div(id="bill-result")]),
+        # what the right column shows when both computations exist
+        html.Div(id="right-view-box", className="right-view", style={"display": "none"},
+                 children=[html.Span(id="lbl-right-view", className="field-label"),
+                           dcc.RadioItems(id="right-view", value="exact", inline=True,
+                                          className="seg")]),
+        html.Div(id="compare", className="compare single",
+                 children=[_column("a"), _column("b")]),
+        _wide_card("cmp"),          # exact method: EDC vs exact per destination
+        _wide_card("settle"),       # billing: settlement per member
+    ]
 
 
 def layout() -> html.Div:

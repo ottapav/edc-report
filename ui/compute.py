@@ -23,22 +23,26 @@ from . import members, panel, views
 from .layout import JOB_KINDS, job_ids
 
 _EXACT, _BILL = job_ids("exact"), job_ids("bill")
-_PHASES = {"fit": "phase_fit", "compute": "phase_compute", "bill": "phase_bill"}
+_PHASES = {"fit": "phase_fit", "compute": "phase_compute", "bill": "phase_bill",
+           "spot": "phase_spot"}
 
 
-def _start_outputs(kind: str) -> dict:
+def start_outputs(kind: str) -> dict:
+    """Outputs of a callback that starts the job of the card ``kind``."""
     ids = job_ids(kind)
     return dict(job=Output(ids["job"], "data"), poll_off=Output(ids["poll"], "disabled"),
                 busy=Output(ids["btn"], "disabled"), cls=Output(ids["progress"], "className"),
                 bar=Output(ids["bar"], "style"), text=Output(ids["text"], "children"))
 
 
-def _refused(reason: str, lang: str) -> dict:
+def refused(reason: str, lang: str) -> dict:
+    """The card's outputs when the job cannot start: ``reason`` (i18n key) under the bar."""
     return dict(job=no_update, poll_off=True, busy=False, cls="progress error",
                 bar={"width": "0%"}, text=t(reason, lang))
 
 
-def _started(job_id: str) -> dict:
+def started(job_id: str) -> dict:
+    """The card's outputs of a job that started (its poll draws the bar from now on)."""
     return dict(job=job_id, poll_off=False, busy=True, cls=no_update, bar=no_update,
                 text=no_update)                       # the poll draws the bar
 
@@ -46,9 +50,9 @@ def _started(job_id: str) -> dict:
 def _usable(entry, lang: str, part_reason: str) -> dict | None:
     """Why a computation cannot start, as the card's outputs; None if it can."""
     if entry is None:                    # server restarted / went to sleep since the upload
-        return _refused("session_lost", lang)
+        return refused("session_lost", lang)
     if entry.data.fmt != "all":
-        return _refused(part_reason, lang)
+        return refused(part_reason, lang)
     return None
 
 
@@ -65,7 +69,7 @@ def bill_inputs(data: SharingData, rows, src_rows, feed_default, default):
 
 
 @callback(
-    output=_start_outputs("exact"),
+    output=start_outputs("exact"),
     inputs=dict(n=Input(_EXACT["btn"], "n_clicks")),
     state=dict(key=State("data-key", "data"), rows=State("members", "rowData"),
                reserve=State("reserve", "value"), lang=State("lang", "value"),
@@ -76,24 +80,24 @@ def start_exact(n, key, rows, reserve, lang, pair_rows=None):
     if not n:
         raise dash.exceptions.PreventUpdate
     entry = store.get(key)
-    refused = _usable(entry, lang, "part_no_recompute")
-    if refused:
-        return refused
+    stop = _usable(entry, lang, "part_no_recompute")
+    if stop:
+        return stop
     if len(entry.data.source_eans) > 1:              # several producers: the pair keys
         typed = members.pair_keys(entry.data, pair_rows)
         problem = members.pair_problem(typed, entry.fit)
         if problem:
-            return _refused(problem, lang)
-        return _started(jobs.start_exact(key, None, members.reserve(reserve), pairs=typed))
+            return refused(problem, lang)
+        return started(jobs.start_exact(key, None, members.reserve(reserve), pairs=typed))
     typed = members.keys(entry.data, rows)
     problem = members.key_problem(typed, entry.fit)
     if problem:
-        return _refused(problem, lang)
-    return _started(jobs.start_exact(key, typed, members.reserve(reserve)))
+        return refused(problem, lang)
+    return started(jobs.start_exact(key, typed, members.reserve(reserve)))
 
 
 @callback(
-    output=_start_outputs("bill"),
+    output=start_outputs("bill"),
     inputs=dict(n=Input(_BILL["btn"], "n_clicks")),
     state=dict(key=State("data-key", "data"), rows=State("members", "rowData"),
                src_rows=State("producers", "rowData"),
@@ -105,13 +109,13 @@ def start_bill(n, key, rows, src_rows, feed_in, default, lang):
     if not n:
         raise dash.exceptions.PreventUpdate
     entry = store.get(key)
-    refused = _usable(entry, lang, "part_no_bill")
-    if refused:
-        return refused
+    stop = _usable(entry, lang, "part_no_bill")
+    if stop:
+        return stop
     inputs, missing = bill_inputs(entry.data, rows, src_rows, feed_in, default)
     if missing:
-        return _refused(missing, lang)
-    return _started(jobs.start_bill(key, *inputs))
+        return refused(missing, lang)
+    return started(jobs.start_bill(key, *inputs))
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +154,7 @@ def poll_state(job_id: str | None, rev: int | None, lang: str) -> tuple:
         return False, True, "progress running", {"width": f"{100 * frac:.1f}%"}, text, nu
     job.reported = True
     if job.error_key or job.error:
-        msg = (t(job.error_key, lang) if job.error_key
+        msg = (t(job.error_key, lang).replace("{detail}", job.error or "") if job.error_key
                else f"{t('phase_error', lang)}: {job.error}")
         job.final = (True, False, "progress error", {"width": "100%"}, msg, nu)
     else:

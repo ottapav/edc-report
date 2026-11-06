@@ -24,6 +24,7 @@ from billing import BillResult
 from edc_data import SharingData
 from keyfit import KeyFit
 from recompute import Recomputed
+from spot import SpotPrices
 
 
 @dataclass
@@ -35,6 +36,7 @@ class Entry:
     fit: KeyFit | None = None             # allocation keys estimated from the report
     exact: Recomputed | None = None       # recompute with the exact static method
     bill: BillResult | None = None        # billing by the Shapley value
+    spot: SpotPrices | None = None        # OTE day-ahead prices of the report's period
 
 
 _ENTRIES: "OrderedDict[str, Entry]" = OrderedDict()

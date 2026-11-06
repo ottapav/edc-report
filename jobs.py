@@ -1,4 +1,5 @@
-"""Background computations: key estimation, recompute with the exact method, billing.
+"""Background computations: key estimation, recompute with the exact method, billing,
+and fetching the spot prices.
 
 Each job runs in a thread that waits for a free slot (at most ``config.MAX_JOBS`` run at
 once; small instances have < 1 CPU) and runs the heavy part in a forked child process
@@ -17,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import config
+import spot
 import store
 from billing import BillResult, compute_shapley
 from edc_data import per_destination, producer_arrays, supplied_per_source
@@ -27,7 +29,7 @@ from recompute import InvalidKeys, recompute, to_hundredths, to_hundredths_multi
 
 @dataclass
 class Job:
-    kind: str                       # "fit", "exact" or "bill"
+    kind: str                       # "fit", "exact", "bill" or "spot"
     data_key: str                   # the upload it works on
     phase: str = "queued"           # then the phase the work reports: fit / compute / bill
     frac: float = 0.0               # progress of the phase, 0..1
@@ -74,21 +76,22 @@ def stats() -> dict:
             "max_jobs": config.MAX_JOBS}
 
 
-def start(kind: str, data_key: str, work: Work) -> str:
-    """Run ``work(entry, job)`` in the background; return the job id."""
+def start(kind: str, data_key: str, work: Work, slot: bool = True) -> str:
+    """Run ``work(entry, job)`` in the background; return the job id. ``slot``: wait for
+    one of the ``MAX_JOBS`` slots (CPU-bound work); network waits need none."""
     now = time.perf_counter()
     for old in [i for i, j in list(JOBS.items())
                 if (j.reported and now - j.t0 > 60) or now - j.t0 > 3600]:
         JOBS.pop(old, None)
     job_id = uuid.uuid4().hex
     JOBS[job_id] = job = Job(kind, data_key)
-    threading.Thread(target=_run, args=(job, work), daemon=True).start()
+    threading.Thread(target=_run, args=(job, work, slot), daemon=True).start()
     return job_id
 
 
-def _run(job: Job, work: Work) -> None:
+def _run(job: Job, work: Work, slot: bool = True) -> None:
     try:
-        while not _SLOTS.acquire(timeout=0.5):          # a cancelled job leaves the queue
+        while slot and not _SLOTS.acquire(timeout=0.5):   # a cancelled job leaves the queue
             if job.cancelled():
                 raise JobCancelled()
         try:
@@ -98,13 +101,16 @@ def _run(job: Job, work: Work) -> None:
                 raise JobCancelled()
             work(entry, job)
         finally:
-            _SLOTS.release()
-    except JobCancelled:
+            if slot:
+                _SLOTS.release()
+    except (JobCancelled, spot.Cancelled):
         job.error_key = "job_cancelled"
     except JobTimeout:
         job.error_key = "job_timeout"
     except InvalidKeys as exc:
         job.error_key = exc.reason
+    except spot.SpotError as exc:                    # OTE unreachable or answered oddly
+        job.error_key, job.error = "spot_error", str(exc)
     except Exception as exc:  # reported in the UI
         traceback.print_exc()
         job.error = str(exc)
@@ -113,7 +119,7 @@ def _run(job: Job, work: Work) -> None:
 
 
 # ---------------------------------------------------------------------------
-# The three computations
+# The computations
 # ---------------------------------------------------------------------------
 
 
@@ -202,3 +208,13 @@ def start_bill(data_key: str, prices: list[float], feed_ins: list[float]) -> str
                                       supplied_per_source(data), data.frame.index,
                                       data.dest_eans, data.source_eans)
     return start("bill", data_key, work)
+
+
+def start_spot(data_key: str) -> str:
+    """Fetch the OTE day-ahead prices of the report's period (network, no CPU slot); the
+    comparison itself is quick and follows the prices typed in the panel."""
+    def work(entry: store.Entry, job: Job) -> None:
+        job.progress("spot", 0.0)
+        entry.spot = spot.fetch_for(entry.data, progress=job.progress,
+                                    cancelled=job.cancelled)
+    return start("spot", data_key, work, slot=False)

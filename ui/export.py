@@ -13,6 +13,7 @@ import store
 from i18n import t
 
 from . import members
+from .spot import comparison, part_on_spot
 
 
 @callback(Output("export-full-ean", "options"), Input("lang", "value"))
@@ -21,9 +22,10 @@ def _full_ean_label(lang):
 
 
 def summary_file(key, selected, rows, src_rows, lang, group, full_ean,
-                 pair_rows=None) -> str | None:
+                 pair_rows=None, spot_inputs=None) -> str | None:
     """Prepare the workbook of the report ``key`` for this selection; return the link to
-    download it (None when the report is gone)."""
+    download it (None when the report is gone). ``spot_inputs``: (default feed-in,
+    default supplier price, fee, curtail) as typed, for the spot sheet."""
     entry = store.get(key)
     if entry is None:
         return None
@@ -32,9 +34,14 @@ def summary_file(key, selected, rows, src_rows, lang, group, full_ean,
     pairs = None
     if len(data.source_eans) > 1 and pair_rows:
         pairs = members.merged_pair_keys(members.pair_keys(data, pair_rows), entry.fit)
+    spot_cmp = spot_mix = None
+    if entry.spot is not None and data.fmt == "all":
+        spot_cmp = comparison(entry, rows, src_rows, *(spot_inputs or (None, None, None, None)))
+        spot_mix, _why = part_on_spot(entry, spot_cmp, rows, pair_rows, lang)
     content = export.summary_xlsx(
         entry, members.enabled(data, selected), members.names(data, lang, src_rows, rows),
-        lang, group=group, full_ean="full" in (full_ean or []), pair_keys=pairs)
+        lang, group=group, full_ean="full" in (full_ean or []), pair_keys=pairs,
+        spot_cmp=spot_cmp, spot_mix=spot_mix)
     name = export.file_name(data, lang, group)
     return f"/export/{store.put_file(name, content)}/{quote(name)}"
 
@@ -50,11 +57,16 @@ def summary_file(key, selected, rows, src_rows, lang, group, full_ean,
     State("group", "value"),
     State("export-full-ean", "value"),
     State("pair-keys", "rowData"),
+    State("feed-in", "value"),
+    State("price-default", "value"),
+    State("spot-fee", "value"),
+    State("spot-curtail", "value"),
     prevent_initial_call=True,
 )
-def download_summary(n, key, selected, rows, src_rows, lang, group, full_ean, pair_rows=None):
-    url = (summary_file(key, selected, rows, src_rows, lang, group, full_ean, pair_rows)
-           if n else None)
+def download_summary(n, key, selected, rows, src_rows, lang, group, full_ean, pair_rows=None,
+                     feed_in=None, default=None, fee=None, curtail=None):
+    url = (summary_file(key, selected, rows, src_rows, lang, group, full_ean, pair_rows,
+                        (feed_in, default, fee, curtail)) if n else None)
     if url is None:
         raise dash.exceptions.PreventUpdate
     return url
