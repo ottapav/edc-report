@@ -1,0 +1,4 @@
+# the app's requirements plus the test runner (CI installs this file; Render only
+# requirements.txt)
+-r requirements.txt
+pytest==9.2.0
