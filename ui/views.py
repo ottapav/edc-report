@@ -258,11 +258,12 @@ def bill_table(bill: Billing, data: SharingData, names: dict, lang: str, top=Non
     head = [_name_head(lang), t("bill_col_price", lang), t("bill_col_shared", lang),
             t("bill_col_saving", lang), t("bill_col_share", lang),
             tn("bill_col_payment", lang, n_prod), t("bill_col_unit", lang)]
+    pay = lambda text, x: cell(text, "num neg" if x < -0.005 else "num")  # noqa: E731
     rows = [("" if e in enabled else "off",
              name_cell(names[e], e, cmap[e]) + num(fmt_num(bill.prices[j], lang, 2))
              + num(fmt_num(bill.shared[j], lang, 1)) + num(kc(bill.saving[j]))
-             + num(kc(bill.share[j]), True) + num(kc(bill.payment[j]))
-             + num(unit(bill.payment[j], bill.shared[j])))
+             + num(kc(bill.share[j]), True) + pay(kc(bill.payment[j]), bill.payment[j])
+             + pay(unit(bill.payment[j], bill.shared[j]), bill.payment[j]))
             for j, e in enumerate(data.dest_eans)]
     kwh, paid = float(bill.shared.sum()), float(bill.payment.sum())
     total = (cell("<b>Σ</b>") + cell("") + num(fmt_num(kwh, lang, 1), True)
@@ -277,6 +278,14 @@ def bill_table(bill: Billing, data: SharingData, names: dict, lang: str, top=Non
         + num(unit(bill.producer_income[i], bill.supplied[i]))
         for i, src in enumerate(data.source_eans)]
     return table(head, rows, [total, *producers])
+
+
+def negative_payment_note(payments, n_producers: int, lang: str) -> list:
+    """Why a member's payment is negative (the producers pay it), when one is: the keys
+    gave it less electricity than its contribution, the shares do not depend on them."""
+    if not (np.asarray(payments, dtype=float) < -0.005).any():
+        return []
+    return [hint(tn("bill_negative", lang, n_producers), "hint neg-note")]
 
 
 # ---------------------------------------------------------------------------
@@ -583,10 +592,12 @@ def spot_table(cmp: Comparison, sp: Split | None, data: SharingData, names: dict
                   + num(kc(sp.unit_price_avg), True)]
     m_head = [_name_head(lang), t("spot_col_price", lang), t("spot_col_kwh", lang),
               t("spot_col_pays", lang), t("spot_col_pays_unit", lang), t("spot_col_saves", lang)]
+    pay = lambda text, x: cell(text, "num neg" if x < -0.005 else "num")  # noqa: E731
     m_rows = [("" if e in enabled else "off",
                name_cell(names[e], e, cmap[e]) + num(kc(cmp.prices[j]))
-               + num(fmt_num(cmp.shared[j], lang, 1)) + num(kc(sp.member_payment[j]))
-               + num(per(sp.member_payment[j], cmp.shared[j]))
+               + num(fmt_num(cmp.shared[j], lang, 1))
+               + pay(kc(sp.member_payment[j]), sp.member_payment[j])
+               + pay(per(sp.member_payment[j], cmp.shared[j]), sp.member_payment[j])
                + cell(f"<b>{fmt_num(sp.member_saving[j], lang, 2)}</b>", "num pos"))
               for j, e in enumerate(data.dest_eans)]
     kwh = float(cmp.shared.sum())
@@ -600,7 +611,9 @@ def spot_table(cmp: Comparison, sp: Split | None, data: SharingData, names: dict
     return [html.H3(t("spot_table_producers", lang), className="sub-title"),
             table(p_head, p_rows, p_foot), *notes,
             html.H3(t("spot_table_members", lang), className="sub-title"),
-            table(m_head, m_rows, m_foot), hint(t("spot_table_hint", lang))]
+            table(m_head, m_rows, m_foot),
+            *negative_payment_note(sp.member_payment, len(data.source_eans), lang),
+            hint(t("spot_table_hint", lang))]
 
 
 def bill_result(result: BillResult, n_producers: int, lang: str) -> list:

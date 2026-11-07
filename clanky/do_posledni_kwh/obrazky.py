@@ -1,7 +1,7 @@
-"""Obrázky článku z reálných dat skupiny: ``python -m clanek.obrazky REPORT.csv``.
+"""Obrázky článku z reálných dat skupiny: ``python -m clanky.do_posledni_kwh.obrazky REPORT.csv``.
 
-Kreslí je stejné funkce jako aplikace (``figures``) a zapíše je do ``clanek/img/``
-(česky), ``clanek/img/en/`` a ``clanek/img/de/``: kolac.png (kam šla výroba) a
+Kreslí je stejné funkce jako aplikace (``figures``) a zapíše je do ``clanky/do_posledni_kwh/img/``
+(česky), ``img/en/`` a ``img/de/``: kolac.png (kam šla výroba) a
 den_priblizna.png / den_presna.png (den, kdy přesná metoda přidá nejvíc). Členy pojmenuje
 anonymně „Odběr 1 (10 %)“ atd. Jazyk volí ``--lang cs|en|de|all`` (výchozí je all).
 
@@ -21,7 +21,9 @@ from edc_data import (
 )
 from recompute import recompute
 
-from . import LANGS, img_dir
+from clanky import DO_POSLEDNI_KWH, LANGS
+
+img_dir = DO_POSLEDNI_KWH.img_dir
 
 KEYS = [0.1, 0.5, 0.1, 0.1, 0.1]      # skupina z článku (součet 90 %)
 T = {
@@ -110,7 +112,7 @@ def main() -> None:
     ap.add_argument("--keys", default=",".join(map(str, KEYS)),
                     help="klíče odběrných míst jako podíly, oddělené čárkou")
     ap.add_argument("--lang", default="all", choices=("all", *LANGS))
-    ap.add_argument("--out", help="výstupní složka (výchozí clanek/img, img/en, img/de)")
+    ap.add_argument("--out", help="výstupní složka (výchozí img, img/en, img/de článku)")
     a = ap.parse_args()
 
     d = load_report(Path(a.csv).read_bytes())

@@ -24,9 +24,9 @@ import io
 from pathlib import Path
 
 import dash
-from flask import Response, request, send_file, send_from_directory
+from flask import Response, abort, redirect, request, send_file, send_from_directory
 
-import clanek
+import clanky
 import config
 import export
 import jobs
@@ -66,17 +66,38 @@ app.index_string = INDEX_STRING.replace("__APP_VERSION__", VERSION)
 app.layout = layout()
 
 
+def _article_or_404(slug: str, lang: str) -> "clanky.Article":
+    article = clanky.by_slug(slug)
+    if article is None or lang not in article.langs:
+        abort(404)
+    return article
+
+
+@server.route("/clanky/<slug>/", defaults={"lang": "cs"})
+@server.route("/clanky/<slug>/<any(en,de):lang>/")
+def _article(slug: str, lang: str):
+    """An explanatory article in ``lang``, assembled from its folder in clanky/ on every
+    request."""
+    return Response(_article_or_404(slug, lang).render(lang), mimetype="text/html")
+
+
+@server.route("/clanky/<slug>/img/<path:name>", defaults={"lang": "cs"})
+@server.route("/clanky/<slug>/<any(en,de):lang>/img/<path:name>")
+def _article_img(slug: str, lang: str, name: str):
+    return send_from_directory(_article_or_404(slug, lang).img_dir(lang), name)
+
+
+# The first article used to be at /clanek/ (links in the wild keep working).
 @server.route("/clanek/", defaults={"lang": "cs"})
 @server.route("/clanek/<any(en,de):lang>/")
-def _article(lang: str):
-    """The explanatory article in ``lang``, assembled from clanek/ on every request."""
-    return Response(clanek.render(lang), mimetype="text/html")
+def _old_article(lang: str):
+    return redirect(clanky.DO_POSLEDNI_KWH.url(lang), code=301)
 
 
 @server.route("/clanek/img/<path:name>", defaults={"lang": "cs"})
 @server.route("/clanek/<any(en,de):lang>/img/<path:name>")
-def _article_img(lang: str, name: str):
-    return send_from_directory(clanek.img_dir(lang), name)
+def _old_article_img(lang: str, name: str):
+    return redirect(clanky.DO_POSLEDNI_KWH.url(lang) + "img/" + name, code=301)
 
 
 @server.route("/favicon.ico")

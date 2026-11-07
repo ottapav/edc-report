@@ -1,6 +1,6 @@
 """Schémata článku jako inline SVG (barvy přes CSS třídy napojené na tokeny stránky).
 
-Každá funkce vrací jedno <svg> v daném jazyce (cs / en / de); clanek.render() jím nahradí
+Každá funkce vrací jedno <svg> v daném jazyce (cs / en / de); clanky.Article.render() jím nahradí
 značku {{JMÉNO}} v clanek.html (clanek.en.html, clanek.de.html). Texty schémat jsou
 v tabulce ``T``, čísla se píšou s desetinnou čárkou (cs, de) nebo tečkou (en)."""
 

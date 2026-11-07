@@ -81,6 +81,9 @@ code { font-family: var(--mono); font-size: .9em; }
 .keypoint span { color: var(--accent); }
 
 ul.plain { margin: .8rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .35rem; }
+ol.plain { margin: .8rem 0 0; padding-left: 1.4rem; display: flex; flex-direction: column; gap: .35rem; }
+/* a draft's gap to fill in (shown in the preview, removed before publishing) */
+mark.todo { background: #ffe58a; color: #1a1a1a; padding: 0 .25em; border-radius: 3px; font-weight: 600; }
 
 .sources { font: 400 .84rem/1.55 var(--display); color: var(--muted); border-top: 1px solid var(--rule); margin-top: 3rem; padding-top: 1rem; }
 .sources h2 { font-size: 1rem; margin-top: 0; color: var(--ink); }

@@ -218,6 +218,8 @@ STRINGS: dict[str, str] = {
     "bill_hint": "Zahlung = Preis × geteilt − Anteil am Nutzen. Der Erzeuger erhält die Summe der "
                  "Zahlungen; sein Anteil ist diese Summe abzüglich dessen, was die geteilte Energie zum "
                  "Einspeisepreis eingebracht hätte. Mitglieder, deren Preis nicht über dem Einspeisepreis liegt, erhalten keinen Anteil.",
+    "bill_negative": "Negative Zahlung: Nach den Schlüsseln bekam das Mitglied weniger Strom, als seinem Beitrag entspricht, und sein Anteil am Nutzen ist größer als das, was es bei diesem Strom beim Lieferanten gespart hat. Den Unterschied zahlt ihm der Erzeuger. Die Anteile hängen nicht von den Schlüsseln ab; Schlüssel näher am Verbrauch der Mitglieder beseitigen negative Zahlungen meist.",
+    "bill_negative_n": "Negative Zahlung: Nach den Schlüsseln bekam das Mitglied weniger Strom, als seinem Beitrag entspricht, und sein Anteil am Nutzen ist größer als das, was es bei diesem Strom beim Lieferanten gespart hat. Den Unterschied zahlen ihm die Erzeuger. Die Anteile hängen nicht von den Schlüsseln ab; Schlüssel näher am Verbrauch der Mitglieder beseitigen negative Zahlungen meist.",
     "bill_hint_n": "Zahlung = Preis × geteilt − Anteil am Nutzen. Die Zahlungen bilden einen Pool; jede Erzeugungsanlage "
                    "erhält den Einspeisewert der von ihr geteilten Energie plus ihren Anteil am Nutzen (der "
                    "Report sagt nicht, wer wen beliefert hat). Die günstigste Erzeugung geht an den teuersten "
