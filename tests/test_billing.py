@@ -240,8 +240,8 @@ def test_billing_in_the_right_column(entry_key):
     per-interval values add up to the settlement."""
     entry, _rows, _job = _billed(entry_key, "en")
     data, bill = entry.data, entry.bill.settlement
-    assert report.right_mode(entry, "bill") == "bill"
-    assert report.right_mode(entry, "exact") == "bill"          # no recompute yet
+    assert report.right_mode(entry, "bill") == "bill"          # the billing tab
+    assert report.right_mode(entry, "sharing") is None          # no recompute yet
     enabled = set(data.dest_eans[:3])                           # two members unticked
     cols, n_rest = figures.bill_columns(entry.bill.per_interval, data, enabled, None)
     assert n_rest == 0

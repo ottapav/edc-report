@@ -1,11 +1,12 @@
 """The page: top bar, upload, the side panel and the report.
 
-The report has two tabs next to the panel. **Sharing**: two cards that start a
-computation (the exact static method and the billing; :func:`job_card`), and two
-columns: the EDC report on the left, the exact method or the billing on the right.
-Paired cards of the two columns share CSS grid rows (see ``.compare.dual`` in
-``assets/style.css``). **Spot market**: the surplus sold on the OTE day-ahead market
-instead of shared (a card that fetches the prices, tiles, figures, a table).
+The report has three tabs next to the panel. **Sharing**: the report's facts and the
+card of the exact static method; **Billing**: the card of the billing by contribution
+(:func:`job_card` both). The two tabs share two columns: the EDC report on the left, the
+tab's computation on the right (the exact method, or the billing). Paired cards of the
+two columns share CSS grid rows (see ``.compare.dual`` in ``assets/style.css``). **Spot
+market**: the surplus sold on the OTE day-ahead market instead of shared (a card that
+fetches the prices, tiles, figures, a table).
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ GRAPH_CONFIG = {
 #: the computations with a card, a progress bar and a result revision counter
 JOB_KINDS = ("exact", "bill", "spot")
 #: the tabs of the report
-TABS = ("sharing", "spot")
+TABS = ("sharing", "bill", "spot")
 #: the figures of the spot tab
 SPOT_FIGURES = ("parties", "mix", "members", "daily", "hourly", "monthly")
 #: figures that appear in both columns, in row order; "fig-<name>" left, "fig-<name>-b" right
@@ -199,7 +200,7 @@ def spot_fig_id(name: str) -> str:
 
 def _spot_bill_box() -> html.Div:
     """Who gets what needs the billing by contribution: why it is missing, its button,
-    and its progress (mirrored from the billing card on the sharing tab)."""
+    and its progress (mirrored from the billing card on the billing tab)."""
     return html.Div(id="spot-bill-box", className="spot-bill", style={"display": "none"},
                     children=[
         html.P(id="spot-bill-note", className="hint stale"),
@@ -250,13 +251,19 @@ def _tabs() -> dcc.Tabs:
 def _report() -> html.Div:
     return html.Div(id="report", className="report hidden", children=[
         _panel(),
-        html.Main(className="main", children=[_tabs(), html.Div(
-            id="pane-sharing", className="pane", children=_sharing_pane()), _spot_pane()]),
+        html.Main(className="main", children=[
+            _tabs(),
+            html.Div(id="pane-sharing", className="pane", children=_sharing_pane()),
+            html.Div(id="pane-bill", className="pane", style={"display": "none"},
+                     children=_bill_pane()),
+            html.Div(id="pane-columns", className="pane", children=_columns()),
+            _spot_pane(),
+        ]),
     ])
 
 
 def _sharing_pane() -> list:
-    """The sharing tab: the report's facts, the two computation cards, the columns."""
+    """The sharing tab above the columns: the report's facts, the exact method's card."""
     return [
         html.Section(className="card", children=[
             html.H2(id="info-title"), html.Div(id="info"), html.Div(id="notes")]),
@@ -264,14 +271,22 @@ def _sharing_pane() -> list:
                  [html.Div(id="exact-pool"), _pair_box(), html.Div(id="fit-info"),
                   html.Div(id="exact-stale"),
                   html.Div(id="exact-result")], link=ARTICLE_URL),
+    ]
+
+
+def _bill_pane() -> list:
+    """The billing tab above the columns: the card of the billing by contribution."""
+    return [
         job_card("bill", [_number_input("feed-in", "lbl-feed-in"),
                           _number_input("price-default", "lbl-price-default")],
                  [html.Div(id="bill-stale"), html.Div(id="bill-result")]),
-        # what the right column shows when both computations exist
-        html.Div(id="right-view-box", className="right-view", style={"display": "none"},
-                 children=[html.Span(id="lbl-right-view", className="field-label"),
-                           dcc.RadioItems(id="right-view", value="exact", inline=True,
-                                          className="seg")]),
+    ]
+
+
+def _columns() -> list:
+    """The two columns of the sharing and billing tabs, and the full-width table of
+    the tab's computation below them."""
+    return [
         html.Div(id="compare", className="compare single",
                  children=[_column("a"), _column("b")]),
         _wide_card("cmp"),          # exact method: EDC vs exact per destination

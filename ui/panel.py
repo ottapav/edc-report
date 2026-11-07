@@ -25,7 +25,6 @@ LABELS = [
     ("table-title", "children", "table_title"),
     ("cmp-title", "children", "cmp_title"),
     ("settle-title", "children", "bill_table_title"),
-    ("lbl-right-view", "children", "right_view"),
     ("theme-btn", "title", "theme_toggle"),
     # panel
     ("lbl-source-hint", "children", "panel_source_hint"),
@@ -60,6 +59,7 @@ LABELS = [
     ("pair-hint", "children", "pair_hint"),
     # tabs, spot tab
     ("tab-sharing", "label", "tab_sharing"),
+    ("tab-bill", "label", "tab_bill"),
     ("tab-spot", "label", "tab_spot"),
     ("spot-title", "children", "spot_title"),
     ("spot-desc", "children", "spot_desc"),

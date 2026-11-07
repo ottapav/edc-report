@@ -26,9 +26,9 @@ The interface is available in Czech, English and German (switch in the top bar; 
 > souhrny, denní a hodinové grafy, teplotní mapu a podíl, který „mohl být sdílen“.
 > Z reportu odhadne alokační klíče (přibližná statická metoda EDC s 1 nebo 5 koly, i pro velké skupiny).
 > Jedním tlačítkem přepočítá sdílení přesnou statickou metodou a porovná ji s dneškem.
-> Dalším tlačítkem spočítá vyúčtování sdílené elektřiny podle přínosu (Shapleyho hodnota)
+> Záložka Vyúčtování spočítá vyúčtování sdílené elektřiny podle přínosu (Shapleyho hodnota)
 > (zadáte ceny od prodejce a výkupní ceny výroben).
-> Druhá záložka ukáže, co by vyneslo prodávat celý přebytek na spotovém trhu (denní trh OTE)
+> Třetí záložka ukáže, co by vyneslo prodávat celý přebytek na spotovém trhu (denní trh OTE)
 > místo sdílení: ceny OTE se stáhnou samy, srovnání po členech, dnech a měsících.
 > Souhrn lze stáhnout jako Excel nebo vytisknout do PDF.
 > Rozhraní je v češtině i angličtině, se světlým i tmavým režimem.
@@ -112,7 +112,7 @@ The interface is available in Czech, English and German (switch in the top bar; 
 * **Timing:** the number of intervals evaluated, total time, and time per interval, split by
   the method's fast paths.
 
-**Billing by contribution (the Shapley value; proposal):**
+**Billing by contribution (the Shapley value; proposal; the *Billing* tab):**
 
 * **Prices:** each member's supplier price (the *Price* column of the grid, next to the keys)
   and each producer's feed-in price (the producers' grid above it); the empty cells take the
@@ -122,18 +122,22 @@ The interface is available in Czech, English and German (switch in the top bar; 
   each has its own feed-in price.
 * **Compute:** one button computes the exact Shapley values over the whole report in the
   background, with a progress bar.
+* **Its own tab:** the *Sharing*, *Billing* and *Share or sell on spot?* tabs sit side by
+  side. The billing card (prices, button, progress) is on the *Billing* tab, the exact
+  method's card on the *Sharing* tab; both tabs show the same two columns, the EDC report on
+  the left and the tab's computation on the right.
 * **Right column:** like the exact method, the billing is drawn next to the EDC report, with
   the same cards in Kč: tiles (benefit, what the EDC sharing missed, producer's and members'
   shares, producer's income, feed-in value), the value of the shared electricity per member
   (share + payment), where the benefit went, the daily share (click a day), the selected day
-  in 15-min steps and the hour × month heatmap. When both the recompute and the billing
-  exist, a switch chooses the right column; a computation that has just finished is shown.
+  in 15-min steps and the hour × month heatmap. Before the billing is computed the tab shows
+  the EDC report alone.
 * **Settlement table** (full width below): per member the shared energy, its value at the
   supplier price, the fair share of the benefit, the payment to the producer and the
   effective price per kWh; per producer the energy it shared, its income, its share and the
   feed-in value it gave up.
 
-**Share or sell on spot?** (second tab; all report):
+**Share or sell on spot?** (third tab; all report):
 
 * The question is who gets what. With sharing, the members pay the producers as the
   **billing by contribution** says (the Shapley value): a producer gets its shared
@@ -530,12 +534,12 @@ callbacks from both.
 | Server state | `config.py` | Settings from environment variables |
 | | `store.py` | Uploaded reports and their results (key estimate, recompute, billing, spot prices), newest `EDC_CACHE_MAX` kept |
 | | `jobs.py` | Background computations: queue, child process, cancellation, progress; the spot prices are fetched without a CPU slot |
-| UI | `ui/layout.py` | The page; both computation cards come from one `job_card()` with ids `<kind>-btn`, `<kind>-progress`, … |
+| UI | `ui/layout.py` | The page and its three tabs; the computation cards come from one `job_card()` with ids `<kind>-btn`, `<kind>-progress`, … |
 | | `ui/members.py` | The members grid (tick, name, key, price) and reading what was typed in it |
 | | `ui/widgets.py`, `ui/views.py` | Tiles, facts, tables, result summaries (pure functions of the data) |
 | | `ui/panel.py` | Callbacks: labels (one table of id, property and string), theme, upload, grid buttons |
 | | `ui/compute.py` | Callbacks of the computation cards: start, one shared progress poll, results |
-| | `ui/report.py` | Callbacks of the report: the two columns, the hourly plot, the selected day |
+| | `ui/report.py` | Callbacks of the report: the two columns (the tab chooses the right one), the hourly plot, the selected day |
 | | `ui/spot.py` | Callbacks of the spot tab: the tabs, fetching the prices, the comparison |
 | | `ui/export.py` | Callbacks of the export: the workbook download, printing |
 | App | `app.py` | Creates the Dash app, `/healthz`, optional basic auth |
@@ -690,7 +694,7 @@ needed. It checks that:
 * every button works in a real browser (`tests/test_ui.py`, Playwright + Chromium, against the
   app served from the test process, with a fake OTE): upload, key estimate, recompute, the
   billing from its card and from the spot tab (also refused without prices), the spot prices
-  and their fee and curtailment, the right column, the day buttons, the heat-map metric,
+  and their fee and curtailment, the tabs and their right column, the day buttons, the heat-map metric,
   unticking a member, typing a key and putting the estimate back, export (with full EANs),
   print (light and dark), theme, the three languages, the article link, a bad file, two
   producers, and the reload offer after a deploy. Any console or HTTP error fails the test.

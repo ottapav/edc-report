@@ -498,6 +498,7 @@ def test_the_tab_fetches_once_and_renders(entry_key, monkeypatch):
 
 
 def test_layout_has_the_tabs_and_the_spot_card():
+    assert layout.TABS == ("sharing", "bill", "spot")
     ids = set()
 
     def walk(c):
@@ -508,7 +509,8 @@ def test_layout_has_the_tabs_and_the_spot_card():
             if hasattr(k, "to_plotly_json"):
                 walk(k)
     walk(layout.layout())
-    assert {"tabs", "tab-sharing", "tab-spot", "pane-sharing", "pane-spot", "spot-btn",
+    assert {"tabs", "tab-sharing", "tab-bill", "tab-spot", "pane-sharing", "pane-bill",
+            "pane-columns", "pane-spot", "bill-card", "spot-btn",
             "spot-fee", "spot-curtail", "spot-feed-in", "spot-price-default", "spot-table",
             "spot-bill-btn", "spot-bill-box"} <= ids
     assert {layout.spot_fig_id(n) for n in layout.SPOT_FIGURES} <= ids

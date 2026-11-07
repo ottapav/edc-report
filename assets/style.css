@@ -299,7 +299,7 @@ body {
   @page { size: A4; margin: 12mm; }
   body { background: #fff; }
   .upload, .status, .panel, .modebar-container, .lang, .rc-row, .progress,
-  .right-view, .article-link, .tabs-parent { display: none !important; }
+  .article-link, .tabs-parent { display: none !important; }
   .page { padding: 0; }
   .report { display: block; }
   .card { break-inside: avoid; border: 0; padding: 0 0 12px; box-shadow: none; }
@@ -404,5 +404,3 @@ input, .text-in, .num-in { background: var(--field); color: var(--ink); }
 .loss-text { font-size: 13px; margin-top: 4px; }
 
 /* switch for the right column (exact method / billing) */
-.right-view { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
-.right-view .field-label { margin: 0; }
