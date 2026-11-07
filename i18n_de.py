@@ -35,11 +35,14 @@ STRINGS: dict[str, str] = {
     # --- web UI ---
     "upload_prompt": "CSV-Report vom Portal edc-cr.cz hierher ziehen oder klicken und eine Datei wählen",
     "upload_hint": "Teilreport (Spalten <ean>-<ean>) oder Gesamtreport (Spalten IN/OUT-<ean>-D/O). "
-                   "Die Datei wird im Speicher verarbeitet und nicht gespeichert.",
+                   "Die Datei wird im Speicher verarbeitet und nie auf die Festplatte geschrieben; nach einer Stunde ohne Nutzung wird sie gelöscht.",
     "upload_other": "Andere Datei hochladen",
     "loaded": "Geladen",
     "error": "Die Datei konnte nicht gelesen werden",
-    "session_lost": "Die hochgeladenen Daten sind nicht mehr auf dem Server (er wurde neu gestartet). Bitte die Datei erneut hochladen.",
+    "session_lost": "Die hochgeladenen Daten sind nicht mehr auf dem Server (sie werden nach einer Stunde ohne Nutzung gelöscht, oder der Server wurde neu gestartet). Bitte die Datei erneut hochladen.",
+    "upload_too_big": "Der Report ist für diesen Server zu groß. Bitte einen kürzeren Zeitraum hochladen (z. B. einige Monate).",
+    "upload_busy": "Der Server verarbeitet gerade eine andere Datei. Bitte gleich noch einmal versuchen.",
+    "server_busy": "Der Server ist mit anderen Berechnungen ausgelastet. Bitte in ein paar Minuten erneut versuchen.",
     "panel_dest": "Verbrauchsstellen",
     "panel_dest_hint": "Anhaken zum Einbeziehen; einen Namen eintippen zum Umbenennen.",
     "panel_source": "Erzeugungsanlage",
@@ -89,6 +92,7 @@ STRINGS: dict[str, str] = {
     # --- keys at upload, jobs, theme ---
     "job_cancelled": "Die Berechnung wurde abgebrochen (eine andere Datei wurde hochgeladen oder die Seite reagierte nicht mehr). Bitte neu starten.",
     "job_timeout": "Die Berechnung dauerte zu lange und wurde gestoppt. Bitte einen kleineren Report versuchen.",
+    "job_memory": "Der Berechnung ging der Serverspeicher aus, sie wurde gestoppt. Bitte einen kürzeren Zeitraum versuchen.",
     "job_lost": "Die Berechnung ging zusammen mit den hochgeladenen Daten verloren (der Server wurde neu gestartet oder schlief ein). Bitte die Datei erneut hochladen.",
     "queued": "Wartet auf einen freien Platz (eine andere Berechnung läuft)",
     "fit_title": "Aus dem Report geschätzte Allokationsschlüssel",

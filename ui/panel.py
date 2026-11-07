@@ -11,7 +11,6 @@ from dash import Input, Output, State, callback, clientside_callback, html, no_u
 import config
 import jobs
 import store
-from edc_data import load_report
 from figures import heat_metrics
 import clanky
 from i18n import date_picker_format, t, tn
@@ -200,11 +199,14 @@ def _on_upload(contents, filename, lang, old_key):
         _header, b64 = contents.split(",", 1)
         if len(b64) * 3 / 4 > config.MAX_UPLOAD_MB * 2**20:
             raise ValueError(f"file is larger than {config.MAX_UPLOAD_MB:g} MB")
-        data = load_report(base64.b64decode(b64))
+        # parsed in a child process with a memory budget, one upload at a time
+        data = jobs.parse_report(base64.b64decode(b64))
     except Exception as exc:  # show any parse error to the user
+        reason = (t("upload_too_big", lang) if isinstance(exc, jobs.TooBig)
+                  else t("upload_busy", lang) if isinstance(exc, jobs.Busy) else exc)
         return {**out, "key": None, "sources": [], "report": "report hidden",
                 "box": "upload upload-big",
-                "status": html.Div([html.B(f"{t('error', lang)}: "), f"{filename} — {exc}"],
+                "status": html.Div([html.B(f"{t('error', lang)}: "), f"{filename} — {reason}"],
                                    className="status-error")}
     key = store.put(filename or "report.csv", data)
     days = data.frame.index.normalize()
@@ -222,7 +224,10 @@ def _on_upload(contents, filename, lang, old_key):
     if data.fmt == "all":
         # estimate the keys right away, to check them before a recompute (several
         # producers: for their pool, see recompute.to_hundredths)
-        out.update(fit_job=jobs.start_fit(key), fit_poll_off=False)
+        try:
+            out.update(fit_job=jobs.start_fit(key), fit_poll_off=False)
+        except jobs.Busy:            # the recompute estimates the keys itself when started
+            out.update(fit_job=None)
     return out
 
 

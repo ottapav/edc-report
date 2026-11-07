@@ -199,15 +199,18 @@ def _detect_format(columns: list[str]) -> str:
 
 
 def _attach_datetime_index(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
-    """The rows indexed by their start time, sorted; and notes about dropped rows."""
+    """The rows indexed by their start time, sorted; and notes about dropped rows. Works
+    without a copy of the whole table where it can (a large report is ~10 million cells)."""
     if "Datum" not in df.columns or "Cas od" not in df.columns:
         raise ValueError("CSV is missing the 'Datum' / 'Cas od' columns.")
-    out = df.copy()
-    out["datetime"] = pd.to_datetime(
-        out["Datum"].astype(str).str.strip() + " " + out["Cas od"].astype(str).str.strip(),
+    stamps = pd.to_datetime(
+        df["Datum"].astype(str).str.strip() + " " + df["Cas od"].astype(str).str.strip(),
         format="%d.%m.%Y %H:%M",
     )
-    return _drop_detached(out.set_index("datetime").sort_index())
+    df = df.set_axis(pd.DatetimeIndex(stamps, name="datetime"), axis=0)
+    if not df.index.is_monotonic_increasing:
+        df = df.sort_index(kind="stable")
+    return _drop_detached(df)
 
 
 #: rows separated from the rest by a longer gap form a block of their own
@@ -348,29 +351,48 @@ def _load_all(df: pd.DataFrame) -> SharingData:
     )
 
 
-def load_report(content: bytes) -> SharingData:
-    """Parse the raw bytes of a CSV report downloaded from edc-cr.cz."""
-    text = None
-    for enc in ("utf-8-sig", "cp1250", "latin-1"):
+def _encoding(content: bytes) -> str:
+    """The first of UTF-8 (with or without BOM), cp1250 and latin-1 that decodes the file."""
+    for enc in ("utf-8-sig", "cp1250"):
         try:
-            text = content.decode(enc)
-            break
+            content.decode(enc)
+            return enc
         except UnicodeDecodeError:
             continue
-    if text is None:  # pragma: no cover - latin-1 never fails
-        raise ValueError("Could not decode the file.")
-    text_cols = {"Datum": str, "Cas od": str, "Cas do": str}
-    raw = pd.read_csv(
-        io.StringIO(text), sep=";", decimal=",", skipinitialspace=True,
-        index_col=False, dtype=text_cols,
-    )
+    return "latin-1"                                   # decodes any bytes
+
+
+_TEXT_COLS = {"Datum": str, "Cas od": str, "Cas do": str}
+
+
+def _needed_columns(header: list[str]) -> list[int]:
+    """Positions of the columns the report's format uses (the time, and the EAN columns
+    of that format): the others are not parsed at all."""
+    names = [str(c).strip() for c in header]
+    fmt = _detect_format(names)
+    want = ((_RE_PAIR,) if fmt == "part"
+            else (_RE_PROD_IN, _RE_PROD_OUT, _RE_CONS_IN, _RE_CONS_OUT))
+    return [i for i, n in enumerate(names)
+            if n in _TEXT_COLS or any(r.match(n) for r in want)]
+
+
+def load_report(content: bytes) -> SharingData:
+    """Parse the raw bytes of a CSV report downloaded from edc-cr.cz."""
+    enc = _encoding(content)
+    opts = dict(encoding=enc, sep=";", decimal=",", skipinitialspace=True, index_col=False)
+    header = list(pd.read_csv(io.BytesIO(content), nrows=0, **opts).columns)
+    # read from the bytes (a decoded copy of a large file costs several times its size),
+    # and only the columns the format needs
+    raw = pd.read_csv(io.BytesIO(content), usecols=_needed_columns(header),
+                      dtype=_TEXT_COLS, **opts)
     raw.columns = [str(c).strip() for c in raw.columns]
     # numbers are parsed by read_csv (decimal comma); only odd columns need help
     for c in raw.columns:
-        if c not in text_cols and raw[c].dtype == object:
+        if c not in _TEXT_COLS and raw[c].dtype == object:
             raw[c] = pd.to_numeric(raw[c].astype(str).str.replace(",", ".", regex=False),
                                    errors="coerce")
-    raw = raw.dropna(subset=["Datum"]) if "Datum" in raw.columns else raw
+    if "Datum" in raw.columns and raw["Datum"].isna().any():
+        raw = raw.dropna(subset=["Datum"])
     fmt = _detect_format(list(raw.columns))
     return _load_part(raw) if fmt == "part" else _load_all(raw)
 

@@ -5,7 +5,14 @@ Each job runs in a thread that waits for a free slot (at most ``config.MAX_JOBS`
 once; small instances have < 1 CPU) and runs the heavy part in a forked child process
 (:mod:`procjob`), so the web server's request threads stay free for progress polls and
 the job can be cancelled. A job stops itself when its result is no longer wanted: the
-upload was replaced or evicted, or the page stopped polling for ``config.JOB_IDLE_S``.
+upload was replaced or evicted, or the page stopped polling for ``config.JOB_IDLE_S``;
+and it is stopped after ``config.JOB_TIMEOUT_S`` of work.
+
+Limits that keep one client from taking the server (anyone can send the callbacks the
+page sends, buttons or not): a report has one job of a kind at a time (a new one replaces
+it), at most ``config.MAX_PENDING`` jobs are unfinished at once (more are refused,
+:class:`Busy`), and an upload is parsed in a child process with a memory budget, one at a
+time (:func:`parse_report`).
 """
 
 from __future__ import annotations
@@ -17,13 +24,16 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from pandas.errors import ParserError
+
 import config
 import spot
 import store
 from billing import BillResult, compute_shapley
-from edc_data import per_destination, producer_arrays, supplied_per_source
+from edc_data import (SharingData, load_report, per_destination, producer_arrays,
+                      supplied_per_source)
 from keyfit import estimate_keys, estimate_pair_keys
-from procjob import JobCancelled, JobTimeout, run_in_child
+from procjob import JobCancelled, JobTimeout, WorkerDied, limit_memory, run_in_child
 from recompute import InvalidKeys, recompute, to_hundredths, to_hundredths_multi
 
 
@@ -47,8 +57,14 @@ class Job:
         self.phase, self.frac = phase, frac
 
     def cancelled(self) -> bool:
+        """True when the result is no longer wanted. Raises :class:`JobTimeout` when the
+        work has run longer than ``config.JOB_TIMEOUT_S`` (every long step polls this, so
+        the limit holds wherever the job is)."""
+        now = time.perf_counter()
+        if self.phase != "queued" and now - self.t0 > config.JOB_TIMEOUT_S:
+            raise JobTimeout(f"stopped after {config.JOB_TIMEOUT_S:g} s")
         return (self.cancel.is_set() or not store.contains(self.data_key)
-                or time.perf_counter() - self.seen > config.JOB_IDLE_S)
+                or now - self.seen > config.JOB_IDLE_S)
 
     @property
     def fraction(self) -> float:
@@ -61,6 +77,16 @@ class Job:
 
 JOBS: dict[str, Job] = {}
 _SLOTS = threading.BoundedSemaphore(config.MAX_JOBS)
+_START = threading.Lock()
+
+
+class Busy(Exception):
+    """Too many computations at once (``config.MAX_PENDING``), or another upload is being
+    parsed: the request is refused, the user tries again in a while."""
+
+
+class TooBig(Exception):
+    """The report needs more memory to parse than ``config.PARSE_MB``."""
 
 Work = Callable[[store.Entry, Job], None]
 
@@ -78,13 +104,22 @@ def stats() -> dict:
 
 def start(kind: str, data_key: str, work: Work, slot: bool = True) -> str:
     """Run ``work(entry, job)`` in the background; return the job id. ``slot``: wait for
-    one of the ``MAX_JOBS`` slots (CPU-bound work); network waits need none."""
-    now = time.perf_counter()
-    for old in [i for i, j in list(JOBS.items())
-                if (j.reported and now - j.t0 > 60) or now - j.t0 > 3600]:
-        JOBS.pop(old, None)
-    job_id = uuid.uuid4().hex
-    JOBS[job_id] = job = Job(kind, data_key)
+    one of the ``MAX_JOBS`` slots (CPU-bound work); network waits need none. A running
+    job of the same kind for the same report is cancelled (its result would be replaced);
+    :class:`Busy` when ``config.MAX_PENDING`` jobs are unfinished."""
+    with _START:
+        now = time.perf_counter()
+        for old in [i for i, j in list(JOBS.items())
+                    if (j.reported and now - j.t0 > 60) or now - j.t0 > 3600]:
+            JOBS.pop(old, None)
+        live = [j for j in JOBS.values() if not j.done and not j.cancel.is_set()]
+        for j in live:
+            if j.kind == kind and j.data_key == data_key:
+                j.cancel.set()
+        if sum(not j.cancel.is_set() for j in live) >= config.MAX_PENDING:
+            raise Busy()
+        job_id = uuid.uuid4().hex
+        JOBS[job_id] = job = Job(kind, data_key)
     threading.Thread(target=_run, args=(job, work, slot), daemon=True).start()
     return job_id
 
@@ -107,6 +142,12 @@ def _run(job: Job, work: Work, slot: bool = True) -> None:
         job.error_key = "job_cancelled"
     except JobTimeout:
         job.error_key = "job_timeout"
+    except MemoryError:
+        job.error_key = "job_memory"
+    except WorkerDied as exc:
+        if not exc.killed:
+            raise
+        job.error_key = "job_memory"                 # the kernel's OOM killer, most likely
     except InvalidKeys as exc:
         job.error_key = exc.reason
     except spot.SpotError as exc:                    # OTE unreachable or answered oddly
@@ -116,6 +157,44 @@ def _run(job: Job, work: Work, slot: bool = True) -> None:
         job.error = str(exc)
     finally:
         job.done = True
+
+
+# ---------------------------------------------------------------------------
+# Parsing an upload
+# ---------------------------------------------------------------------------
+
+_PARSE = threading.Lock()
+
+
+def _parse_child(content: bytes, budget_mb: float, progress) -> SharingData:
+    limit_memory(budget_mb)              # procjob lifts it again before sending the result
+    try:
+        return load_report(content)
+    except ParserError as exc:           # pandas' C reader reports its own out-of-memory
+        if "out of memory" in str(exc):
+            raise MemoryError() from None
+        raise
+
+
+def parse_report(content: bytes) -> SharingData:
+    """:func:`edc_data.load_report` in a child process that may take at most
+    ``config.PARSE_MB`` of memory, one upload at a time: a huge or odd file then fails
+    alone (:class:`TooBig`) and the server keeps every other user's data. Parse errors
+    (ValueError: not an EDC report, …) come back as they are. :class:`Busy` when another
+    upload is still being parsed after ``config.PARSE_WAIT_S``."""
+    if not _PARSE.acquire(timeout=config.PARSE_WAIT_S):
+        raise Busy()
+    try:
+        return run_in_child(_parse_child, (content, config.PARSE_MB), progress=_no_progress,
+                            timeout=config.PARSE_TIMEOUT_S, reraise=True)
+    except (MemoryError, WorkerDied, JobTimeout):
+        raise TooBig() from None
+    finally:
+        _PARSE.release()
+
+
+def _no_progress(phase: str, frac: float) -> None:
+    pass
 
 
 # ---------------------------------------------------------------------------

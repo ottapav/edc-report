@@ -28,6 +28,10 @@ projects:
         value: "25"
       - key: EDC_MAX_JOBS             # computations at once (instance has < 1 CPU)
         value: "2"
+      - key: EDC_CACHE_MB             # memory for the reports (+ ~110 MB server, PARSE_MB)
+        value: "150"
+      - key: EDC_PARSE_MB             # memory the parsing of one upload may take
+        value: "200"
       - key: BASIC_AUTH_USER          # optional: set both to password-protect the app
         sync: false
       - key: BASIC_AUTH_PASSWORD

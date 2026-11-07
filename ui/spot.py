@@ -20,7 +20,7 @@ from i18n import t
 from spot import compare, mix, replays, split
 
 from . import members, views
-from .compute import refused, start_outputs, started
+from .compute import refused, start_job, start_outputs
 from .layout import SPOT_FIGURES, job_ids, spot_fig_id
 
 _SPOT = job_ids("spot")
@@ -84,7 +84,7 @@ def start_spot(tab, key, job_id, lang):
         return refused("part_no_spot", lang)
     if _running(job_id, key) or entry.spot is not None:
         raise dash.exceptions.PreventUpdate
-    return started(jobs.start_spot(key))
+    return start_job(jobs.start_spot, lang, key)
 
 
 #: what the comparison depends on (the prices and the fee typed, the selection, …)

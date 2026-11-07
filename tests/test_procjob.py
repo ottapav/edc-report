@@ -105,3 +105,52 @@ def test_two_children_run_side_by_side():
     [th.start() for th in threads]
     [th.join(20) for th in threads]
     assert not errs and sorted(results) == [10.0, 40.0, 90.0]
+
+
+def _allocates(mb, progress):
+    from procjob import limit_memory
+    limit_memory(mb)
+    return len(bytearray(400 * 2**20))          # 400 MB: more than the budget
+
+
+def _small_after_limit(progress):
+    from procjob import limit_memory
+    limit_memory(50)
+    return sum(range(1000))
+
+
+def test_a_child_over_its_memory_budget_fails_alone():
+    """The budget makes the allocation fail in the child (MemoryError), which still
+    reports it; the parent keeps running."""
+    with pytest.raises(MemoryError):
+        run_in_child(_allocates, (50,), progress=_noop)
+    assert run_in_child(_small_after_limit, progress=_noop) == 499500   # result still sent
+    assert not mp.active_children()
+
+
+def test_reraise_gives_the_childs_own_exception():
+    with pytest.raises(ValueError, match="boom"):
+        run_in_child(_fails, progress=_noop, reraise=True)
+
+
+def test_a_killed_child_is_told_apart():
+    from procjob import WorkerDied
+    with pytest.raises(WorkerDied) as died:
+        run_in_child(_killed, progress=_noop)
+    assert died.value.killed
+    with pytest.raises(WorkerDied) as died:
+        run_in_child(_dies, progress=_noop)
+    assert not died.value.killed and died.value.exitcode == 3
+
+
+def _killed(progress):
+    os.kill(os.getpid(), signal.SIGKILL)
+
+
+def test_children_are_the_first_to_go_when_memory_runs_out():
+    assert run_in_child(_oom_score, progress=_noop) == 1000
+
+
+def _oom_score(progress):
+    with open("/proc/self/oom_score_adj") as f:
+        return int(f.read())

@@ -123,9 +123,39 @@ def _healthz():
     return {"status": "ok", "cached_reports": store.size(), **jobs.stats()}
 
 
+#: Browser protections on every response. Dash and the grid evaluate code given as text
+#: (clientside callbacks, grid functions), hence 'unsafe-eval'; Dash inlines its config,
+#: hence 'unsafe-inline'. The rest still holds: nothing loads from or talks to other
+#: sites (but the articles' web fonts), no plugins, no framing (clickjacking).
+CSP = "; ".join([
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "img-src 'self' data: blob:",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+])
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CSP,
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+
+
 @server.after_request
-def _version_header(response: Response) -> Response:
+def _headers(response: Response) -> Response:
     response.headers["X-App-Version"] = VERSION
+    for name, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    # behind the hosting's TLS proxy: browsers keep to https from then on
+    if request.headers.get("X-Forwarded-Proto") == "https" or request.is_secure:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
     return response
 
 

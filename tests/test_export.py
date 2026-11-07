@@ -182,3 +182,20 @@ def test_prepared_files_expire_and_are_bounded(monkeypatch):
     assert store.get_file(tokens[0]) is None and store.get_file(tokens[-1]).name.endswith(".xlsx")
     monkeypatch.setattr(store, "FILE_TTL_S", -1)
     assert store.get_file(tokens[-1]) is None
+
+
+def test_a_name_that_looks_like_a_formula_stays_text(entry_key):
+    """A member called "=HYPERLINK(…)" (or any "=…") is written as text: the export goes
+    to the whole group, and Excel must not run what someone typed as a name."""
+    key, _ = entry_key
+    entry = store.get(key)
+    data = entry.data
+    names = members.default_names(data, "cs")
+    evil = '=HYPERLINK("https://example.com","klikni")'
+    names[data.dest_eans[0]] = evil
+    raw = export.summary_xlsx(entry, set(data.dest_eans), names, "cs", group="=1+1")
+    book = load_workbook(io.BytesIO(raw))
+    cells = [c for ws in book.worksheets for row in ws.iter_rows() for c in row
+             if isinstance(c.value, str) and c.value.startswith("=")]
+    assert cells and {c.value for c in cells} >= {evil}
+    assert all(c.data_type == "s" for c in cells)
