@@ -11,6 +11,7 @@ from dash import Input, Output, State, callback, clientside_callback
 import export
 import store
 from i18n import t
+from spot import split
 
 from . import members
 from .spot import comparison, part_on_spot
@@ -34,14 +35,15 @@ def summary_file(key, selected, rows, src_rows, lang, group, full_ean,
     pairs = None
     if len(data.source_eans) > 1 and pair_rows:
         pairs = members.merged_pair_keys(members.pair_keys(data, pair_rows), entry.fit)
-    spot_cmp = spot_mix = None
+    spot_cmp = spot_mix = spot_split = None
     if entry.spot is not None and data.fmt == "all":
         spot_cmp = comparison(entry, rows, src_rows, *(spot_inputs or (None, None, None, None)))
         spot_mix, _why = part_on_spot(entry, spot_cmp, rows, pair_rows, lang)
+        spot_split = split(spot_cmp, entry.bill)
     content = export.summary_xlsx(
         entry, members.enabled(data, selected), members.names(data, lang, src_rows, rows),
         lang, group=group, full_ean="full" in (full_ean or []), pair_keys=pairs,
-        spot_cmp=spot_cmp, spot_mix=spot_mix)
+        spot_cmp=spot_cmp, spot_mix=spot_mix, spot_split=spot_split)
     name = export.file_name(data, lang, group)
     return f"/export/{store.put_file(name, content)}/{quote(name)}"
 

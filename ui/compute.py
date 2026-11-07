@@ -98,15 +98,16 @@ def start_exact(n, key, rows, reserve, lang, pair_rows=None):
 
 @callback(
     output=start_outputs("bill"),
-    inputs=dict(n=Input(_BILL["btn"], "n_clicks")),
+    # the billing card's button, or the spot tab's (who gets what needs the billing)
+    inputs=dict(n=Input(_BILL["btn"], "n_clicks"), n_spot=Input("spot-bill-btn", "n_clicks")),
     state=dict(key=State("data-key", "data"), rows=State("members", "rowData"),
                src_rows=State("producers", "rowData"),
                feed_in=State("feed-in", "value"), default=State("price-default", "value"),
                lang=State("lang", "value")),
     prevent_initial_call=True,
 )
-def start_bill(n, key, rows, src_rows, feed_in, default, lang):
-    if not n:
+def start_bill(n, key, rows, src_rows, feed_in, default, lang, n_spot=None):
+    if not (n or n_spot):
         raise dash.exceptions.PreventUpdate
     entry = store.get(key)
     stop = _usable(entry, lang, "part_no_bill")

@@ -1,9 +1,9 @@
 """The spot-market figures (Kč): what the surplus is worth with sharing and on spot.
 
 * value by the share of the production sold on spot (:func:`fig_spot_mix`)
-* from spot to sharing, step by step             (:func:`fig_spot_waterfall`)
-* with sharing vs on spot, per member            (:func:`fig_spot_members`)
-* gain of sharing per day                        (:func:`fig_spot_daily`)
+* who gets what: producers and members           (:func:`fig_spot_parties`)
+* with sharing vs on spot, per participant       (:func:`fig_spot_members`)
+* what sharing brings per day                    (:func:`fig_spot_daily`)
 * spot price and the surplus on one day          (:func:`fig_spot_intraday`)
 * prices per month                               (:func:`fig_spot_monthly`)
 
@@ -17,9 +17,9 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from edc_data import POOL, SharingData
+from edc_data import SharingData
 from i18n import fmt_num, fmt_signed, month_label, t
-from spot import Comparison, Mix, monthly
+from spot import Comparison, Mix, Split, monthly
 
 from .base import (
     OTHER, OTHER_COLOUR, THEMES, colour_map, daily_layout, date_text, figure, member_groups,
@@ -102,81 +102,81 @@ def fig_spot_mix(m: Mix | None, lang: str = "cs", th: dict | None = None,
 
 
 # ---------------------------------------------------------------------------
-# From spot to sharing
+# Who gets what
 # ---------------------------------------------------------------------------
 
 
-def fig_spot_waterfall(cmp: Comparison, lang: str = "cs", th: dict | None = None) -> go.Figure:
-    """The surplus on spot, what the shared energy and the unshared surplus add (or
-    lose) with sharing, and the value with sharing."""
+def fig_spot_parties(cmp: Comparison, sp: Split | None, lang: str = "cs",
+                     th: dict | None = None, note: str | None = None) -> go.Figure:
+    """Sharing (producers paid by the billing by contribution), sharing with the
+    unshared rest on spot (when that pays more than the feed-in price), all on spot:
+    stacked what the producers get and what the members save. Without the billing only
+    the group's totals, with ``note`` saying why."""
     th = th or THEMES["light"]
-    fig = figure(t("spot_wf_title", lang), lang, 440, th)
+    fig = figure(t("spot_parties_title", lang), lang, 440, th)
     if not cmp.valid.any():
         return no_data(fig, lang, th)
-    R = cmp.spot_revenue
-    steps = [(t("spot_wf_spot", lang), 0.0, R, th["unshared"], _kc(R, lang))]
-    if cmp.priced:
-        gs, gu = cmp.gain_shared, cmp.gain_unshared
-        steps += [
-            (t("spot_wf_shared", lang), R, gs, _gain_colour(gs, th), _kc(gs, lang, True)),
-            (t("spot_wf_unshared", lang), R + gs, gu, _gain_colour(gu, th), _kc(gu, lang, True)),
-            (t("spot_wf_sharing", lang), 0.0, cmp.sharing_value, th["total"],
-             _kc(cmp.sharing_value, lang)),
-        ]
-    x = [s[0] for s in steps]
-    fig.add_bar(x=x, y=[s[2] for s in steps], base=[s[1] for s in steps],
-                marker=dict(color=[s[3] for s in steps], line=dict(color=th["paper"], width=1)),
-                text=[s[4] for s in steps], textposition="outside", cliponaxis=False,
-                textfont=dict(size=12, color=th["ink"]),
-                customdata=[s[4] for s in steps], hovertemplate="%{x}: %{customdata}<extra></extra>",
-                showlegend=False)
-    # dotted connectors from the top of one step to the next
-    tops = [s[1] + s[2] for s in steps]
-    shapes = [dict(type="line", xref="x", yref="y", x0=i + 0.4, x1=i + 0.6, y0=tops[i],
-                   y1=tops[i], line=dict(color=th["muted"], width=1, dash="dot"))
-              for i in range(len(steps) - 1)]
-    lo = min(0.0, *[min(s[1], s[1] + s[2]) for s in steps])
-    hi = max(0.0, *[max(s[1], s[1] + s[2]) for s in steps])
-    pad = 0.12 * (hi - lo or 1.0)
-    fig.update_layout(
-        shapes=shapes, bargap=0.35,
-        xaxis=dict(type="category", showgrid=False, tickangle=0, tickfont=dict(size=11)),
-        yaxis=dict(title=t("spot_kc", lang), range=[lo - (pad if lo < 0 else 0), hi + pad],
-                   tickformat=",.0f", zeroline=True, zerolinecolor=th["grid"]),
-    )
     if not cmp.priced:
-        fig.add_annotation(text=t("spot_need_prices_short", lang), x=0.98, y=0.5, xref="paper",
-                           yref="paper", xanchor="right", showarrow=False,
-                           font=dict(size=12, color=th["muted"]))
+        return _need_prices(fig, lang, th)
+    rest = cmp.gain_unshared < 0
+    x = [t("spot_parties_sharing", lang)] + ([t("spot_parties_rest", lang)] if rest else []) \
+        + [t("spot_parties_spot", lang)]
+    cur = _cur(lang)
+    hover = "%{x}<br>%{fullData.name}: %{y:,.0f} " + cur + "<extra></extra>"
+    if sp is None:
+        y = [cmp.sharing_value] + ([cmp.rest_on_spot_value] if rest else []) + [cmp.spot_revenue]
+        fig.add_bar(x=x, y=y, name=t("spot_parties_group", lang), marker=dict(color=th["total"]),
+                    text=[_kc(v, lang) for v in y], textposition="outside", cliponaxis=False,
+                    hovertemplate=hover)
+        if note:
+            fig.add_annotation(text=note, x=0.5, y=1.0, xref="paper", yref="paper",
+                               yanchor="bottom", showarrow=False,
+                               font=dict(size=11, color=th["muted"]))
+    else:
+        prod = [sp.producers_sharing] + ([sp.producers_rest] if rest else []) + [sp.producers_spot]
+        mem = [sp.members_saving] + ([sp.members_saving] if rest else []) + [0.0]
+        fig.add_bar(x=x, y=prod, name=t("spot_parties_producers", lang),
+                    marker=dict(color=th["source"]), text=[_kc(v, lang) for v in prod],
+                    textposition="inside", insidetextanchor="middle", hovertemplate=hover)
+        fig.add_bar(x=x, y=mem, name=t("spot_parties_members", lang),
+                    marker=dict(color=th["members"]),
+                    text=[_kc(v, lang) if v else "" for v in mem], textposition="inside",
+                    insidetextanchor="middle", hovertemplate=hover)
+        tops = [a + b for a, b in zip(prod, mem)]
+        for xi, top in zip(x, tops):
+            fig.add_annotation(x=xi, y=top, text=f"<b>{_kc(top, lang)}</b>", showarrow=False,
+                               yanchor="bottom", font=dict(size=12, color=th["ink"]))
+    fig.update_layout(
+        barmode="stack", bargap=0.4,
+        xaxis=dict(type="category", showgrid=False, tickangle=0, tickfont=dict(size=11)),
+        yaxis=dict(title=t("spot_kc", lang), tickformat=",.0f", rangemode="tozero"),
+        legend=dict(orientation="h", yanchor="top", y=-0.16, xanchor="left", x=0,
+                    traceorder="normal", font=dict(size=11)),
+    )
     return fig
 
 
-# ---------------------------------------------------------------------------
-# Per member
-# ---------------------------------------------------------------------------
-
-
-def fig_spot_members(cmp: Comparison, data: SharingData, names: dict[str, str],
-                     enabled: set[str], *, lang: str = "cs", th: dict | None = None,
-                     top: tuple[str, ...] | None = None) -> go.Figure:
-    """Per ticked member: its shared energy at its supplier price and on spot; the
-    producers' unshared surplus at the feed-in price and on spot. The label is the gain."""
+def fig_spot_members(cmp: Comparison, sp: Split | None, data: SharingData,
+                     names: dict[str, str], enabled: set[str], *, lang: str = "cs",
+                     th: dict | None = None, top: tuple[str, ...] | None = None,
+                     note: str | None = None) -> go.Figure:
+    """Per producer: what it gets with sharing and on spot; per ticked member: what it
+    saves with sharing (on spot nothing). The label is the difference."""
     th = th or THEMES["light"]
     fig = figure(t("spot_members_title", lang), lang, 420, th)
     if not cmp.valid.any():
         return no_data(fig, lang, th)
+    if sp is None:
+        return _need_prices(fig, lang, th, note)
     idx = {e: j for j, e in enumerate(data.dest_eans)}
     cmap = colour_map(data, top)
-    rows = []          # label, with sharing, on spot, colour
+    rows = [(names.get(src, src), float(sp.producer_sharing[i]), float(sp.producer_spot[i]),
+             th["source"]) for i, src in enumerate(data.source_eans)]
     for key, group in member_groups(data, enabled, top):
         j = [idx[e] for e in group]
         label = (t("others", lang).format(n=len(group)) if key == OTHER else names.get(key, key))
-        rows.append((label, float(cmp.at_supplier[j].sum()), float(cmp.shared_at_spot[j].sum()),
-                     cmap.get(key, OTHER_COLOUR)))
-    src = data.source_eans[0] if len(data.source_eans) == 1 else POOL
-    rows.append((t("spot_row_unshared", lang).format(name=names[src]),
-                 float(cmp.at_feed_in.sum()), float(cmp.unshared_at_spot.sum()), th["source"]))
-    rows = rows[::-1]                               # first member on top
+        rows.append((label, float(sp.member_saving[j].sum()), 0.0, cmap.get(key, OTHER_COLOUR)))
+    rows = rows[::-1]                               # producers on top
     y = [r[0] for r in rows]
     cur = _cur(lang)
     hover = "%{y}<br>%{fullData.name}: %{x:,.0f} " + cur + "<extra></extra>"
@@ -184,16 +184,12 @@ def fig_spot_members(cmp: Comparison, data: SharingData, names: dict[str, str],
                 marker=dict(color=th["unshared"]), hovertemplate=hover)
     fig.add_bar(y=y, x=[r[1] for r in rows], orientation="h", name=t("spot_with_sharing", lang),
                 marker=dict(color=[r[3] for r in rows]), hovertemplate=hover)
-    xs = [v for r in rows for v in r[1:3] if np.isfinite(v)]
+    xs = [v for r in rows for v in r[1:3]]
     hi, lo = max([0.0, *xs]), min([0.0, *xs])
-    notes = []
-    for r in rows:
-        if not (np.isfinite(r[1]) and np.isfinite(r[2])):
-            continue
-        g = r[1] - r[2]
-        notes.append(dict(x=max(r[1], r[2], 0.0) + 0.01 * (hi - lo or 1.0), y=r[0],
-                          text=f"<b>{_kc(g, lang, True)}</b>", showarrow=False, xanchor="left",
-                          font=dict(size=11, color=_gain_colour(g, th))))
+    notes = [dict(x=max(r[1], r[2], 0.0) + 0.01 * (hi - lo or 1.0), y=r[0],
+                  text=f"<b>{_kc(r[1] - r[2], lang, True)}</b>", showarrow=False,
+                  xanchor="left", font=dict(size=11, color=_gain_colour(r[1] - r[2], th)))
+             for r in rows]
     fig.update_layout(
         barmode="group", bargap=0.3, bargroupgap=0.05, annotations=notes,
         height=max(320, 110 + 44 * len(rows)),
@@ -211,11 +207,11 @@ def fig_spot_members(cmp: Comparison, data: SharingData, names: dict[str, str],
 # ---------------------------------------------------------------------------
 
 
-def fig_spot_daily(cmp: Comparison, *, lang: str = "cs", sel_day: str | None = None,
-                   th: dict | None = None) -> go.Figure:
-    """The gain of sharing over spot per day: on the shared energy, on the unshared
-    surplus (often negative: the feed-in price below spot), and the net. Click a day to
-    select it."""
+def fig_spot_daily(cmp: Comparison, sp: Split | None = None, *, lang: str = "cs",
+                   sel_day: str | None = None, th: dict | None = None) -> go.Figure:
+    """Per day: with the billing, what sharing brings the producers over spot and what
+    the members save; without it, the group's gain on the shared electricity and on the
+    unshared surplus. The line is the sum. Click a day to select it."""
     th = th or THEMES["light"]
     fig = figure(t("spot_daily_title", lang), lang, 440, th)
     pi = cmp.per_interval
@@ -223,13 +219,19 @@ def fig_spot_daily(cmp: Comparison, *, lang: str = "cs", sel_day: str | None = N
         return no_data(fig, lang, th)
     if not cmp.priced:
         return _need_prices(fig, lang, th)
-    daily = pi[["gain_shared", "gain_unshared"]].resample("D").sum()
+    if sp is not None:
+        daily = sp.daily[["producers", "members"]]
+        parts = (("producers", t("spot_daily_producers", lang), th["source"]),
+                 ("members", t("spot_daily_members", lang), th["members"]))
+    else:
+        daily = pi[["gain_shared", "gain_unshared"]].resample("D").sum()
+        parts = (("gain_shared", t("spot_daily_shared", lang), th["source"]),
+                 ("gain_unshared", t("spot_daily_unshared", lang), th["unshared"]))
     cur = _cur(lang)
     hover = "%{y:,.0f} " + cur
-    fig.add_bar(x=daily.index, y=daily["gain_shared"], name=t("spot_daily_shared", lang),
-                marker=dict(color=th["source"], line=dict(width=0)), hovertemplate=hover)
-    fig.add_bar(x=daily.index, y=daily["gain_unshared"], name=t("spot_daily_unshared", lang),
-                marker=dict(color=th["unshared"], line=dict(width=0)), hovertemplate=hover)
+    for col, name, colour in parts:
+        fig.add_bar(x=daily.index, y=daily[col], name=name,
+                    marker=dict(color=colour, line=dict(width=0)), hovertemplate=hover)
     fig.add_scatter(x=daily.index, y=daily.sum(axis=1), name=t("spot_daily_net", lang),
                     mode="lines", line=dict(color=th["total"], width=1.2), hovertemplate=hover)
     daily_layout(fig, daily.index, t("spot_daily_ylabel", lang), sel_day, lang, th)

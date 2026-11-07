@@ -32,6 +32,17 @@ from sharing is
 and the producer's *break-even price* of the shared energy is what it must get per kWh
 to earn as much as on spot: (spot revenue − f · unshared) / shared.
 
+Who gets what
+-------------
+The group's value hides who gets it. With sharing the producers are paid by the members
+as the billing by contribution says (:func:`split`: the Shapley values of the billing in
+the compared intervals, scaled to the benefit realized there, as the billing's
+settlement does): a producer gets its shared energy at the feed-in price plus its fair
+share of the benefit, and the feed-in price for the unshared surplus; a member saves
+its fair share against buying from its supplier. On spot the producers get the spot
+revenue of their whole surplus and the members save nothing. The two sides add up to the
+group's values above.
+
 Part on spot
 ------------
 Selling a share ``r`` of the production on spot is a reserve for sale: in every 15 min
@@ -63,6 +74,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
+from billing import BillResult
 from edc_data import (
     SharingData, key_shared, key_unshared, memoized, producer_arrays, shared_source,
 )
@@ -700,6 +712,100 @@ def _compare(data: SharingData, spot: SpotPrices, prices: tuple, feed_ins: tuple
         value = np.clip(value, 0, None)
     return Comparison(flows=f, value=value, fee=fee, curtail=curtail, prices=_nan(prices),
                       feed_ins=_nan(feed_ins))
+
+
+@dataclass
+class Split:
+    """Who gets what (Kč): with sharing, the producers paid by the billing by
+    contribution; on spot, the producers' spot revenue. Members on spot save nothing."""
+
+    member_saving: np.ndarray       # per member: its fair share (vs buying from its supplier)
+    member_payment: np.ndarray      # per member: paid to the producers for the shared energy
+    producer_shared: np.ndarray     # per producer: paid for its shared energy
+    producer_unshared: np.ndarray   # per producer: the unshared surplus at the feed-in price
+    producer_spot: np.ndarray       # per producer: the whole surplus on spot
+    producer_rest: np.ndarray       # per producer: paid for the shared + unshared on spot
+    supplied: np.ndarray            # kWh per producer shared
+    daily: pd.DataFrame             # Kč per day: producers' sharing − spot, members' saving
+
+    @property
+    def producer_sharing(self) -> np.ndarray:
+        return self.producer_shared + self.producer_unshared
+
+    @property
+    def producer_gain(self) -> np.ndarray:
+        """Kč each producer gets more with sharing than on spot (negative: less)."""
+        return self.producer_sharing - self.producer_spot
+
+    @property
+    def unit_price(self) -> np.ndarray:
+        """Kč/kWh each producer is paid for its shared electricity."""
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return np.where(self.supplied > 0, self.producer_shared / self.supplied, np.nan)
+
+    @property
+    def unit_price_avg(self) -> float:
+        total = float(self.supplied.sum())
+        return float(self.producer_shared.sum()) / total if total > 0 else float("nan")
+
+    @property
+    def producers_sharing(self) -> float:
+        return float(self.producer_sharing.sum())
+
+    @property
+    def producers_spot(self) -> float:
+        return float(self.producer_spot.sum())
+
+    @property
+    def producers_rest(self) -> float:
+        return float(self.producer_rest.sum())
+
+    @property
+    def members_saving(self) -> float:
+        return float(self.member_saving.sum())
+
+
+def billed_with(bill: BillResult | None, cmp: Comparison) -> bool:
+    """The billing was computed for this report with the prices of the comparison."""
+    if bill is None or len(bill.index) != len(cmp.index) or not bill.index.equals(cmp.index):
+        return False
+    same = lambda a, b: len(a) == len(b) and np.allclose(  # noqa: E731
+        np.asarray(a, dtype=float), np.asarray(b, dtype=float), rtol=0, atol=1e-9)
+    return same(bill.totals.prices, cmp.prices) and same(bill.totals.feed_ins, cmp.feed_ins)
+
+
+def split(cmp: Comparison, bill: BillResult | None) -> Split | None:
+    """Who gets what with sharing (producers paid by the billing by contribution) and on
+    spot; None without a billing for these prices. The producers get exactly what the
+    members pay for the shared energy."""
+    if not cmp.priced or not billed_with(bill, cmp):
+        return None
+    pi = bill.per_interval
+    valid = cmp.valid
+    ms_t = pi[bill.members].to_numpy(dtype=float) * valid[:, None]        # (T, n)
+    ps_t = pi[bill.producer_cols].to_numpy(dtype=float) * valid[:, None]  # (T, np)
+    # scale the shares to the benefit realized in the compared intervals (the settlement
+    # does so over the whole report: with a spot price everywhere the factor is 1)
+    realized = float(cmp.at_supplier.sum() - cmp.feed_ins @ cmp.supplied)
+    shares = float(ms_t.sum() + ps_t.sum())
+    factor = realized / shares if shares > 0 else 0.0
+    saving = factor * ms_t.sum(axis=0)
+    shared_paid = cmp.feed_ins * cmp.supplied + factor * ps_t.sum(axis=0)
+    if shares <= 0:
+        # nothing to gain from sharing (supplier prices not above the feed-in prices): the
+        # members pay their supplier price and the producers share what they pay
+        # equally above the feed-in value, as the billing's settlement does
+        shared_paid = shared_paid + realized / max(len(shared_paid), 1)
+    # per day: the producers' sharing − spot and the members' saving
+    f, v = cmp.feed_ins, cmp.value
+    prod_t = (cmp.SU + cmp.UN) @ f + factor * ps_t.sum(axis=1) - v * cmp.flows.surplus
+    daily = pd.DataFrame({"producers": prod_t, "members": factor * ms_t.sum(axis=1)},
+                         index=cmp.index).resample("D").sum()
+    return Split(member_saving=saving, member_payment=cmp.at_supplier - saving,
+                 producer_shared=shared_paid, producer_unshared=cmp.at_feed_in.copy(),
+                 producer_spot=cmp.revenue.copy(),
+                 producer_rest=shared_paid + cmp.unshared_at_spot, supplied=cmp.supplied.copy(),
+                 daily=daily)
 
 
 def missing_surplus(data: SharingData, spot: SpotPrices) -> float:

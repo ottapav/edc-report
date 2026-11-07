@@ -449,18 +449,31 @@ def daily_table(entry, enabled: set[str], lang: str) -> Table:
 
 
 def spot_tables(cmp, data: SharingData, enabled: set[str], names: dict, lang: str,
-                full_ean: bool, mix=None) -> list[Table]:
-    """Sharing vs spot: the totals (the tiles), the value by the share of the production
-    sold on spot (``mix``), per member and producer (the table), the prices per month."""
+                full_ean: bool, mix=None, split=None) -> list[Table]:
+    """Share or sell on spot, as on the page: the totals (who gets what, the group), the
+    value by the share of the production sold on spot (``mix``), per producer and per
+    member (``split``: with the billing by contribution), the prices per month."""
     cur, unit = t("currency", lang), f"{t('currency', lang)}/kWh"
     num = lambda x: None if x is None or not np.isfinite(x) else float(x)  # noqa: E731
     per = lambda x, kwh: num(x / kwh) if kwh > 0 else None  # noqa: E731
-    totals = Table([t("x_item", lang), t("x_value", lang), t("x_unit", lang)], [
-        [t("spot_t_revenue", lang), num(cmp.spot_revenue), cur],
-        [t("spot_t_sharing", lang), num(cmp.sharing_value), cur],
-        [t("spot_col_gain", lang), num(cmp.gain), cur],
-        [t("spot_t_shared", lang), num(cmp.gain_shared), cur],
-        [t("spot_t_unshared", lang), num(cmp.gain_unshared), cur],
+    rows = []
+    if split is not None:
+        rows += [
+            [t("spot_t_prod_sharing", lang), num(split.producers_sharing), cur],
+            [t("spot_t_prod_spot", lang), num(split.producers_spot), cur],
+            [t("x_spot_prod_gain", lang), num(split.producers_sharing - split.producers_spot), cur],
+            [t("x_spot_prod_rest", lang), num(split.producers_rest), cur],
+            [t("x_spot_prod_unit", lang), num(split.unit_price_avg), unit],
+            [t("spot_t_members", lang), num(split.members_saving), cur],
+        ]
+    else:
+        rows.append([t("x_spot_parties", lang), t("spot_bill_missing", lang), None])
+    rows += [
+        [t("x_spot_group_sharing", lang), num(cmp.sharing_value), cur],
+        [t("x_spot_group_spot", lang), num(cmp.spot_revenue), cur],
+        [t("spot_t_group", lang), num(cmp.gain), cur],
+        [t("spot_daily_shared", lang), num(cmp.gain_shared), cur],
+        [t("spot_daily_unshared", lang), num(cmp.gain_unshared), cur],
         [t("x_spot_rest", lang), num(cmp.rest_on_spot_value), cur],
         [t("x_spot_surplus", lang), num(cmp.surplus_kwh), "kWh"],
         [t("spot_mean", lang), num(cmp.mean_spot), unit],
@@ -471,48 +484,9 @@ def spot_tables(cmp, data: SharingData, enabled: set[str], names: dict, lang: st
         [t("spot_curtail", lang), _yes(cmp.curtail, lang), None],
         [t("spot_t_negative", lang), num(cmp.negative_kwh), "kWh"],
         [t("x_spot_negative_cost", lang), num(cmp.negative_cost), cur],
-    ], [None, "#,##0.00", None], title=t("spot_title", lang))
-    head = [t("col_name", lang), t("col_ean", lang), t("x_included", lang),
-            t("spot_col_price", lang), t("spot_col_kwh", lang), t("spot_col_sharing", lang),
-            t("spot_col_spot", lang), t("spot_col_gain", lang), t("spot_col_unit", lang)]
-    rows = [[names.get(e, e), ean_label(e, full_ean), _yes(e in enabled, lang),
-             num(cmp.prices[j]), _kwh(cmp.shared[j]), num(cmp.at_supplier[j]),
-             num(cmp.shared_at_spot[j]), num(cmp.member_gain[j]),
-             per(cmp.shared_at_spot[j], cmp.shared[j])]
-            for j, e in enumerate(data.dest_eans)]
-    kwh = float(cmp.shared.sum())
-    rows.append(["Σ", None, None, None, _kwh(kwh), num(cmp.at_supplier.sum()),
-                 num(cmp.shared_at_spot.sum()), num(cmp.gain_shared),
-                 per(cmp.shared_at_spot.sum(), kwh)])
-    bold = {len(rows) - 1}
-    for i, src in enumerate(data.source_eans):
-        rows.append([t("spot_row_unshared", lang).format(name=names.get(src, src)),
-                     ean_label(src, full_ean), None, num(cmp.feed_ins[i]),
-                     _kwh(cmp.unshared[i]), num(cmp.at_feed_in[i]),
-                     num(cmp.unshared_at_spot[i]), num(cmp.unshared_gain[i]),
-                     per(cmp.unshared_at_spot[i], cmp.unshared[i])])
-    rows.append([t("spot_total", lang), None, None, None, _kwh(cmp.surplus_kwh),
-                 num(cmp.sharing_value), num(cmp.spot_revenue), num(cmp.gain),
-                 per(cmp.spot_revenue, cmp.surplus_kwh)])
-    bold.add(len(rows) - 1)
-    per_member = Table(head, rows, [None, None, None, "0.00", KWH, KC, KC, KC, "0.00"],
-                       title=t("spot_table_title", lang), bold=bold)
-    producers = Table([t("col_name", lang), t("col_ean", lang), t("x_spot_surplus", lang),
-                       t("spot_t_revenue", lang) + f" [{cur}]",
-                       t("x_spot_break_even", lang) + f" [{unit}]"],
-                      [[names.get(src, src), ean_label(src, full_ean),
-                        _kwh(cmp.supplied[i] + cmp.unshared[i]), num(cmp.revenue[i]),
-                        num(cmp.break_even[i])] for i, src in enumerate(data.source_eans)],
-                      [None, None, KWH, KC, "0.00"])
-    m = monthly(cmp)
-    months = Table([t("x_month", lang), t("spot_mean", lang), t("spot_capture", lang),
-                    t("spot_supplier_avg", lang), t("spot_feed_in_avg", lang),
-                    t("x_spot_surplus", lang)],
-                   [[str(p), num(r.mean_spot), num(r.capture), num(r.supplier), num(r.feed_in),
-                     _kwh(r.surplus)] for p, r in zip(m.index, m.itertuples())],
-                   [None, "0.000", "0.000", "0.000", "0.000", KWH],
-                   title=t("spot_monthly_title", lang) + f" [{unit}]")
-    out = [totals]
+    ]
+    out = [Table([t("x_item", lang), t("x_value", lang), t("x_unit", lang)], rows,
+                 [None, "#,##0.00", None], title=t("spot_title", lang))]
     if mix is not None:
         out.append(Table([t("x_spot_level", lang), t("spot_mix_members", lang) + f" [{cur}]",
                           t("spot_mix_feed_in", lang) + f" [{cur}]",
@@ -523,7 +497,43 @@ def spot_tables(cmp, data: SharingData, enabled: set[str], names: dict, lang: st
                                                     mix.spot, mix.shared_kwh)],
                          ["0", KC, KC, KC, KC, KWH], title=t("x_spot_mix", lang),
                          bold={mix.best}))
-    return out + [per_member, producers, months]
+    if split is not None:
+        out.append(Table(
+            [t("col_name", lang), t("col_ean", lang), t("spot_col_shared_kwh", lang),
+             t("spot_col_unshared_kwh", lang), t("spot_col_paid_shared", lang),
+             t("spot_col_paid_unshared", lang), t("spot_col_sharing", lang),
+             t("spot_col_spot", lang), t("spot_col_gain", lang), t("spot_col_paid_unit", lang),
+             t("x_spot_break_even", lang) + f" [{unit}]"],
+            [[names.get(src, src), ean_label(src, full_ean), _kwh(split.supplied[i]),
+              _kwh(cmp.unshared[i]), num(split.producer_shared[i]),
+              num(split.producer_unshared[i]), num(split.producer_sharing[i]),
+              num(split.producer_spot[i]), num(split.producer_gain[i]),
+              num(split.unit_price[i]), num(cmp.break_even[i])]
+             for i, src in enumerate(data.source_eans)],
+            [None, None, KWH, KWH, KC, KC, KC, KC, KC, "0.00", "0.00"],
+            title=t("spot_table_producers", lang)))
+        rows = [[names.get(e, e), ean_label(e, full_ean), _yes(e in enabled, lang),
+                 num(cmp.prices[j]), _kwh(cmp.shared[j]), num(split.member_payment[j]),
+                 per(split.member_payment[j], cmp.shared[j]), num(split.member_saving[j])]
+                for j, e in enumerate(data.dest_eans)]
+        kwh = float(cmp.shared.sum())
+        rows.append(["Σ", None, None, None, _kwh(kwh), num(split.member_payment.sum()),
+                     per(split.member_payment.sum(), kwh), num(split.members_saving)])
+        out.append(Table(
+            [t("col_name", lang), t("col_ean", lang), t("x_included", lang),
+             t("spot_col_price", lang), t("spot_col_kwh", lang), t("spot_col_pays", lang),
+             t("spot_col_pays_unit", lang), t("spot_col_saves", lang)],
+            rows, [None, None, None, "0.00", KWH, KC, "0.00", KC],
+            title=t("spot_table_members", lang), bold={len(rows) - 1}))
+    m = monthly(cmp)
+    out.append(Table([t("x_month", lang), t("spot_mean", lang), t("spot_capture", lang),
+                      t("spot_supplier_avg", lang), t("spot_feed_in_avg", lang),
+                      t("x_spot_surplus", lang)],
+                     [[str(p), num(r.mean_spot), num(r.capture), num(r.supplier),
+                       num(r.feed_in), _kwh(r.surplus)] for p, r in zip(m.index, m.itertuples())],
+                     [None, "0.000", "0.000", "0.000", "0.000", KWH],
+                     title=t("spot_monthly_title", lang) + f" [{unit}]"))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -532,7 +542,8 @@ def spot_tables(cmp, data: SharingData, enabled: set[str], names: dict, lang: st
 
 
 def sheets(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
-           full_ean: bool = False, pair_keys=None, spot_cmp=None, spot_mix=None) -> list[Sheet]:
+           full_ean: bool = False, pair_keys=None, spot_cmp=None, spot_mix=None,
+           spot_split=None) -> list[Sheet]:
     """The sheets of the export for this report and selection (what has been computed
     decides which ones there are); ``spot_cmp`` is the spot comparison as on the page."""
     data = entry.data
@@ -561,7 +572,7 @@ def sheets(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
     if spot_cmp is not None:
         out.append(Sheet(t("x_sheet_spot", lang),
                          spot_tables(spot_cmp, data, enabled, names, lang, full_ean,
-                                     spot_mix)))
+                                     spot_mix, spot_split)))
     out.append(Sheet(t("x_sheet_daily", lang), [daily_table(entry, enabled, lang)]))
     return out
 
@@ -614,13 +625,14 @@ def _write(ws, tables: list[Table]) -> None:
 
 def summary_xlsx(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
                  full_ean: bool = False, pair_keys=None, spot_cmp=None,
-                 spot_mix=None) -> bytes:
+                 spot_mix=None, spot_split=None) -> bytes:
     """The export of one report as the bytes of an .xlsx file; ``pair_keys`` are the
     keys per producer as in the page's grid (several producers)."""
     wb = Workbook()
     wb.remove(wb.active)
     for sh in sheets(entry, enabled, names, lang, group=group, full_ean=full_ean,
-                     pair_keys=pair_keys, spot_cmp=spot_cmp, spot_mix=spot_mix):
+                     pair_keys=pair_keys, spot_cmp=spot_cmp, spot_mix=spot_mix,
+                     spot_split=spot_split):
         _write(wb.create_sheet(_sheet_title(sh.name)), sh.tables)
     wb.properties.title = t("report_title", lang)
     wb.properties.creator = "EDC sharing report"

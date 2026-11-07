@@ -29,7 +29,7 @@ JOB_KINDS = ("exact", "bill", "spot")
 #: the tabs of the report
 TABS = ("sharing", "spot")
 #: the figures of the spot tab
-SPOT_FIGURES = ("mix", "waterfall", "members", "daily", "hourly", "monthly")
+SPOT_FIGURES = ("parties", "mix", "members", "daily", "hourly", "monthly")
 #: figures that appear in both columns, in row order; "fig-<name>" left, "fig-<name>-b" right
 PAIRED_FIGURES = ("overview", "pie", "daily", "hourly", "heat")
 
@@ -197,6 +197,22 @@ def spot_fig_id(name: str) -> str:
     return f"fig-spot-{name}"
 
 
+def _spot_bill_box() -> html.Div:
+    """Who gets what needs the billing by contribution: why it is missing, its button,
+    and its progress (mirrored from the billing card on the sharing tab)."""
+    return html.Div(id="spot-bill-box", className="spot-bill", style={"display": "none"},
+                    children=[
+        html.P(id="spot-bill-note", className="hint stale"),
+        html.Div(className="rc-row", children=[
+            html.Button(id="spot-bill-btn", n_clicks=0, className="btn-primary")]),
+        html.Div(id="spot-bill-progress", className="progress idle", children=[
+            html.Div(className="progress-track", children=html.Div(
+                id="spot-bill-bar", className="progress-bar", style={"width": "0%"})),
+            html.Div(id="spot-bill-text", className="progress-text"),
+        ]),
+    ])
+
+
 def _spot_pane() -> html.Div:
     """The spot tab: the card that fetches the prices (with the trader's fee, the
     curtailment switch and the default prices, the same as in the billing card), then
@@ -208,16 +224,16 @@ def _spot_pane() -> html.Div:
                           _number_input("spot-feed-in", "lbl-spot-feed-in"),
                           _number_input("spot-price-default", "lbl-spot-price-default"),
                           curtail],
-                 [html.Div(id="spot-info")]),
+                 [html.Div(id="spot-info"), _spot_bill_box()]),
         html.Div(id="spot-body", className="spot-body", style={"display": "none"}, children=[
             html.Section(className="card tiles-card", children=[
                 html.Div(id="spot-verdict"), html.Div(id="spot-tiles")]),
+            _graph(spot_fig_id("parties"), "spot-parties-card"),
             _graph(spot_fig_id("mix"), "spot-mix-card"),
-            _graph(spot_fig_id("waterfall"), "spot-waterfall-card"),
+            _graph(spot_fig_id("members"), "spot-members-card"),
             _graph(spot_fig_id("daily"), "spot-daily-card daily-card"),
             _graph(spot_fig_id("hourly"), "spot-hourly-card"),
             _graph(spot_fig_id("monthly"), "spot-monthly-card"),
-            _graph(spot_fig_id("members"), "spot-members-card"),
             html.Section(className="card table-card", children=[
                 html.H2(id="spot-table-title"), html.Div(id="spot-table", className="table-wrap")]),
         ]),
