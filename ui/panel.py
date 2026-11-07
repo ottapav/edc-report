@@ -64,7 +64,7 @@ LABELS = [
     ("spot-title", "children", "spot_title"),
     ("spot-desc", "children", "spot_desc"),
     ("lbl-spot-fee", "children", "spot_fee"),
-    ("lbl-spot-feed-in", "children", "feed_in"),
+    ("lbl-spot-feed-in", "children", "spot_feed_in_lbl"),
     ("lbl-spot-price-default", "children", "price_default"),
     ("spot-table-title", "children", "spot_table_title"),
     ("spot-bill-btn", "children", "spot_bill_btn"),

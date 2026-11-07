@@ -7,6 +7,7 @@ contribution; it is enabled only when who gets what needs it."""
 from __future__ import annotations
 
 import dash
+import numpy as np
 from dash import Input, Output, State, callback, clientside_callback, ctx, no_update
 
 import jobs
@@ -112,8 +113,8 @@ def comparison(entry, rows, src_rows, feed_in, default, fee, curtail):
 
 
 def part_on_spot(entry, cmp, rows, pair_rows, lang):
-    """(the levels valued, None) or (None, why there is no curve): the rest is shared by
-    today's EDC method with the keys of the panel (empty cells: the estimate)."""
+    """(the levels valued, None) or (None, why there is no curve): the part offered is
+    shared by today's EDC method with the keys of the panel (empty cells: the estimate)."""
     data, fit = entry.data, entry.fit
     if not cmp.priced:
         return None, None
@@ -168,14 +169,18 @@ def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default,
     sp = split(cmp, entry.bill)
     billed = entry.bill is not None
     need = None if sp is not None or not cmp.priced else views.need_bill(billed, lang)
+    # the billing's button: on only when the billing is missing or stale and can run
+    feed_ok = not np.isnan(cmp.feed_ins).any()
+    bill_title = (t("spot_need_prices_short", lang) if not cmp.priced
+                  else t("bill_need_feed_in", lang) if need is not None and not feed_ok
+                  else need or t("spot_bill_current", lang))
     enabled = members.enabled(data, selected)
     names = members.names(data, lang, src_rows, rows)
     th = theme(theme_name)
     top = top_dests(data.frame, data)
     figs = dict(
         parties=fig_spot_parties(cmp, sp, lang, th, note=need),
-        mix=fig_spot_mix(m, lang, th, note=why,
-                         rest=cmp.rest_on_spot_value if cmp.gain_unshared < 0 else None),
+        mix=fig_spot_mix(m, lang, th, note=why),
         members=fig_spot_members(cmp, sp, data, names, enabled, lang=lang, th=th, top=top,
                                  note=need),
         daily=fig_spot_daily(cmp, sp, lang=lang,
@@ -184,9 +189,7 @@ def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default,
     )
     out = dict(body={}, info=views.spot_info(entry.spot, data, lang),
                verdict=views.spot_verdict(cmp, m, sp, lang, why, billed),
-               bill_need=need is not None,
-               bill_title=(need or t("spot_bill_current", lang)) if cmp.priced
-               else t("spot_need_prices_short", lang),
+               bill_need=need is not None and feed_ok, bill_title=bill_title,
                tiles=views.spot_tiles(cmp, sp, lang, billed),
                table=views.spot_table(cmp, sp, data, names, lang, top, enabled, billed), **figs)
     for name, fig in figs.items():

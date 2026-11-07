@@ -207,15 +207,20 @@ def test_the_gain_adds_up(producers):
     c = spot.compare(data, sp, p, f, fee_mwh=300)
     assert c.priced
     assert c.gain == pytest.approx(c.sharing_value - c.spot_revenue)
-    assert c.gain == pytest.approx(c.gain_shared + c.gain_unshared)
+    # the unshared surplus is on spot either way: the gain is the shared energy's
+    assert c.sharing_value == pytest.approx(c.at_supplier.sum() + c.unshared_at_spot.sum())
     pi = c.per_interval
-    assert pi["gain_shared"].sum() == pytest.approx(c.gain_shared)
-    assert pi["gain_unshared"].sum() == pytest.approx(c.gain_unshared)
+    assert pi["gain_shared"].sum() == pytest.approx(c.gain)
     assert pi["spot_revenue"].sum() == pytest.approx(c.spot_revenue)
     # each producer supplied what the members got, interval by interval
     assert np.allclose(c.SU.sum(axis=1), c.SH.sum(axis=1))
     # at the break-even price of the shared energy the producer earns as on spot
-    assert (c.break_even * c.supplied + c.at_feed_in) == pytest.approx(c.revenue)
+    assert (c.break_even * c.supplied + c.unshared_at_spot) == pytest.approx(c.revenue)
+    # ... which is what the shared energy would have got on spot
+    assert c.break_even_avg == pytest.approx(c.capture_shared)
+    assert c.gain == pytest.approx(float(c.at_supplier.sum()) - c.capture_shared * c.shared.sum())
+    # the feed-in price does not change the comparison (only the billing)
+    assert spot.compare(data, sp, p, [None] * producers, fee_mwh=300).gain == pytest.approx(c.gain)
     # the members' saving is their price times their shared energy
     assert c.at_supplier == pytest.approx(np.array(p) * core.per_destination(data)["shared"])
 
@@ -257,16 +262,18 @@ def test_part_on_spot_is_anchored_to_the_report_and_to_all_on_spot(producers):
     pair = None if producers == 1 else tuple(tuple(keys) for _ in range(2))
     rep = spot.replays(data, sp, tuple(keys), 5, pair)
     m = spot.mix(c, rep)
-    assert m.total[0] == pytest.approx(c.sharing_value)           # 0 %: the report
-    assert m.total[-1] == pytest.approx(c.spot_revenue)           # 100 %: all on spot
-    assert m.shared_kwh[0] == pytest.approx(c.shared.sum()) and m.shared_kwh[-1] == 0
-    assert (np.diff(m.shared_kwh) <= 1e-9).all()                  # less shared, the more sold
-    assert m.feed_in[0] == pytest.approx(c.at_feed_in.sum())
+    assert list(m.levels) == pytest.approx([x / 10 for x in range(11)])  # share offered
+    assert m.total[-1] == pytest.approx(c.sharing_value)          # 100 %: the report
+    assert m.total[0] == pytest.approx(c.spot_revenue)            # 0 %: all on spot
+    assert m.shared_kwh[-1] == pytest.approx(c.shared.sum()) and m.shared_kwh[0] == 0
+    assert (np.diff(m.shared_kwh) >= -1e-9).all()                 # the more offered, shared
+    assert m.spot[-1] == pytest.approx(c.unshared_at_spot.sum())  # the report's rest on spot
+    assert m.spot[0] == pytest.approx(c.spot_revenue)
     # supplier prices far above spot: sharing all of it is best, each 10 % costs money
-    assert m.best == 0 and m.step_cost > 0
+    assert m.best == len(spot.LEVELS) - 1 and m.step_cost > 0
     # spot dearer than the supplier price: selling all of it is best
     dear = spot.compare(data, sp, [0.1] * 5, [0.0] * producers)
-    assert spot.mix(dear, rep).best == len(spot.LEVELS) - 1
+    assert spot.mix(dear, rep).best == 0
 
 
 def test_choosing_every_15_min_is_an_upper_bound():
@@ -287,22 +294,23 @@ def test_the_verdict_names_the_option_worth_most_for_the_group():
     data = _data()
     sp = _prices(data)
     keys = tuple([0.15] * 5)
-    cases = {                       # supplier, feed-in -> verdict
-        (4.5, 1.2): ("Sharing pays for the group", "share"),
-        (4.5, 0.0): ("For the group, sharing and selling the unshared surplus on spot pays",
-                     "rest"),
-        (0.2, 0.0): ("Selling on spot pays for the group", "spot"),
-    }
-    for (p, f), (title, best) in cases.items():
-        c = spot.compare(data, sp, [p] * 5, [f])
+    for p, (title, best) in {
+        4.5: ("Sharing pays for the group", "share"),
+        0.2: ("Selling on spot pays for the group", "spot"),
+    }.items():
+        c = spot.compare(data, sp, [p] * 5, [1.2])
         m = spot.mix(c, spot.replays(data, sp, keys, 5))
         div = views.spot_verdict(c, m, None, "en")
-        assert div.children[0].children == title, (p, f)
+        assert div.children[0].children == title, p
         options = {"share": c.sharing_value, "spot": c.spot_revenue,
                    "mix": float(m.total[m.best])}
-        if c.gain_unshared < 0:
-            options["rest"] = c.rest_on_spot_value
         assert max(options.values()) == pytest.approx(options[best])
+    # the threshold is what the shared electricity gets on spot, not the average spot
+    # price: a supplier price between the two still makes sharing pay
+    c = spot.compare(data, sp, [1.5] * 5, [1.2])
+    assert c.capture_shared < 1.5 < c.mean_spot and c.gain > 0
+    text = str(views.spot_verdict(c, None, None, "en"))
+    assert "Sharing pays for the group" in text and "would have got" in text
 
 
 def _bill(key, price=4.3, feed=1.2):
@@ -331,8 +339,8 @@ def test_who_gets_what_follows_the_billing_by_contribution(entry_key):
     assert sp.producers_sharing + sp.members_saving == pytest.approx(c.sharing_value)
     assert sp.producers_spot == pytest.approx(c.spot_revenue)
     assert sp.member_payment + sp.member_saving == pytest.approx(c.at_supplier)
-    assert sp.producers_rest == pytest.approx(
-        float(sp.producer_shared.sum() + c.unshared_at_spot.sum()))
+    # with sharing the producers sell the unshared surplus on spot
+    assert sp.producer_unshared == pytest.approx(c.unshared_at_spot)
     daily = sp.daily.sum()
     assert daily["members"] == pytest.approx(sp.members_saving)
     assert daily["producers"] == pytest.approx(sp.producers_sharing - sp.producers_spot)
@@ -488,7 +496,7 @@ def test_the_tab_fetches_once_and_renders(entry_key, monkeypatch):
     out = ui_spot.render_spot(**{**args, "rows": rows, "curtail": []}, fit_rev=0,
                               pair_changed=None, bill_rev=0, pair_rows=None,
                               sel_day="2025-10-05")
-    assert len(out["mix"].data) == 4 and "Skupině se vyplatí sdílet" in str(out["verdict"])
+    assert len(out["mix"].data) == 3 and "Skupině se vyplatí sdílet" in str(out["verdict"])
     # after the billing with the same prices: who gets what, the card's button is off
     _bill(entry_key, price=4.2, feed=1.1)
     out = ui_spot.render_spot(**{**args, "rows": rows, "curtail": []}, fit_rev=0,
@@ -546,13 +554,13 @@ def test_the_export_has_a_spot_sheet_once_the_prices_are_there(entry_key):
     assert "Kdo kolik dostane" in values                      # no billing: a note
     assert "Výrobny se sdílením" not in values
     # the curve needs keys: with the estimate missing it is left out
-    assert "Podíl výroby na spotu, zbytek sdílen" not in values
+    assert "Podíl výroby nabídnutý ke sdílení, zbytek na spotu" not in values
     rows = [{"ean": e, "key": 15} for e in entry.data.dest_eans]
     url = ui_export.summary_file(entry_key, None, rows, None, "cs", "", [], None,
                                  ("1,2", "4,5", "250", []))
     ws = load_workbook(io.BytesIO(store.get_file(url.split("/")[2]).content))["Spot"]
     titles = [r[0] for r in ws.iter_rows(values_only=True) if r and r[0]]
-    assert "Podíl výroby na spotu, zbytek sdílen" in titles
+    assert "Podíl výroby nabídnutý ke sdílení, zbytek na spotu" in titles
     # with the billing for these prices: the producers' and members' tables
     _bill(entry_key, price=4.5, feed=1.2)
     url = ui_export.summary_file(entry_key, None, rows, None, "cs", "", [], None,
