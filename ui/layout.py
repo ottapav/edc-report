@@ -14,6 +14,7 @@ from __future__ import annotations
 import dash_ag_grid as dag
 from dash import dcc, html
 
+import clanky
 from i18n import LANG_LABELS, t
 
 from . import members
@@ -33,10 +34,6 @@ TABS = ("sharing", "bill", "spot")
 SPOT_FIGURES = ("parties", "mix", "members", "daily", "hourly", "monthly")
 #: figures that appear in both columns, in row order; "fig-<name>" left, "fig-<name>-b" right
 PAIRED_FIGURES = ("overview", "pie", "daily", "hourly", "heat")
-
-
-# explanatory article on the exact static method and the pool mode (cs/en/de), see clanky/
-ARTICLE_URL = "/clanky/do-posledni-kwh/"
 
 
 def job_ids(kind: str) -> dict[str, str]:
@@ -273,7 +270,7 @@ def _sharing_pane() -> list:
         job_card("exact", [_number_input("reserve", "lbl-reserve", value="0")],
                  [html.Div(id="exact-pool"), _pair_box(), html.Div(id="fit-info"),
                   html.Div(id="exact-stale"),
-                  html.Div(id="exact-result")], link=ARTICLE_URL),
+                  html.Div(id="exact-result")], link=clanky.DO_POSLEDNI_KWH.url("cs")),
     ]
 
 
@@ -282,7 +279,8 @@ def _bill_pane() -> list:
     return [
         job_card("bill", [_number_input("feed-in", "lbl-feed-in"),
                           _number_input("price-default", "lbl-price-default")],
-                 [html.Div(id="bill-stale"), html.Div(id="bill-result")]),
+                 [html.Div(id="bill-stale"), html.Div(id="bill-result")],
+                 link=clanky.SPRAVEDLIVA_CENA.url("cs")),
     ]
 
 

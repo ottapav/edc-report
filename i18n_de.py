@@ -185,6 +185,7 @@ STRINGS: dict[str, str] = {
     "price_col_tip": "Lieferantenpreis dieses Mitglieds [CZK/kWh], Energie ohne Netzentgelte; leer = Grundpreis des Lieferanten",
     "bill_title": "Abrechnung des geteilten Stroms nach Beitrag (Vorschlag)",
     "bill_desc": "Teilt den Nutzen der Teilung fair zwischen Erzeugern und Mitgliedern auf, danach, was jeder zur Gruppe beiträgt (Shapley-Wert). Den Lieferantenpreis (Energie, ohne Netzentgelt) jedes Mitglieds in die Spalte Preis und den Einspeisepreis jeder Erzeugungsanlage neben ihren Namen eintragen; leere Zellen übernehmen die Grundpreise unten. Die Abrechnung nutzt die geteilte Energie des EDC-Reports. Sie ist ein Preisvorschlag für den Teilungsvertrag; eine Zahlung über den Kosten der Erzeugung kann als Gewerbe gelten und eine Erzeugungslizenz des ERÚ erfordern.",
+    "bill_article": "Wie die Abrechnung nach Beitrag funktioniert: erklärender Artikel (auf Tschechisch) ↗",
     "bill_btn": "Abrechnung nach Beitrag berechnen",
     "feed_in": "Grund-Einspeisepreis [CZK/kWh]",
     "feed_col": "Einsp.",
