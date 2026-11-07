@@ -540,6 +540,7 @@ callbacks from both.
 | | `ui/export.py` | Callbacks of the export: the workbook download, printing |
 | App | `app.py` | Creates the Dash app, `/healthz`, optional basic auth |
 | | `assets/style.css` | Styles, light/dark variables (Dash loads it automatically) |
+| | `assets/favicon.svg`, `.ico`, `apple-touch-icon.png` | App icon in ČVUT colours (blue Pantone 300, amber Pantone 130); the PNG/ICO are rendered from the SVG |
 | | `gunicorn.conf.py`, `render.yaml`, `.python-version` | Deployment |
 | Checks | `tests/` | pytest suite (synthetic data, no real CSV needed) |
 | | `.github/workflows/tests.yml`, `requirements-dev.txt` | CI: the suite on every pull request and push to `main` |
