@@ -293,13 +293,17 @@ def layout() -> html.Div:
     ])
 
 
-#: the page before its first paint: apply the saved or the system theme (no light flash)
+#: the page before its first paint: apply the saved or the system theme (no light flash).
+#: The icon (assets/favicon.*) replaces Dash's {%favicon%}: browsers take the SVG, the
+#: sizes on the ICO keep Chrome from preferring it.
 INDEX_STRING = """<!DOCTYPE html>
 <html>
     <head>
         {%metas%}
         <title>{%title%}</title>
-        {%favicon%}
+        <link rel="icon" href="/assets/favicon.ico" sizes="32x32">
+        <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+        <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
         <script>
         (function () {
             try {

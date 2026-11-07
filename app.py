@@ -60,6 +60,12 @@ def _article_img(lang: str, name: str):
     return send_from_directory(clanek.img_dir(lang), name)
 
 
+@server.route("/favicon.ico")
+def _favicon():
+    """The icon where browsers look by default (the article pages have no icon link)."""
+    return send_from_directory(app.config.assets_folder, "favicon.ico")
+
+
 @server.route("/export/<token>/<path:name>")
 def _export_file(token: str, name: str):
     """A summary prepared by the export button (:func:`store.put_file`), as an attachment
