@@ -2,3 +2,5 @@
 # requirements.txt)
 -r requirements.txt
 pytest==9.2.0
+# the browser tests (tests/test_ui.py); its Chromium: python -m playwright install chromium
+playwright==1.63.0

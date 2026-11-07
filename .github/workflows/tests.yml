@@ -28,4 +28,6 @@ jobs:
           cache: pip
           cache-dependency-path: requirements*.txt
       - run: pip install -r requirements-dev.txt
+      # Chromium for the browser tests (every button of the page, tests/test_ui.py)
+      - run: python -m playwright install --with-deps chromium
       - run: python -m pytest -q tests

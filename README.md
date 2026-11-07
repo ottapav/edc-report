@@ -541,6 +541,7 @@ callbacks from both.
 | App | `app.py` | Creates the Dash app, `/healthz`, optional basic auth |
 | | `assets/style.css` | Styles, light/dark variables (Dash loads it automatically) |
 | | `assets/favicon.svg`, `.ico`, `apple-touch-icon.png` | App icon in ČVUT colours (blue Pantone 300, amber Pantone 130); the PNG/ICO are rendered from the SVG |
+| | `assets/version.js` | Offers a reload when the server's code version (`X-App-Version`) is not the page's: after a deploy a page loaded before it calls callbacks the new server may not have, and its buttons would do nothing |
 | | `gunicorn.conf.py`, `render.yaml`, `.python-version` | Deployment |
 | Checks | `tests/` | pytest suite (synthetic data, no real CSV needed) |
 | | `.github/workflows/tests.yml`, `requirements-dev.txt` | CI: the suite on every pull request and push to `main` |
@@ -638,6 +639,11 @@ Notes:
 * **Memory:** both plans have 512 MB. Keep `EDC_CACHE_MAX` about 6.
 * **Keep one worker.** Do not add `--workers N`, and do not rely on `WEB_CONCURRENCY` (see
   *Architecture*).
+* **After a deploy** the server has restarted, so uploaded reports are gone, and a page
+  loaded before the deploy may call callbacks the new code no longer has. Such a page shows a
+  bar offering a reload: every response carries the code version (`X-App-Version`, a hash of
+  the modules and assets, `app.VERSION`) and the page knows its own (`meta app-version`).
+  A deploy that changes only the docs keeps the version.
 
 ## Configuration
 
@@ -657,6 +663,7 @@ Notes:
 
 ```bash
 pip install -r requirements-dev.txt
+python -m playwright install chromium     # for the browser tests; without it they are skipped
 python -m pytest -q tests
 ```
 
@@ -679,7 +686,15 @@ needed. It checks that:
 * the timing counts every interval;
 * the Shapley values of the billing equal brute force over all coalitions, the bounded node
   count matches the exact one, and the settlement adds up (payments, shares, haléř);
-* memoisation reuses frames.
+* memoisation reuses frames;
+* every button works in a real browser (`tests/test_ui.py`, Playwright + Chromium, against the
+  app served from the test process, with a fake OTE): upload, key estimate, recompute, the
+  billing from its card and from the spot tab (also refused without prices), the spot prices
+  and their fee and curtailment, the right column, the day buttons, the heat-map metric,
+  unticking a member, typing a key and putting the estimate back, export (with full EANs),
+  print (light and dark), theme, the three languages, the article link, a bad file, two
+  producers, and the reload offer after a deploy. Any console or HTTP error fails the test.
+  In CI (`CI` set) a missing browser is an error, not a skip.
 
 ## Limitations
 

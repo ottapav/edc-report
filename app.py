@@ -18,8 +18,10 @@ Run:  python app.py            (http://127.0.0.1:8050)
 from __future__ import annotations
 
 import argparse
+import hashlib
 import hmac
 import io
+from pathlib import Path
 
 import dash
 from flask import Response, request, send_file, send_from_directory
@@ -39,11 +41,28 @@ from ui.layout import INDEX_STRING, layout
 #: importing a ui module registers its callbacks (``dash.callback``)
 CALLBACK_MODULES = (ui.panel, ui.compute, ui.report, ui.export, ui.spot)
 
+
+def code_version(root: Path = Path(__file__).parent) -> str:
+    """A hash of the app's code (Python modules, assets): it changes with a deploy that
+    changes the app, not with one that only changes the docs."""
+    h = hashlib.sha1()
+    for path in sorted([*root.glob("*.py"), *root.glob("ui/*.py"), *root.glob("figures/*.py"),
+                        *root.glob("assets/*")]):
+        h.update(path.relative_to(root).as_posix().encode())
+        h.update(path.read_bytes())
+    return h.hexdigest()[:12]
+
+
+#: The page carries the version it was served with (a meta tag) and every response the
+#: server's (X-App-Version). A page loaded before a deploy then calls callbacks the new
+#: server may not have (a button does nothing), so assets/version.js offers a reload.
+VERSION = code_version()
+
 app = dash.Dash(__name__, title="EDC sharing report", suppress_callback_exceptions=True)
 server = app.server  # for gunicorn: gunicorn app:server -c gunicorn.conf.py
 # base64 upload inflates the file by 4/3; leave headroom for the rest of the request
 server.config["MAX_CONTENT_LENGTH"] = int((config.MAX_UPLOAD_MB * 1.4 + 2) * 2**20)
-app.index_string = INDEX_STRING
+app.index_string = INDEX_STRING.replace("__APP_VERSION__", VERSION)
 app.layout = layout()
 
 
@@ -81,6 +100,12 @@ def _export_file(token: str, name: str):
 @server.route("/healthz")
 def _healthz():
     return {"status": "ok", "cached_reports": store.size(), **jobs.stats()}
+
+
+@server.after_request
+def _version_header(response: Response) -> Response:
+    response.headers["X-App-Version"] = VERSION
+    return response
 
 
 @server.before_request
