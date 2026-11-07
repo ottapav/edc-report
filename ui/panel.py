@@ -63,7 +63,6 @@ LABELS = [
     ("tab-spot", "label", "tab_spot"),
     ("spot-title", "children", "spot_title"),
     ("spot-desc", "children", "spot_desc"),
-    ("spot-btn", "children", "spot_btn"),
     ("lbl-spot-fee", "children", "spot_fee"),
     ("lbl-spot-feed-in", "children", "feed_in"),
     ("lbl-spot-price-default", "children", "price_default"),
@@ -91,7 +90,6 @@ def _labels(lang):
         exact_pool=Output("exact-pool", "children"),
         article_href=Output("exact-article", "href"),
         bill_title=Output("bill-btn", "title"),
-        spot_title=Output("spot-btn", "title"),
     ),
     inputs=dict(lang=Input("lang", "value"), key=Input("data-key", "data")),
     state=dict(heat=State("heat-metric", "value")),
@@ -118,7 +116,6 @@ def _report_labels(lang, key, heat):
         exact_pool=(html.P(t("pool_note", lang).format(n=len(data.source_eans)),
                            className="hint pool-note") if multi and not part else []),
         bill_title=t("part_no_bill", lang) if part else "",
-        spot_title=t("part_no_spot", lang) if part else "",
     )
 
 

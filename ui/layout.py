@@ -77,9 +77,12 @@ def _number_input(id_: str, label_id: str, value=None) -> html.Label:
     ])
 
 
-def job_card(kind: str, inputs: list, results: list, link: str | None = None) -> html.Section:
+def job_card(kind: str, inputs: list, results: list, link: str | None = None,
+             button: bool = True) -> html.Section:
     """A card that starts a computation: title, description (with an optional link to an
-    explanatory text), the button and its inputs, a progress bar, then the results."""
+    explanatory text), the button and its inputs, a progress bar, then the results.
+    ``button=False``: the job starts by itself (the button stays, hidden, for the job's
+    callbacks)."""
     ids = job_ids(kind)
     return html.Section(id=f"{kind}-card", className="card job-card", children=[
         dcc.Store(id=ids["job"]),
@@ -90,7 +93,8 @@ def job_card(kind: str, inputs: list, results: list, link: str | None = None) ->
         *([html.P(className="hint article-link", children=html.A(
             id=f"{kind}-article", href=link, target="_blank", rel="noopener"))] if link else []),
         html.Div(className="rc-row", children=[
-            html.Button(id=ids["btn"], n_clicks=0, className="btn-primary"), *inputs]),
+            html.Button(id=ids["btn"], n_clicks=0, className="btn-primary",
+                        style=None if button else {"display": "none"}), *inputs]),
         html.Div(id=ids["progress"], className="progress idle", children=[
             html.Div(className="progress-track", children=html.Div(
                 id=ids["bar"], className="progress-bar", style={"width": "0%"})),
@@ -198,34 +202,33 @@ def spot_fig_id(name: str) -> str:
     return f"fig-spot-{name}"
 
 
-def _spot_bill_box() -> html.Div:
-    """Who gets what needs the billing by contribution: why it is missing, its button,
-    and its progress (mirrored from the billing card on the billing tab)."""
-    return html.Div(id="spot-bill-box", className="spot-bill", style={"display": "none"},
-                    children=[
-        html.P(id="spot-bill-note", className="hint stale"),
-        html.Div(className="rc-row", children=[
-            html.Button(id="spot-bill-btn", n_clicks=0, className="btn-primary")]),
-        html.Div(id="spot-bill-progress", className="progress idle", children=[
-            html.Div(className="progress-track", children=html.Div(
-                id="spot-bill-bar", className="progress-bar", style={"width": "0%"})),
-            html.Div(id="spot-bill-text", className="progress-text"),
-        ]),
+def _spot_bill_progress() -> html.Div:
+    """The billing's progress, mirrored from the billing card on the billing tab (the
+    spot card's button starts the billing too)."""
+    return html.Div(id="spot-bill-progress", className="progress idle", children=[
+        html.Div(className="progress-track", children=html.Div(
+            id="spot-bill-bar", className="progress-bar", style={"width": "0%"})),
+        html.Div(id="spot-bill-text", className="progress-text"),
     ])
 
 
 def _spot_pane() -> html.Div:
-    """The spot tab: the card that fetches the prices (with the trader's fee, the
-    curtailment switch and the default prices, the same as in the billing card), then
-    the comparison."""
+    """The spot tab: the card that fetches the prices when the tab opens (no button), with
+    the trader's fee, the curtailment switch and the default prices (the same as in the
+    billing card), and the button of the billing by contribution, which who gets what
+    needs: always there, enabled only when the billing is missing or was computed with
+    other prices. Then the comparison."""
     curtail = dcc.Checklist(id="spot-curtail", options=[{"label": "", "value": "on"}],
                             value=[], className="checks")
     return html.Div(id="pane-spot", className="pane", style={"display": "none"}, children=[
-        job_card("spot", [_number_input("spot-fee", "lbl-spot-fee", value="0"),
+        job_card("spot", [html.Button(id="spot-bill-btn", n_clicks=0, className="btn-primary",
+                                      disabled=True),
+                          _number_input("spot-fee", "lbl-spot-fee", value="0"),
                           _number_input("spot-feed-in", "lbl-spot-feed-in"),
                           _number_input("spot-price-default", "lbl-spot-price-default"),
                           curtail],
-                 [html.Div(id="spot-info"), _spot_bill_box()]),
+                 [dcc.Store(id="spot-bill-need", data=False), html.Div(id="spot-info"),
+                  _spot_bill_progress()], button=False),
         html.Div(id="spot-body", className="spot-body", style={"display": "none"}, children=[
             html.Section(className="card tiles-card", children=[
                 html.Div(id="spot-verdict"), html.Div(id="spot-tiles")]),

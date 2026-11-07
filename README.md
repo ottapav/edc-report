@@ -149,13 +149,16 @@ The interface is available in Czech, English and German (switch in the top bar; 
   save), for the group, whether selling only the unshared rest on spot (a feed-in contract at
   the spot price) or a share of the production pays more, how much choosing every 15 min
   could add at most, and what the producers need per kWh shared to earn as much as on spot.
-  Without a billing for the prices typed, the box speaks for the group and the card offers to
-  compute the billing (its progress shows in the card).
+  Without a billing for the prices typed, the box speaks for the group. The card's button
+  *Compute the billing by contribution* is always there and enabled only then (and not while
+  the billing runs), so typing a price does not move the card; the billing's progress shows
+  in the card.
 * **Part on spot** (group): the value for 0, 10, …, 100 % of the production sold on spot, the
   rest shared by today's EDC method with the keys of the panel (estimated or typed); 0 % is
   the report's sharing, 100 % all on spot.
-* The OTE prices of the report's period are downloaded when the tab opens; the comparison then
-  follows every price, fee or tick typed, with no button.
+* The OTE prices of the report's period are downloaded when the tab opens (after a failure,
+  the next time it opens); the comparison then follows every price, fee or tick typed, with
+  no button.
 * Inputs: the supplier and feed-in prices of the panel, with the base prices for the empty
   cells (the same fields as in the billing card), the fee for selling on spot in CZK/MWh, and
   whether the producer stops selling at a negative price.
