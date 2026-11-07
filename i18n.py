@@ -325,7 +325,7 @@ STRINGS: dict[str, dict[str, str]] = {
         # --- spot market instead of sharing ---
         "tab_sharing": "Sharing",
         "tab_bill": "Billing",
-        "tab_spot": "Share or sell on spot?",
+        "tab_spot": "Sharing × selling on spot",
         "spot_t_prod_sharing": "Producers with sharing",
         "spot_t_prod_spot": "Producers on spot",
         "spot_t_prod_unit": "{unit} for the shared (by contribution)",
@@ -757,7 +757,7 @@ STRINGS: dict[str, dict[str, str]] = {
         # --- spot market instead of sharing ---
         "tab_sharing": "Sdílení",
         "tab_bill": "Vyúčtování",
-        "tab_spot": "Sdílet, nebo prodat na spotu?",
+        "tab_spot": "Sdílení × prodej na spotu",
         "spot_t_prod_sharing": "Výrobny se sdílením",
         "spot_t_prod_spot": "Výrobny na spotu",
         "spot_t_prod_unit": "za sdílenou {unit} (podle přínosu)",

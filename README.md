@@ -122,7 +122,7 @@ The interface is available in Czech, English and German (switch in the top bar; 
   each has its own feed-in price.
 * **Compute:** one button computes the exact Shapley values over the whole report in the
   background, with a progress bar.
-* **Its own tab:** the *Sharing*, *Billing* and *Share or sell on spot?* tabs sit side by
+* **Its own tab:** the *Sharing*, *Billing* and *Sharing × selling on spot* tabs sit side by
   side. The billing card (prices, button, progress) is on the *Billing* tab, the exact
   method's card on the *Sharing* tab; both tabs show the same two columns, the EDC report on
   the left and the tab's computation on the right.
@@ -137,7 +137,7 @@ The interface is available in Czech, English and German (switch in the top bar; 
   effective price per kWh; per producer the energy it shared, its income, its share and the
   feed-in value it gave up.
 
-**Share or sell on spot?** (third tab; all report):
+**Sharing × selling on spot** (third tab; all report):
 
 * The question is who gets what. With sharing, the members pay the producers as the
   **billing by contribution** says (the Shapley value): a producer gets its shared

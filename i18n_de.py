@@ -312,7 +312,7 @@ STRINGS: dict[str, str] = {
     # --- spot market instead of sharing ---
     "tab_sharing": "Teilen",
     "tab_bill": "Abrechnung",
-    "tab_spot": "Teilen oder am Spot verkaufen?",
+    "tab_spot": "Teilen × Verkauf am Spot",
     "spot_t_prod_sharing": "Erzeuger mit Teilen",
     "spot_t_prod_spot": "Erzeuger am Spot",
     "spot_t_prod_unit": "{unit} für den geteilten (nach Beitrag)",
