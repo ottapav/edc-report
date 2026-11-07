@@ -21,16 +21,20 @@ start, like the EDC report.
 
 Comparison
 ----------
-With sharing, the members' shared energy is worth their supplier price ``p`` (they do
-not buy it) and the surplus nobody took the producer's feed-in price ``f``. On spot,
-every kWh of the surplus earns the spot price ``s`` minus the trader's fee (or nothing,
-when the producer curtails at a negative price). Per 15-min interval the group's gain
-from sharing is
+Sharing and selling the rest on spot go together: what the members do not take is sold
+on spot either way. With sharing, the members' shared energy is worth their supplier
+price ``p`` (they do not buy it) and the unshared surplus the spot price; on spot,
+every kWh of the surplus earns the spot price. The spot price is ``v = s − fee`` (the
+trader's fee; nothing when the producer curtails at a negative price). Per 15-min
+interval the group's gain from sharing is therefore only that of the shared energy,
 
-    G = Σ_j (p_j − v) · shared_j + Σ_i (f_i − v) · unshared_i,     v = s − fee,
+    G = Σ_j (p_j − v) · shared_j,
 
-and the producer's *break-even price* of the shared energy is what it must get per kWh
-to earn as much as on spot: (spot revenue − f · unshared) / shared.
+so sharing pays while the supplier prices are above what the shared energy would get on
+spot (:attr:`Comparison.capture_shared`, mostly midday prices: well below the average
+spot price). That is also the producer's *break-even price*: what it must get per kWh
+shared to earn as much as on spot. The feed-in price matters only for the billing by
+contribution (who gets what).
 
 Who gets what
 -------------
@@ -38,20 +42,18 @@ The group's value hides who gets it. With sharing the producers are paid by the 
 as the billing by contribution says (:func:`split`: the Shapley values of the billing in
 the compared intervals, scaled to the benefit realized there, as the billing's
 settlement does): a producer gets its shared energy at the feed-in price plus its fair
-share of the benefit, and the feed-in price for the unshared surplus; a member saves
-its fair share against buying from its supplier. On spot the producers get the spot
+share of the benefit, and the spot price for the unshared surplus; a member saves its
+fair share against buying from its supplier. On spot the producers get the spot
 revenue of their whole surplus and the members save nothing. The two sides add up to the
 group's values above.
 
-Part on spot
-------------
-Selling a share ``r`` of the production on spot is a reserve for sale: in every 15 min
-``r · P`` goes to the spot market and the rest is shared by today's EDC method with the
-same keys (:func:`replays`, as the exact method's reserve). The replay is anchored to the
-report (``r = 0`` is the report's sharing, ``r = 1`` all on spot); :func:`mix` values every
-level, the unshared rest at the feed-in price. Selling only that unshared rest on spot
-(a feed-in contract at the spot price) is :attr:`Comparison.rest_on_spot_value`.
-Deciding every 15 min where each kWh goes would add at most
+Part offered for sharing
+------------------------
+Offering only a share ``s`` of the production for sharing: in every 15 min ``(1 − s) · P``
+goes to the spot market first and the rest is shared by today's EDC method with the same
+keys (:func:`replays`, as the exact method's reserve); what nobody takes goes to spot as
+well. The replay is anchored to the report (``s = 1`` is the report's sharing, ``s = 0``
+all on spot); :func:`mix` values every level. Deciding every 15 min where each kWh goes would add at most
 :attr:`Comparison.spot_better_kc` (an upper bound: EDC sharing cannot be switched per
 interval).
 """
@@ -500,12 +502,14 @@ class Comparison:
         return self.SU.sum(axis=0)
 
     @cached_property
-    def at_feed_in(self) -> np.ndarray:
-        return self.feed_ins * self.unshared
+    def unshared_at_spot(self) -> np.ndarray:
+        """Kč each producer gets for its unshared surplus (on spot, with sharing too)."""
+        return self.value @ self.UN
 
     @cached_property
-    def unshared_at_spot(self) -> np.ndarray:
-        return self.value @ self.UN
+    def supplied_at_spot(self) -> np.ndarray:
+        """Kč each producer's shared energy would have got on spot."""
+        return self.value @ self.SU
 
     @cached_property
     def revenue(self) -> np.ndarray:
@@ -513,15 +517,12 @@ class Comparison:
         return self.value @ (self.SU + self.UN)
 
     @property
-    def unshared_gain(self) -> np.ndarray:
-        return self.at_feed_in - self.unshared_at_spot
-
-    @property
     def break_even(self) -> np.ndarray:
-        """Kč/kWh of shared electricity at which each producer earns as much as on spot."""
+        """Kč/kWh of shared electricity at which each producer earns as much as on spot
+        (its unshared surplus goes to spot either way): what its shared energy would have
+        got there."""
         with np.errstate(divide="ignore", invalid="ignore"):
-            return np.where(self.supplied > 0,
-                            (self.revenue - self.at_feed_in) / self.supplied, np.nan)
+            return np.where(self.supplied > 0, self.supplied_at_spot / self.supplied, np.nan)
 
     # --- the group ---
     @property
@@ -530,26 +531,14 @@ class Comparison:
 
     @property
     def sharing_value(self) -> float:
-        """Kč: members' savings + feed-in revenue of the unshared surplus."""
-        return float(self.at_supplier.sum() + self.at_feed_in.sum())
+        """Kč: members' savings + the unshared surplus sold on spot."""
+        return float(self.at_supplier.sum() + self.unshared_at_spot.sum())
 
     @property
     def gain(self) -> float:
-        return self.sharing_value - self.spot_revenue
-
-    @property
-    def gain_shared(self) -> float:
+        """Kč sharing brings the group against all on spot: the shared energy's supplier
+        prices against what it would have got on spot (the rest is on spot either way)."""
         return float(self.member_gain.sum())
-
-    @property
-    def gain_unshared(self) -> float:
-        return float(self.unshared_gain.sum())
-
-    @property
-    def rest_on_spot_value(self) -> float:
-        """Kč: sharing as in the report, the unshared surplus sold on spot instead of at
-        the feed-in price (a feed-in contract at the spot price)."""
-        return float(self.at_supplier.sum() + self.unshared_at_spot.sum())
 
     @property
     def surplus_kwh(self) -> float:
@@ -557,8 +546,9 @@ class Comparison:
 
     @property
     def priced(self) -> bool:
-        """Every supplier and feed-in price is known (else the sharing side is NaN)."""
-        return not (np.isnan(self.prices).any() or np.isnan(self.feed_ins).any())
+        """Every supplier price is known (else the sharing side is NaN); the feed-in
+        prices matter only for the billing by contribution."""
+        return not np.isnan(self.prices).any()
 
     def _avg(self, num: float, den: float) -> float:
         return num / den if den > 0 else float("nan")
@@ -573,9 +563,6 @@ class Comparison:
         """Kč/kWh the shared energy would have got on spot."""
         return self._avg(float(self.shared_at_spot.sum()), float(self.shared.sum()))
 
-    @property
-    def capture_unshared(self) -> float:
-        return self._avg(float(self.unshared_at_spot.sum()), float(self.unshared.sum()))
 
     @property
     def capture(self) -> float:
@@ -588,13 +575,9 @@ class Comparison:
         return self._avg(float(self.at_supplier.sum()), float(self.shared.sum()))
 
     @property
-    def feed_in_avg(self) -> float:
-        return self._avg(float(self.at_feed_in.sum()), float(self.unshared.sum()))
-
-    @property
     def break_even_avg(self) -> float:
-        return self._avg(self.spot_revenue - float(self.at_feed_in.sum()),
-                         float(self.supplied.sum()))
+        """Kč/kWh the shared energy would have got on spot: what sharing must beat."""
+        return self.capture_shared
 
     # --- 15 min by 15 min: where spot pays more than sharing ---
     @cached_property
@@ -646,12 +629,11 @@ class Comparison:
     # --- per 15 min (the group) ---
     @cached_property
     def per_interval(self) -> pd.DataFrame:
-        """Kč per 15 min: the gain on the shared energy and on the unshared surplus, the
-        spot revenue; kWh shared and unshared; the spot price (Kč/kWh)."""
+        """Kč per 15 min: the gain on the shared energy, the spot revenue; kWh shared and
+        unshared; the spot price (Kč/kWh)."""
         v = self.value[:, None]
         return pd.DataFrame({
             "gain_shared": ((self.prices[None, :] - v) * self.SH).sum(axis=1),
-            "gain_unshared": ((self.feed_ins[None, :] - v) * self.UN).sum(axis=1),
             "spot_revenue": self.value * self.flows.surplus,
             "shared": self.SH.sum(axis=1),
             "unshared": self.UN.sum(axis=1),
@@ -722,9 +704,8 @@ class Split:
     member_saving: np.ndarray       # per member: its fair share (vs buying from its supplier)
     member_payment: np.ndarray      # per member: paid to the producers for the shared energy
     producer_shared: np.ndarray     # per producer: paid for its shared energy
-    producer_unshared: np.ndarray   # per producer: the unshared surplus at the feed-in price
+    producer_unshared: np.ndarray   # per producer: the unshared surplus on spot
     producer_spot: np.ndarray       # per producer: the whole surplus on spot
-    producer_rest: np.ndarray       # per producer: paid for the shared + unshared on spot
     supplied: np.ndarray            # kWh per producer shared
     daily: pd.DataFrame             # Kč per day: producers' sharing − spot, members' saving
 
@@ -755,10 +736,6 @@ class Split:
     @property
     def producers_spot(self) -> float:
         return float(self.producer_spot.sum())
-
-    @property
-    def producers_rest(self) -> float:
-        return float(self.producer_rest.sum())
 
     @property
     def members_saving(self) -> float:
@@ -796,16 +773,15 @@ def split(cmp: Comparison, bill: BillResult | None) -> Split | None:
         # members pay their supplier price and the producers share what they pay
         # equally above the feed-in value, as the billing's settlement does
         shared_paid = shared_paid + realized / max(len(shared_paid), 1)
-    # per day: the producers' sharing − spot and the members' saving
+    # per day: the producers' sharing − spot (the unshared surplus is on spot either way)
+    # and the members' saving
     f, v = cmp.feed_ins, cmp.value
-    prod_t = (cmp.SU + cmp.UN) @ f + factor * ps_t.sum(axis=1) - v * cmp.flows.surplus
+    prod_t = cmp.SU @ f + factor * ps_t.sum(axis=1) - v * cmp.SU.sum(axis=1)
     daily = pd.DataFrame({"producers": prod_t, "members": factor * ms_t.sum(axis=1)},
                          index=cmp.index).resample("D").sum()
     return Split(member_saving=saving, member_payment=cmp.at_supplier - saving,
-                 producer_shared=shared_paid, producer_unshared=cmp.at_feed_in.copy(),
-                 producer_spot=cmp.revenue.copy(),
-                 producer_rest=shared_paid + cmp.unshared_at_spot, supplied=cmp.supplied.copy(),
-                 daily=daily)
+                 producer_shared=shared_paid, producer_unshared=cmp.unshared_at_spot.copy(),
+                 producer_spot=cmp.revenue.copy(), supplied=cmp.supplied.copy(), daily=daily)
 
 
 def missing_surplus(data: SharingData, spot: SpotPrices) -> float:
@@ -817,27 +793,24 @@ def missing_surplus(data: SharingData, spot: SpotPrices) -> float:
 
 
 def monthly(cmp: Comparison) -> pd.DataFrame:
-    """Per month (Kč/kWh): the average spot price, what the surplus got on spot (energy
-    weighted), the supplier price of the shared energy and the feed-in price."""
+    """Per month (Kč/kWh): the average spot price, what the shared energy would have got
+    on spot (energy weighted: what sharing must beat), the supplier price of the shared
+    energy; kWh of surplus."""
     pi = cmp.per_interval
     surplus = pi["shared"] + pi["unshared"]
     month = pi.index.to_period("M")
     g = pd.DataFrame({
-        "spot": pi["spot"], "rev": pi["spot_revenue"], "surplus": surplus,
+        "spot": pi["spot"], "rev": cmp.value * pi["shared"], "surplus": surplus,
         "sup": cmp.SH @ np.nan_to_num(cmp.prices), "sh": pi["shared"],
-        "fin": cmp.UN @ np.nan_to_num(cmp.feed_ins), "un": pi["unshared"],
     }).groupby(month)
     out = pd.DataFrame({
         "mean_spot": g["spot"].mean(),
-        "capture": g["rev"].sum() / g["surplus"].sum().replace(0, np.nan),
+        "capture": g["rev"].sum() / g["sh"].sum().replace(0, np.nan),
         "supplier": g["sup"].sum() / g["sh"].sum().replace(0, np.nan),
-        "feed_in": g["fin"].sum() / g["un"].sum().replace(0, np.nan),
         "surplus": g["surplus"].sum(),
     })
     if np.isnan(cmp.prices).any():
         out["supplier"] = np.nan
-    if np.isnan(cmp.feed_ins).any():
-        out["feed_in"] = np.nan
     return out
 
 
@@ -845,7 +818,8 @@ def monthly(cmp: Comparison) -> pd.DataFrame:
 # Part of the production on spot, the rest shared
 # ---------------------------------------------------------------------------
 
-#: shares of the production sold on spot (the rest is shared)
+#: shares of the production sold on spot first (the rest is offered for sharing); the
+#: curve shows them as the share offered, ``1 − r``
 LEVELS = tuple(round(x, 2) for x in np.linspace(0, 1, 11))
 
 
@@ -856,6 +830,7 @@ class Replays:
     levels: tuple
     shared: np.ndarray        # (L, n) kWh each member got
     supplied: np.ndarray      # (L, np) kWh each producer shared
+    per_interval: np.ndarray  # (L, T) kWh shared in each interval with a spot price
 
 
 @memoized
@@ -867,7 +842,7 @@ def replays(data: SharingData, spot: SpotPrices, keys: tuple | None, rounds: int
     P2, D = producer_arrays(data)
     valid = ~np.isnan(np.asarray(spot.price, dtype=float))
     P2, D = P2[valid], D[valid]
-    shared, supplied = [], []
+    shared, supplied, per_t = [], [], []
     for r in LEVELS:
         P_eff = P2 - np.round(P2 * r).astype(np.int64)
         if pair_keys is not None:
@@ -879,58 +854,61 @@ def replays(data: SharingData, spot: SpotPrices, keys: tuple | None, rounds: int
                                                         1 / P_eff.shape[1])
         shared.append(s.sum(axis=0) / 100)
         supplied.append(q.sum(axis=0) / 100)
-    return Replays(LEVELS, np.array(shared, dtype=float), np.array(supplied, dtype=float))
+        per_t.append(s.sum(axis=1) / 100)
+    return Replays(LEVELS, np.array(shared, dtype=float), np.array(supplied, dtype=float),
+                   np.array(per_t, dtype=float))
 
 
 @dataclass
 class Mix:
-    """Kč per level of :data:`LEVELS`: the members' savings on what is still shared, the
-    feed-in price of the surplus nobody takes, the spot sales; and the best level."""
+    """Kč per share of the production offered for sharing (ascending, 0 = all on spot,
+    1 = the report's sharing): the members' savings on what is shared, the spot sales of
+    the rest (what was not offered and what nobody took); and the best share."""
 
     levels: np.ndarray
     members: np.ndarray
-    feed_in: np.ndarray
     spot: np.ndarray
     shared_kwh: np.ndarray
 
     @property
     def total(self) -> np.ndarray:
-        return self.members + self.feed_in + self.spot
+        return self.members + self.spot
 
     @property
     def best(self) -> int:
-        """Index of the best level (the lowest share of spot among equals)."""
+        """Index of the best share (the highest share offered among equals)."""
         tot = self.total
-        return int(np.flatnonzero(tot >= np.nanmax(tot) - 0.005)[0])
+        return int(np.flatnonzero(tot >= np.nanmax(tot) - 0.005)[-1])
 
     @property
     def step_cost(self) -> float:
-        """Kč the group loses on average per step of :data:`LEVELS` (10 % of the
-        production) moved from sharing to spot, between 0 % and 100 %; negative: it
-        gains."""
+        """Kč the group loses on average per step of 10 % of the production taken from
+        sharing to spot, between all shared and all on spot; negative: it gains."""
         tot = self.total
         steps = len(tot) - 1
-        return float((tot[0] - tot[-1]) / steps) if steps else 0.0
+        return float((tot[-1] - tot[0]) / steps) if steps else 0.0
 
 
 def mix(cmp: Comparison, rep: Replays) -> Mix:
-    """Value the levels with the comparison's prices. The replay is anchored to the
-    report: at 0 % each member gets what the report gave it (the replay scaled by the
-    report / replay ratio), at 100 % nothing; what a producer shares follows the same
-    way, so the unshared rest is its production left after the spot sale and sharing."""
-    lv = np.asarray(rep.levels, dtype=float)
+    """Value the shares offered with the comparison's prices: the shared energy at the
+    members' supplier prices, everything else at the spot price of its interval. The
+    replay is anchored to the report: with all offered each member gets what the report
+    gave it (the replay scaled by the report / replay ratio, per member and per interval),
+    with nothing offered nothing."""
+    r = np.asarray(rep.levels, dtype=float)
     base = rep.shared[0]
     with np.errstate(divide="ignore", invalid="ignore"):
-        ratio = np.where(base > 0, rep.shared / np.where(base > 0, base, 1),
-                         (1 - lv)[:, None])
+        ratio = np.where(base > 0, rep.shared / np.where(base > 0, base, 1), (1 - r)[:, None])
     S = cmp.shared[None, :] * ratio                                   # (L, n)
-    pbase = rep.supplied[0]
+    # per interval: what is shared, anchored to the report the same way
+    valid = cmp.valid
+    report_t = cmp.SH.sum(axis=1)[valid]                              # (Tv,)
+    tbase = rep.per_interval[0]
     with np.errstate(divide="ignore", invalid="ignore"):
-        Q = np.where(pbase > 0, rep.supplied / np.where(pbase > 0, pbase, 1),
-                     (1 - lv)[:, None]) * cmp.supplied[None, :]
-        tot = Q.sum(axis=1, keepdims=True)
-        Q = np.where(tot > 0, Q * S.sum(axis=1, keepdims=True) / np.where(tot > 0, tot, 1), 0)
-    production = cmp.supplied + cmp.unshared                          # (np,)
-    U = np.clip((1 - lv)[:, None] * production[None, :] - Q, 0, None)
-    return Mix(levels=lv, members=S @ cmp.prices, feed_in=U @ cmp.feed_ins,
-               spot=lv * cmp.spot_revenue, shared_kwh=S.sum(axis=1))
+        tratio = np.where(tbase > 0, rep.per_interval / np.where(tbase > 0, tbase, 1),
+                          (1 - r)[:, None])
+    shared_t = report_t[None, :] * tratio                             # (L, Tv)
+    rest_on_spot = cmp.spot_revenue - shared_t @ cmp.value[valid]     # (L,)
+    order = slice(None, None, -1)                                     # ascending share offered
+    return Mix(levels=(1 - r)[order], members=(S @ cmp.prices)[order],
+               spot=rest_on_spot[order], shared_kwh=S.sum(axis=1)[order])

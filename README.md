@@ -141,34 +141,37 @@ The interface is available in Czech, English and German (switch in the top bar; 
 
 * The question is who gets what. With sharing, the members pay the producers as the
   **billing by contribution** says (the Shapley value): a producer gets its shared
-  electricity at the feed-in price plus its fair share of the benefit, and the feed-in
-  price for the unshared surplus; a member saves its fair share against its supplier price.
+  electricity at the feed-in price plus its fair share of the benefit, and the spot price
+  for the unshared surplus (sharing and selling the rest on spot go together); a member saves its fair share against its supplier price.
   On spot, the producers get the spot price for the whole surplus and the members buy
   everything from their supplier (they save nothing). The group is the sum of both sides.
 * The answer first: a box says whether sharing pays for the producers (and what the members
-  save), for the group, whether selling only the unshared rest on spot (a feed-in contract at
-  the spot price) or a share of the production pays more, how much choosing every 15 min
-  could add at most, and what the producers need per kWh shared to earn as much as on spot.
+  save) and for the group, what the shared electricity would get on spot (the price sharing
+  must beat, usually well below the average spot price), whether offering only a share of
+  the production for sharing pays more, and how much choosing every 15 min could add at
+  most.
   Without a billing for the prices typed, the box speaks for the group. The card's button
   *Compute the billing by contribution* is always there and enabled only then (and not while
   the billing runs), so typing a price does not move the card; the billing's progress shows
   in the card.
-* **Part on spot** (group): the value for 0, 10, …, 100 % of the production sold on spot, the
-  rest shared by today's EDC method with the keys of the panel (estimated or typed); 0 % is
-  the report's sharing, 100 % all on spot.
+* **Share offered for sharing** (group): the value for 0, 10, …, 100 % of the production
+  offered for sharing, shared by today's EDC method with the keys of the panel (estimated
+  or typed), the rest on spot; 0 % is all on spot, 100 % the report's sharing.
 * The OTE prices of the report's period are downloaded when the tab opens (after a failure,
   the next time it opens); the comparison then follows every price, fee or tick typed, with
   no button.
-* Inputs: the supplier and feed-in prices of the panel, with the base prices for the empty
-  cells (the same fields as in the billing card), the fee for selling on spot in CZK/MWh, and
-  whether the producer stops selling at a negative price.
+* Inputs: the supplier prices of the panel, with the base price for the empty cells (the
+  same field as in the billing card), the fee for selling on spot in CZK/MWh, and whether
+  the producer stops selling at a negative price; the feed-in prices only for the billing.
 * Tiles: producers with sharing and on spot, what sharing brings them, what the members save,
-  the group's gain (shared electricity and unshared surplus), the surplus at negative prices.
-* Figures: who gets what (producers and members, stacked) for sharing, sharing with the rest
-  on spot, and all on spot; the group's value by the share sold on spot; per participant
+  the group's gain (the shared electricity at the supplier prices against spot), the surplus
+  at negative prices.
+* Figures: who gets what (producers and members, stacked) for sharing (the rest on spot) and
+  all on spot; the group's value by the share offered for sharing; per participant
   (producers' income, members' savings) with sharing and on spot; per day what sharing brings
   the producers and the members (click selects the day); the selected day's spot price
-  against the supplier and feed-in prices, with the surplus below; the prices per month.
+  against the supplier price, with the surplus below; the prices per month (with what the
+  shared electricity got on spot).
   Tables per producer and per member, each producer's break-even price.
 
 **Export:**
@@ -480,39 +483,44 @@ seconds). Period *k* of a day starts (k − 1) × 15 min after midnight in absol
 the 23- and 25-hour days land on the report's local wall clock. Days that are over stay
 in memory for every user (public data). Intervals without a price are left out of both
 sides, with a note. The server needs outbound HTTPS to www.ote-cr.cz (and api.cnb.cz for
-the fallback rate); when OTE cannot be reached the card says why, and the button tries
-again.
+the fallback rate); when OTE cannot be reached the card says why, and opening the tab
+again tries again.
 
-**Comparison.** With sharing, a member's shared kWh is worth its supplier price *p* (it did
-not buy it) and the unshared surplus the feed-in price *f*. On spot every kWh of the surplus
-earns *v* = spot price − fee (with curtailment never below 0). Per 15 min the group gains
+**Comparison.** Sharing and selling the rest on spot go together: what the members do not
+take is sold on spot either way. With sharing, a member's shared kWh is worth its supplier
+price *p* (it did not buy it); every other kWh of the surplus earns *v* = spot price − fee
+(with curtailment never below 0), with sharing and on spot alike. Per 15 min the group gains
 
-    G = Σ_j (p_j − v) · shared_j + Σ_i (f_i − v) · unshared_i,
+    G = Σ_j (p_j − v) · shared_j,
 
-which is the value with sharing minus the spot revenue.
+which is the value with sharing minus the spot revenue. So sharing pays while the supplier
+prices are above what the shared electricity would get on spot (Σ v · shared / Σ shared):
+that is mostly the price at times of high production, often well below the average spot
+price. The feed-in price matters only for the billing by contribution (who gets what).
 
-**Part on spot.** Selling a share *r* of the production is a reserve for sale: *r · P*
-goes to spot in every 15 min and the rest is shared by EDC's method with the same keys
-and rounds (`keyfit.replay_edc`, several producers `replay_edc_multi` with the pair keys),
-for *r* = 0, 10, …, 100 % (≈ 2 s for 150 members over a year, then memoised). The replay is
-anchored to the report member by member, so 0 % is exactly the report and 100 % exactly
-all on spot. Choosing every 15 min where each shared kWh goes (spot when spot − fee is
-above the member's supplier price) gives an upper bound; EDC sharing cannot do that.
-Sharing as in the report with the unshared rest sold on spot instead of at the feed-in
-price is Σ_j p_j · shared_j + Σ_i v · unshared_i; the verdict compares it with the other
-options.
+**Share offered for sharing.** Offering only a share *s* of the production: *(1 − s) · P*
+goes to spot in every 15 min, the rest is shared by EDC's method with the same keys and
+rounds (`keyfit.replay_edc`, several producers `replay_edc_multi` with the pair keys), and
+what nobody takes goes to spot too; for *s* = 0, 10, …, 100 % (≈ 2 s for 150 members over a
+year, then memoised). The value is Σ_j p_j · shared_j + Σ v · (the rest), each kWh at the
+spot price of its interval. The replay is anchored to the report member by member and
+interval by interval, so 100 % is exactly the report's sharing and 0 % exactly all on spot.
+Choosing every 15 min where each shared kWh goes (spot when spot − fee is above the
+member's supplier price) gives an upper bound; EDC sharing cannot do that.
 
 **Who gets what.** With the billing by contribution for the same prices, the billing's
 Shapley values per 15 min are summed over the compared intervals and scaled to the benefit
 realized there (Σ p · shared − Σ f · supplied), as its settlement does over the whole report:
 with a spot price everywhere the factor is 1 and the members' savings are the billing's
-shares. A producer gets f · its shared energy + its scaled share, so the producers get exactly
-what the members pay; with nothing to gain (supplier prices not above the feed-in prices) the
+shares. A producer gets f · its shared energy + its scaled share for the shared electricity, so
+the producers get exactly what the members pay, and the spot price for its unshared
+surplus; with nothing to gain (supplier prices not above the feed-in prices) the
 members pay their supplier price and the producers share it, as the settlement does.
 
 A producer's **break-even price**
-of the shared electricity is (spot revenue − f · unshared) / shared: with an internal price
-between it and the members' supplier price both sides are better off than on spot. The
+of the shared electricity is what that electricity would get on spot (Σ v · supplied /
+supplied): with an internal price between it and the members' supplier price both sides
+are better off than on spot. The
 members' shares and payments are internal transfers and do not enter G; after the billing
 by contribution the price window tile also shows what the billing pays per kWh.
 
