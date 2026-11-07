@@ -1,6 +1,6 @@
-"""Callbacks of the report: the two columns (EDC report on the left; the exact method
-or the billing on the right), the hourly plot of the selected day, and the day
-selection."""
+"""Callbacks of the report: the two columns (EDC report on the left; on the right the
+exact method on the sharing tab, the billing on the billing tab), the hourly plot of
+the selected day, and the day selection."""
 
 from __future__ import annotations
 
@@ -28,47 +28,28 @@ from .layout import fig_id, job_ids, spot_fig_id
 HIDDEN = {"display": "none"}
 _REVS = dict(exact_rev=Input(job_ids("exact")["rev"], "data"),
              bill_rev=Input(job_ids("bill")["rev"], "data"),
-             view=Input("right-view", "value"))
+             view=Input("tabs", "value"))
 _MEMBERS = dict(selected=Input("members", "selectedRows"),
                 changed=Input("members", "cellValueChanged"),
                 src_changed=Input("producers", "cellValueChanged"))
 _MEMBER_STATE = dict(rows=State("members", "rowData"), src_rows=State("producers", "rowData"))
 
 
-def right_mode(entry: store.Entry | None, view: str | None) -> str | None:
-    """What the right column shows: "exact", "bill" or nothing."""
+def right_mode(entry: store.Entry | None, tab: str | None) -> str | None:
+    """What the right column shows: the billing on the billing tab, the exact method on
+    the others (the spot tab hides the columns), or nothing before that computation."""
     if entry is None:
         return None
-    if view == "bill" and entry.bill is not None:
-        return "bill"
-    if entry.exact is not None:
-        return "exact"
-    return "bill" if entry.bill is not None else None
+    if tab == "bill":
+        return "bill" if entry.bill is not None else None
+    return "exact" if entry.exact is not None else None
 
 
-@callback(
-    Output("right-view", "options"),
-    Output("right-view", "value"),
-    Output("right-view-box", "style"),
-    Input(job_ids("exact")["rev"], "data"),
-    Input(job_ids("bill")["rev"], "data"),
-    Input("data-key", "data"),
-    Input("lang", "value"),
-    State("right-view", "value"),
-)
-def right_view(_exact_rev, _bill_rev, key, lang, current):
-    """The switch appears when both computations exist; one that has just finished is
-    shown."""
-    entry = store.get(key)
-    options = [{"label": t("right_exact", lang), "value": "exact"},
-               {"label": t("right_bill", lang), "value": "bill"}]
-    if entry is None:
-        return options, "exact", HIDDEN
-    value = {job_ids("bill")["rev"]: "bill",
-             job_ids("exact")["rev"]: "exact"}.get(ctx.triggered_id, current or "exact")
-    value = right_mode(entry, value) or "exact"
-    both = entry.exact is not None and entry.bill is not None
-    return options, value, {} if both else HIDDEN
+def _to_spot(tab: str | None) -> bool:
+    """The spot tab was just opened: the columns are hidden there and keep what they
+    show (other changes made on the spot tab are drawn as for the sharing tab, and
+    opening the sharing or billing tab draws its own)."""
+    return tab == "spot" and set(ctx.triggered_prop_ids or {}) == {"tabs.value"}
 
 
 @dataclass
@@ -212,7 +193,7 @@ RENDER_OUTPUTS = dict(
 )
 def render(key, exact_rev, bill_rev, view, selected, changed, src_changed, lang, group,
            heat_metric, theme_name, rows, src_rows, sel_day):
-    if members.key_only_edit():
+    if members.key_only_edit() or _to_spot(view):
         raise dash.exceptions.PreventUpdate      # a key or price changed: figures unaffected
     group = (group or "").strip()
     title = t("report_title_group", lang).format(group=group) if group else t("report_title", lang)
@@ -350,7 +331,7 @@ def hourly(day, key, exact_rev, bill_rev, view, selected, changed, src_changed, 
            theme_name, rows, src_rows):
     """The selected day in 15-min steps. The energy plots share one y axis fitted to
     the day, so both methods compare on one scale; the billing (Kč) has its own."""
-    if members.key_only_edit():
+    if members.key_only_edit() or _to_spot(view):
         raise dash.exceptions.PreventUpdate
     s = _scope(key, selected, lang, theme_name, src_rows, rows)
     if s is None or not day:

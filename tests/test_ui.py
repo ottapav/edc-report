@@ -1,6 +1,6 @@
 """Every button of the page in a real browser (Playwright + Chromium), against the app
 served from this process: upload, key estimate, the exact method, the billing (its card
-and the spot tab), the spot prices (a fake OTE), the right column, days, the heat-map
+and the spot tab), the spot prices (a fake OTE), the tabs and their right column, days, the heat-map
 metric, the grids, export, print, theme, language, the article link, a bad file, and the
 reload offer after a deploy. The tests run in order on one page and fail on any console
 error or HTTP error.
@@ -215,6 +215,16 @@ def test_exact(ui):
     ui.wait_filled("#exact-result")
 
 
+def test_bill_tab(ui):
+    """The billing has its own tab: its card above the columns, the sharing tab's card
+    hidden; the right column waits for the billing (only the EDC report is drawn)."""
+    ui.page.click("#tab-bill")
+    ui.page.wait_for_selector("#pane-bill", state="visible")
+    assert not ui.visible("#pane-sharing") and ui.visible("#pane-columns")
+    ui.page.wait_for_selector("#compare.single", state="attached")
+    assert not ui.visible("#cmp-card") and not ui.visible("#settle-card")
+
+
 def test_bill_without_prices(ui):
     """Refused (the button never gets busy): says which price is missing."""
     ui.page.click("#bill-btn")
@@ -233,20 +243,27 @@ def test_bill(ui):
     ui.wait_filled("#bill-result")
 
 
-def test_right_view(ui):
-    assert ui.visible("#right-view-box")                   # both computations exist
-    for view in ("exact", "bill"):
-        ui.option("right-view", view).click()
-        ui.settle()
-        assert ui.checked("right-view", view)
+def test_tabs_choose_the_right_column(ui):
+    """Both computations exist: each tab draws its own next to the EDC report."""
+    ui.page.wait_for_selector("#compare.right-bill", state="attached")
+    ui.page.click("#tab-sharing")
+    ui.page.wait_for_selector("#compare.right-exact", state="attached")
+    ui.page.wait_for_selector("#cmp-card", state="visible")
+    assert not ui.visible("#settle-card") and not ui.visible("#pane-bill")
+    ui.page.click("#tab-bill")
+    ui.page.wait_for_selector("#compare.right-bill", state="attached")
+    ui.page.wait_for_selector("#settle-card", state="visible")
+    assert not ui.visible("#cmp-card")
+    ui.page.click("#tab-sharing")                          # the next tests start there
+    ui.page.wait_for_selector("#pane-sharing", state="visible")
 
 
 def test_day_buttons(ui):
     day = ui.day()
-    ui.page.click("#btn-prev-day")
+    before = ui.page.input_value(".day-picker input")      # read before the click: the
+    ui.page.click("#btn-prev-day")                         # answer may come at once
     ui.page.wait_for_function(
-        "d => document.querySelector('.day-picker input').value !== d",
-        arg=ui.page.input_value(".day-picker input"))
+        "d => document.querySelector('.day-picker input').value !== d", arg=before)
     assert ui.day() == day - timedelta(days=1)
     ui.page.click("#btn-next-day")
     ui.settle()
@@ -333,7 +350,7 @@ def test_spot_tab(ui):
     ui.page.click("#tab-spot")
     ui.page.wait_for_selector("#spot-progress.done", state="attached", timeout=JOB_TIMEOUT)
     ui.page.wait_for_selector("#spot-body", state="visible")
-    assert not ui.visible("#pane-sharing")
+    assert not ui.visible("#pane-sharing") and not ui.visible("#pane-columns")
     ui.wait_filled("#spot-verdict")
     assert not ui.visible("#spot-bill-box")              # billed with these prices
 
@@ -381,6 +398,7 @@ def test_pool(ui, csvs):
     ui.page.wait_for_selector("#pair-box", state="visible")
     cls, text = ui.run("exact")
     assert "done" in cls, text
+    ui.page.click("#tab-bill")
     cls, text = ui.run("bill")                       # the prices typed above still hold
     assert "done" in cls, text
     ui.page.click("#tab-spot")

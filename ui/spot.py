@@ -27,15 +27,19 @@ HIDDEN = {"display": "none"}
 
 
 # Tabs: only the panes' visibility changes, in the browser; nothing is unmounted, so
-# the callbacks of the hidden tab keep their components.
+# the callbacks of the hidden tab keep their components. The sharing and billing tabs
+# share the columns (pane-columns); each shows its own card above them.
 clientside_callback(
     """
     function(tab) {
-        const spot = tab === 'spot';
-        return [spot ? {display: 'none'} : {}, spot ? {} : {display: 'none'}];
+        const show = {}, hide = {display: 'none'};
+        return [tab === 'sharing' ? show : hide, tab === 'bill' ? show : hide,
+                tab === 'spot' ? hide : show, tab === 'spot' ? show : hide];
     }
     """,
     Output("pane-sharing", "style"),
+    Output("pane-bill", "style"),
+    Output("pane-columns", "style"),
     Output("pane-spot", "style"),
     Input("tabs", "value"),
 )
