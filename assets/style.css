@@ -103,6 +103,14 @@ body {
 .status-ok { color: var(--ink-2); }
 .status-ok .ok { color: var(--accent); font-weight: 700; }
 .status-error { color: var(--err); background: var(--err-bg); border: 1px solid var(--err-line); padding: 10px 12px; border-radius: 8px; }
+/* the app was deployed since the page loaded (assets/version.js) */
+.stale-banner { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1000;
+    display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px);
+    color: var(--ink); background: var(--warn-bg); border: 1px solid var(--warn-line);
+    border-left: 4px solid var(--warn); border-radius: 8px; padding: 10px 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .18); font-size: 14px; }
+.stale-banner .btn-primary { flex: none; }
+@media print { .stale-banner { display: none; } }
 
 /* ---- report grid ----------------------------------------------------- */
 .report { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; align-items: start; }

@@ -302,9 +302,11 @@ def layout() -> html.Div:
             children=upload_content("cs", False),
         ),
         # spinner only next to the upload: wrapping the report in dcc.Loading would hide
-        # (unmount) it while the upload callback runs and drop updates arriving meanwhile
+        # (unmount) it while the upload callback runs and drop updates arriving meanwhile.
+        # The report's render may write the status too (session lost): delay_show keeps
+        # the status line from blinking to the spinner on every quick re-render.
         dcc.Loading(type="dot", color="#339933", target_components={"upload-status": "children"},
-                    children=html.Div(id="upload-status", className="status")),
+                    delay_show=500, children=html.Div(id="upload-status", className="status")),
         _report(),
     ])
 
@@ -312,11 +314,13 @@ def layout() -> html.Div:
 #: the page before its first paint: apply the saved or the system theme (no light flash).
 #: The icon (assets/favicon.*) replaces Dash's {%favicon%}: browsers take the SVG, the
 #: sizes on the ICO keep Chrome from preferring it.
+#: The meta app-version is the code version the page was served with (app.VERSION).
 INDEX_STRING = """<!DOCTYPE html>
 <html>
     <head>
         {%metas%}
         <title>{%title%}</title>
+        <meta name="app-version" content="__APP_VERSION__">
         <link rel="icon" href="/assets/favicon.ico" sizes="32x32">
         <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
         <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
