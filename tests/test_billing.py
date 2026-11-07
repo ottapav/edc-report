@@ -364,3 +364,20 @@ def test_panel_grids_and_ean_tails(pool_key):
     assert names[data.source_eans[0]] == "Střecha" and names[data.dest_eans[0]] == "Škola"
     facts = str(views.facts("x.csv", data, set(data.dest_eans), names, "cs"))
     assert data.source_eans[0] not in facts and "…" + data.source_eans[0][-3:] in facts
+
+
+def test_a_member_kept_short_by_the_keys_is_paid_the_difference():
+    """The article's example: keys 70/30/0 give Filip nothing, though he would take 6 of
+    the 12 kWh. The shares do not depend on the keys, so his share (scaled to what the
+    report realized) is more than he saved: his payment is negative, the producer pays it,
+    and the page says why."""
+    res = B.compute_shapley(np.array([1200]), np.array([[400, 500, 600]]), [4, 4, 4], 1.0)
+    bill = B.settle(res, [4.0, 5.0, 0.0])
+    assert bill.efficiency == pytest.approx(27 / 36)
+    assert list(bill.share) == pytest.approx([3.75 * 0.75, 5.25 * 0.75, 6.75 * 0.75])
+    assert bill.payment[2] == pytest.approx(-5.06, abs=0.005)
+    assert float(bill.producer_income.sum()) == pytest.approx(float(bill.payment.sum()), abs=0.005)
+    note = views.negative_payment_note(bill.payment, 1, "cs")
+    assert note and "Rozdíl mu doplatí výrobce" in note[0].children
+    assert views.negative_payment_note(B.settle(res, [4.0, 4.8, 3.2]).payment, 1, "cs") == []
+    assert "výrobci" in views.negative_payment_note(bill.payment, 2, "cs")[0].children

@@ -1,5 +1,5 @@
 """Obrázek „Srovnání výpočtů“ (doba výpočtu a podíl rozdělené elektřiny podle velikosti
-skupiny): ``python -m clanek.srovnani [--lang cs|en|de|all]``.
+skupiny): ``python -m clanky.do_posledni_kwh.srovnani [--lang cs|en|de|all]``.
 
 Kreslí ho z ``srovnani.json`` (výsledek ``bench_scaling.py``: medián doby výpočtu jedné
 čtvrthodiny a podíl nasdílené elektřiny pro 5–1000 odběrných míst). Potřebuje matplotlib.
@@ -10,7 +10,9 @@ import argparse
 import json
 from pathlib import Path
 
-from . import LANGS, img_dir
+from clanky import DO_POSLEDNI_KWH, LANGS
+
+img_dir = DO_POSLEDNI_KWH.img_dir
 
 DATA = Path(__file__).with_name("srovnani.json")
 METHODS = ("Statická, 1 kolo", "Statická, 5 kol", "Přesná statická")   # klíče v srovnani.json

@@ -329,5 +329,7 @@ def bill_result(rev, key, lang, selected, feed_in, default, changed, src_changed
     changed = inputs is None or any(
         abs(a - b) > 1e-9 for a, b in zip([*inputs[0], *inputs[1]],
                                           [*totals.prices, *totals.feed_ins]))
-    return dict(result=views.bill_result(result, len(data.source_eans), lang), table=[table],
+    note = views.negative_payment_note(result.settlement.payment, len(data.source_eans), lang)
+    return dict(result=views.bill_result(result, len(data.source_eans), lang),
+                table=[table, *note],
                 stale=views.hint(t("bill_stale", lang), "stale") if changed else [])

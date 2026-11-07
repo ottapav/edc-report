@@ -18,8 +18,9 @@ with the computation timed per 15-min interval.
 
 The interface is available in Czech, English and German (switch in the top bar; the explanatory article is available in the same three languages).
 
-**Live:** <https://edc-report.uceeb.cvut.cz/> · explanatory article:
-<https://edc-report.uceeb.cvut.cz/clanek/> (Czech), [`/clanek/en/`](https://edc-report.uceeb.cvut.cz/clanek/en/), [`/clanek/de/`](https://edc-report.uceeb.cvut.cz/clanek/de/)
+**Live:** <https://edc-report.uceeb.cvut.cz/> · explanatory articles ([`clanky/`](clanky/README.md)):
+<https://edc-report.uceeb.cvut.cz/clanky/do-posledni-kwh/> (Czech), [`…/en/`](https://edc-report.uceeb.cvut.cz/clanky/do-posledni-kwh/en/), [`…/de/`](https://edc-report.uceeb.cvut.cz/clanky/do-posledni-kwh/de/);
+the billing by contribution (draft, Czech): <https://edc-report.uceeb.cvut.cz/clanky/spravedliva-cena/>
 
 > **Česky:** Webová aplikace, která zobrazuje data o sdílení elektřiny z CSV reportu
 > vygenerovaného na portálu edc-cr.cz. Po nahrání CSV ukáže
@@ -367,13 +368,17 @@ producers in proportion to their production. The page says it is a pool in the e
 method's card (before the computation), next to the key estimate and in the column titles;
 the export too, with a sheet of the pair keys.
 
-**Explanatory article (Czech, English, German).** [`clanek/`](clanek/README.md) explains the approximate and
-the exact static method, the pool mode for several producers and the results for one real
-group, for a broad audience (written for TZB-info, UCEEB ČVUT). The app assembles it from
-`clanek/clanek.html`, `clanek.en.html` or `clanek.de.html` and the figures in `clanek/schemata.py` on
-every request, serves it at `/clanek/`, `/clanek/en/` and `/clanek/de/` and links the version for the
-current interface language from the *Exact static method* card, so an edit in the repository is
-what the app shows.
+**Explanatory articles.** Each article has its own folder in [`clanky/`](clanky/README.md),
+for a broad audience (written for TZB-info, UCEEB ČVUT):
+[`do_posledni_kwh/`](clanky/do_posledni_kwh/README.md) explains the approximate and the exact
+static method, the pool mode for several producers and the results for one real group (Czech,
+English, German); [`spravedliva_cena/`](clanky/spravedliva_cena/README.md) explains the billing
+by contribution (Shapley value; Czech, a draft). The app assembles an article from its folder
+(`clanek.html`, translations `clanek.en.html` / `clanek.de.html`, figures from its
+`schemata.py`) and the shared style `clanky/styl.css` on every request, serves it at
+`/clanky/<address>/` (`…/en/`, `…/de/`; the old `/clanek/…` addresses redirect to the first
+article) and links the first one in the interface language from the *Exact static method*
+card, so an edit in the repository is what the app shows.
 
 **Timing.** The loop runs in a forked worker process: it gets a whole core, and the web
 server's threads do not disturb the measurement. It is timed with that process's CPU clock:

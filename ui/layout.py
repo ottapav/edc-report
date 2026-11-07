@@ -35,8 +35,8 @@ SPOT_FIGURES = ("parties", "mix", "members", "daily", "hourly", "monthly")
 PAIRED_FIGURES = ("overview", "pie", "daily", "hourly", "heat")
 
 
-# explanatory article on the exact static method and the pool mode (cs/en/de), see clanek/
-ARTICLE_URL = "/clanek/"
+# explanatory article on the exact static method and the pool mode (cs/en/de), see clanky/
+ARTICLE_URL = "/clanky/do-posledni-kwh/"
 
 
 def job_ids(kind: str) -> dict[str, str]:

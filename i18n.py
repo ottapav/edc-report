@@ -231,6 +231,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "bill_hint": "Payment = price × shared − share of the benefit. The producer receives the sum of the "
                      "payments; its share is that sum minus what the shared energy would have earned at "
                      "the feed-in price. Members whose price is not above the feed-in price get no share.",
+        "bill_negative": "Negative payment: by the keys the member got less electricity than its contribution, and its share of the benefit is more than it saved at its supplier on that electricity. The producer pays it the difference. The shares do not depend on the keys; keys closer to the members' consumption usually remove negative payments.",
+        "bill_negative_n": "Negative payment: by the keys the member got less electricity than its contribution, and its share of the benefit is more than it saved at its supplier on that electricity. The producers pay it the difference. The shares do not depend on the keys; keys closer to the members' consumption usually remove negative payments.",
         "bill_hint_n": "Payment = price × shared − share of the benefit. The payments make a pool; each producer "
                        "receives the feed-in value of the energy it shared plus its share of the benefit (the "
                        "report does not say who supplied whom). The cheapest production goes to the dearest "
@@ -653,6 +655,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "bill_hint": "Platba = cena × nasdíleno − podíl na úspoře. Výrobce dostane součet plateb; jeho podíl "
                      "je tento součet minus to, co by nasdílená energie vynesla za výkupní cenu. Člen, jehož "
                      "cena není vyšší než výkupní, podíl nedostane.",
+        "bill_negative": "Záporná platba: člen dostal podle klíčů méně elektřiny, než odpovídá jeho přínosu, a jeho podíl na úspoře je vyšší, než kolik na této elektřině ušetřil u prodejce. Rozdíl mu doplatí výrobce. Podíly na úspoře na klíčích nezávisí; klíče bližší spotřebě členů záporné platby obvykle odstraní.",
+        "bill_negative_n": "Záporná platba: člen dostal podle klíčů méně elektřiny, než odpovídá jeho přínosu, a jeho podíl na úspoře je vyšší, než kolik na této elektřině ušetřil u prodejce. Rozdíl mu doplatí výrobci. Podíly na úspoře na klíčích nezávisí; klíče bližší spotřebě členů záporné platby obvykle odstraní.",
         "bill_hint_n": "Platba = cena × nasdíleno − podíl na úspoře. Platby tvoří bazén; každá výrobna dostane "
                        "výkupní hodnotu své nasdílené energie plus svůj podíl na úspoře (report neříká, kdo "
                        "komu dodal). Nejlevnější výroba jde k nejdražší spotřebě; člen, jehož cena není vyšší "
