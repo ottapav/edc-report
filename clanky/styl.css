@@ -48,6 +48,7 @@ svg .lbl.mut { fill: var(--muted); font-weight: 450; }
 svg .lbl.acc { fill: var(--accent); font-weight: 650; }
 svg .vessel { fill: none; stroke: var(--ink); stroke-width: 2.4; }
 svg .water { fill: var(--accent); opacity: .32; }
+svg .part-prod { fill: var(--shared); opacity: .32; }
 svg .dash { stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 6 5; }
 svg .grid { stroke: var(--rule); stroke-width: 1; }
 svg .mark { stroke: var(--lost); stroke-width: 1.2; stroke-dasharray: 3 3; }

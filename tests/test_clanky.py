@@ -8,7 +8,7 @@ FIG = {"cs": r"Obr\.", "en": r"Fig\.", "de": r"Abb\."}
 TAB = {"cs": r"Tabulka", "en": r"Table", "de": r"Tabelle"}
 CITE = {"cs": ("obr", "tabul\\w*"), "en": ("fig", "table"), "de": ("abb", "tabelle")}
 #: per article: (figures, tables, at least so many drawn SVG schemata), the title per language
-SHAPE = {"do_posledni_kwh": (7, 4, 4), "spravedliva_cena": (0, 3, 0)}
+SHAPE = {"do_posledni_kwh": (7, 4, 4), "spravedliva_cena": (1, 3, 1)}
 TITLE = {
     "do_posledni_kwh": {"cs": "Sdílení elektřiny", "en": "Electricity sharing", "de": "Stromteilung"},
     "spravedliva_cena": {"cs": "Spravedlivá cena sdílené kilowatthodiny"},

@@ -14,8 +14,12 @@ doplnit a značku odstranit:
 * ceny, se kterými se počítá vyúčtování skutečné skupiny z minulého článku, a výsledky ze
   záložky *Vyúčtování* (úspora, podíl výrobce, ceny členů, srovnání s pevnou cenou);
 * dva obrázky do `img/` (kam šla úspora; podíl výrobce nebo cena po měsících), v textu jako
-  `<figure>` stejně jako v minulém článku;
+  `<figure>` stejně jako v minulém článku (budou to obr. 2 a 3);
 * odkaz na minulý článek po jeho vydání (zdroj [1]).
+
+Otevřené otázky z editorské revize: kontaktní e-mail v rámečku o UCEEB (`@cvut.cz`, nebo
+`@uceeb.cz`?) a období skutečné skupiny („od září 2025 do září 2026“: 12, nebo 13 měsíců?
+sjednotit s prvním článkem).
 
 Čísla příkladů (Dana, Emil, Filip; tabulky 1 a 2; záporná platba) spočítá funkce aplikace
 `billing.compute_shapley` a `billing.settle`; příklad se zápornou platbou hlídá test
@@ -27,7 +31,8 @@ doplnit a značku odstranit:
 | --- | --- |
 | Text, tabulky, zdroje | `clanek.html` |
 | Vzhled (společný pro všechny články) | [`../styl.css`](../styl.css) |
-| Obrázky | `img/` (zatím žádné) |
+| Schéma cenového žebříčku (obr. 1) | `schemata.py`, funkce `zebricek` → značka `{{ZEBRICEK}}` |
+| Obrázky z aplikace | `img/` (zatím žádné) |
 
 Lokální náhled: `python app.py` a otevřít <http://127.0.0.1:8050/clanky/spravedliva-cena/>.
 Samostatná verze pro redakci: `python -m clanky spravedliva_cena export/`.
