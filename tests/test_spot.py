@@ -455,16 +455,20 @@ def test_the_tab_fetches_once_and_renders(entry_key, monkeypatch):
             return fn(**kw)
         return copy_context().run(inner)
 
-    out = run(ui_spot.start_spot, "tabs.value", n=0, tab="spot", key=entry_key, job_id=None,
+    out = run(ui_spot.start_spot, "tabs.value", tab="spot", key=entry_key, job_id=None,
               lang="cs")
     assert started == [entry_key] and out["job"] == "job"
     with pytest.raises(dash.exceptions.PreventUpdate):     # on the sharing tab: nothing
-        run(ui_spot.start_spot, "tabs.value", n=0, tab="sharing", key=entry_key, job_id=None,
+        run(ui_spot.start_spot, "tabs.value", tab="sharing", key=entry_key, job_id=None,
             lang="cs")
+    # the download failed (no prices): opening the tab again tries again
+    out = run(ui_spot.start_spot, "tabs.value", tab="spot", key=entry_key, job_id=None,
+              lang="cs")
+    assert started == [entry_key, entry_key]
     entry = store.get(entry_key)
     entry.spot = _prices(entry.data)
     with pytest.raises(dash.exceptions.PreventUpdate):     # prices there: no new fetch
-        run(ui_spot.start_spot, "tabs.value", n=0, tab="spot", key=entry_key, job_id=None,
+        run(ui_spot.start_spot, "tabs.value", tab="spot", key=entry_key, job_id=None,
             lang="cs")
     args = dict(key=entry_key, rev=1, tab="spot", selected=None, changed=None,
                 src_changed=None, feed_in="1,1", default="4,2", fee="200", curtail=["on"],
@@ -477,19 +481,24 @@ def test_the_tab_fetches_once_and_renders(entry_key, monkeypatch):
     # no keys yet (estimate still running): the curve says so, the verdict is there
     assert "odhadu klíčů" in out["mix"].layout.annotations[0].text
     assert "vyplatí" in str(out["verdict"])
-    # no billing yet: the card offers it, the verdict is about the group
-    assert out["bill_box"] == {} and "vyúčtování podle přínosu" in out["bill_note"]
+    # no billing yet: the card's button is enabled (it says why), the verdict is about
+    # the group
+    assert out["bill_need"] is True and "vyúčtování podle přínosu" in out["bill_title"]
     rows = [{"ean": e, "key": 15} for e in entry.data.dest_eans]
     out = ui_spot.render_spot(**{**args, "rows": rows, "curtail": []}, fit_rev=0,
                               pair_changed=None, bill_rev=0, pair_rows=None,
                               sel_day="2025-10-05")
     assert len(out["mix"].data) == 4 and "Skupině se vyplatí sdílet" in str(out["verdict"])
-    # after the billing with the same prices: who gets what, the card's button hides
+    # after the billing with the same prices: who gets what, the card's button is off
     _bill(entry_key, price=4.2, feed=1.1)
     out = ui_spot.render_spot(**{**args, "rows": rows, "curtail": []}, fit_rev=0,
                               pair_changed=None, bill_rev=1, pair_rows=None,
                               sel_day="2025-10-05")
-    assert out["bill_box"] == {"display": "none"}
+    assert out["bill_need"] is False and "spočítané pro tyto ceny" in out["bill_title"]
+    # no prices typed: nothing to compute, the button says what is missing
+    no_price = ui_spot.render_spot(**{**args, "default": None}, fit_rev=0, pair_changed=None,
+                                   bill_rev=1, pair_rows=None, sel_day="2025-10-05")
+    assert no_price["bill_need"] is False and "Zadejte ceny" in no_price["bill_title"]
     assert "Výrobny: se sdílením dostanou" in str(out["verdict"])
     assert [tr.name for tr in out["parties"].data] == ["výrobny dostanou", "členové ušetří"]
     fig, _style = ui_spot.spot_hourly(day="2025-10-05", **{**args, "lang": "en",
@@ -512,7 +521,8 @@ def test_layout_has_the_tabs_and_the_spot_card():
     assert {"tabs", "tab-sharing", "tab-bill", "tab-spot", "pane-sharing", "pane-bill",
             "pane-columns", "pane-spot", "bill-card", "spot-btn",
             "spot-fee", "spot-curtail", "spot-feed-in", "spot-price-default", "spot-table",
-            "spot-bill-btn", "spot-bill-box"} <= ids
+            "spot-bill-btn", "spot-bill-need", "spot-bill-progress"} <= ids
+    assert "spot-bill-box" not in ids
     assert {layout.spot_fig_id(n) for n in layout.SPOT_FIGURES} <= ids
 
 

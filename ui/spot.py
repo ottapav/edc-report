@@ -1,6 +1,8 @@
-"""Callbacks of the spot tab: switch the tabs, fetch the OTE prices (on the first visit
-of the tab, or with the button), and draw the comparison. The comparison takes a few
-milliseconds, so it follows every price, fee or selection typed, with no button."""
+"""Callbacks of the spot tab: switch the tabs, fetch the OTE prices (when the tab opens
+and they are not there yet: a failed download is tried again the next time), and draw
+the comparison. The comparison takes a few milliseconds, so it follows every price, fee
+or selection typed, with no button. The card's only button starts the billing by
+contribution; it is enabled only when who gets what needs it."""
 
 from __future__ import annotations
 
@@ -66,24 +68,20 @@ def _running(job_id: str | None, key: str | None) -> bool:
 
 @callback(
     output=start_outputs("spot"),
-    inputs=dict(n=Input(_SPOT["btn"], "n_clicks"), tab=Input("tabs", "value"),
-                key=Input("data-key", "data")),
+    inputs=dict(tab=Input("tabs", "value"), key=Input("data-key", "data")),
     state=dict(job_id=State(_SPOT["job"], "data"), lang=State("lang", "value")),
     prevent_initial_call=True,
 )
-def start_spot(n, tab, key, job_id, lang):
-    """The button fetches the prices (again); opening the tab fetches them once."""
-    clicked = ctx.triggered_id == _SPOT["btn"]
-    if not clicked and tab != "spot":
+def start_spot(tab, key, job_id, lang):
+    """Opening the tab fetches the prices if they are not there (again after a failure)."""
+    if tab != "spot":
         raise dash.exceptions.PreventUpdate
     entry = store.get(key)
     if entry is None:
-        if clicked:
-            return refused("session_lost", lang)
         raise dash.exceptions.PreventUpdate
     if entry.data.fmt != "all":
         return refused("part_no_spot", lang)
-    if _running(job_id, key) or (not clicked and entry.spot is not None):
+    if _running(job_id, key) or entry.spot is not None:
         raise dash.exceptions.PreventUpdate
     return started(jobs.start_spot(key))
 
@@ -142,7 +140,7 @@ def part_on_spot(entry, cmp, rows, pair_rows, lang):
 _OUTPUTS = dict(
     body=Output("spot-body", "style"), info=Output("spot-info", "children"),
     verdict=Output("spot-verdict", "children"),
-    bill_box=Output("spot-bill-box", "style"), bill_note=Output("spot-bill-note", "children"),
+    bill_need=Output("spot-bill-need", "data"), bill_title=Output("spot-bill-btn", "title"),
     tiles=Output("spot-tiles", "children"), table=Output("spot-table", "children"),
     **{name: Output(spot_fig_id(name), "figure") for name in SPOT_FIGURES if name != "hourly"},
     **{f"{name}_h": Output(spot_fig_id(name), "style")
@@ -162,7 +160,7 @@ def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default,
     entry = store.get(key)
     empty = {k: no_update for k in _OUTPUTS}
     if entry is None or entry.spot is None or entry.data.fmt != "all":
-        return {**empty, "body": HIDDEN, "info": []}
+        return {**empty, "body": HIDDEN, "info": [], "bill_need": False, "bill_title": ""}
     data = entry.data
     cmp = comparison(entry, rows, src_rows, feed_in, default, fee, curtail)
     m, why = part_on_spot(entry, cmp, rows, pair_rows, lang)
@@ -186,7 +184,9 @@ def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default,
     )
     out = dict(body={}, info=views.spot_info(entry.spot, data, lang),
                verdict=views.spot_verdict(cmp, m, sp, lang, why, billed),
-               bill_box=HIDDEN if need is None else {}, bill_note=need or "",
+               bill_need=need is not None,
+               bill_title=(need or t("spot_bill_current", lang)) if cmp.priced
+               else t("spot_need_prices_short", lang),
                tiles=views.spot_tiles(cmp, sp, lang, billed),
                table=views.spot_table(cmp, sp, data, names, lang, top, enabled, billed), **figs)
     for name, fig in figs.items():
@@ -208,6 +208,19 @@ def spot_hourly(day, key, rev, tab, selected, changed, src_changed, feed_in, def
     fig = fig_spot_intraday(cmp, str(day)[:10] if day else None, lang=lang,
                             th=theme(theme_name))
     return fig, {"height": f"{fig.layout.height}px"}
+
+
+# The billing's button in the spot card: enabled when who gets what needs the billing
+# (missing, or computed with other prices) and it is not running. It never hides, so
+# typing a price does not move the card.
+clientside_callback(
+    """
+    function(need, busy) { return !need || !!busy; }
+    """,
+    Output("spot-bill-btn", "disabled"),
+    Input("spot-bill-need", "data"),
+    Input(_BILL["btn"], "disabled"),
+)
 
 
 # The billing's progress, shown in the spot card too (its button there starts it).

@@ -352,12 +352,9 @@ def test_spot_tab(ui):
     ui.page.wait_for_selector("#spot-body", state="visible")
     assert not ui.visible("#pane-sharing") and not ui.visible("#pane-columns")
     ui.wait_filled("#spot-verdict")
-    assert not ui.visible("#spot-bill-box")              # billed with these prices
-
-
-def test_spot_refetch(ui):
-    cls, text = ui.run("spot")
-    assert "done" in cls, text
+    assert not ui.visible("#spot-btn")                   # the prices come by themselves
+    assert ui.visible("#spot-bill-btn")                  # always there …
+    ui.page.wait_for_selector("#spot-bill-btn[disabled]", state="attached")  # … off: billed
 
 
 def test_spot_fee_and_curtail(ui):
@@ -374,13 +371,16 @@ def test_spot_fee_and_curtail(ui):
 
 
 def test_spot_bill_button(ui):
-    """Other prices: the billing is stale, the spot tab offers it and its button runs it."""
+    """Other prices: the billing is stale, the spot card's button turns on (it does not
+    appear: the card does not move) and runs it; then it is off again."""
+    top = ui.page.locator("#spot-verdict").bounding_box()["y"]
     ui.type_number("#spot-price-default", "5")
-    ui.page.wait_for_selector("#spot-bill-box", state="visible")
+    ui.page.wait_for_selector("#spot-bill-btn:not([disabled])", state="visible")
+    assert ui.page.locator("#spot-verdict").bounding_box()["y"] == top
     assert ui.page.input_value("#price-default") == "5"
     cls, text = ui.run("bill", button="#spot-bill-btn")
     assert "done" in cls, text
-    ui.page.wait_for_selector("#spot-bill-box", state="hidden")
+    ui.page.wait_for_selector("#spot-bill-btn[disabled]", state="visible")
     assert "done" in ui.page.get_attribute("#spot-bill-progress", "class")
 
 
