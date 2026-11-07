@@ -377,8 +377,10 @@ by contribution (Shapley value; Czech, a draft). The app assembles an article fr
 (`clanek.html`, translations `clanek.en.html` / `clanek.de.html`, figures from its
 `schemata.py`) and the shared style `clanky/styl.css` on every request, serves it at
 `/clanky/<address>/` (`…/en/`, `…/de/`; the old `/clanek/…` addresses redirect to the first
-article) and links the first one in the interface language from the *Exact static method*
-card, so an edit in the repository is what the app shows.
+article) and links each one above the button of its card, in the interface language: the
+first from the *Exact static method* card, the second from the *Billing by contribution*
+card (Czech in every language until translated). An edit in the repository is what the app
+shows.
 
 **Timing.** The loop runs in a forked worker process: it gets a whole core, and the web
 server's threads do not disturb the measurement. It is timed with that process's CPU clock:
@@ -712,7 +714,7 @@ needed. It checks that:
   billing from its card and from the spot tab (also refused without prices), the spot prices
   and their fee and curtailment, the tabs and their right column, the day buttons, the heat-map metric,
   unticking a member, typing a key and putting the estimate back, export (with full EANs),
-  print (light and dark), theme, the three languages, the article link, a bad file, two
+  print (light and dark), theme, the three languages, the article links, a bad file, two
   producers, and the reload offer after a deploy. Any console or HTTP error fails the test.
   In CI (`CI` set) a missing browser is an error, not a skip.
 

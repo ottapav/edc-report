@@ -52,6 +52,7 @@ LABELS = [
     ("lbl-reserve", "children", "reserve"),
     ("bill-title", "children", "bill_title"),
     ("bill-desc", "children", "bill_desc"),
+    ("bill-article", "children", "bill_article"),
     ("bill-btn", "children", "bill_btn"),
     ("lbl-feed-in", "children", "feed_in"),
     ("lbl-price-default", "children", "price_default"),
@@ -89,6 +90,7 @@ def _labels(lang):
         exact_title=Output("exact-btn", "title"),
         exact_pool=Output("exact-pool", "children"),
         article_href=Output("exact-article", "href"),
+        bill_article_href=Output("bill-article", "href"),
         bill_title=Output("bill-btn", "title"),
     ),
     inputs=dict(lang=Input("lang", "value"), key=Input("data-key", "data")),
@@ -105,6 +107,7 @@ def _report_labels(lang, key, heat):
         upload=upload_content(lang, entry is not None),
         day_format=date_picker_format(lang),
         article_href=clanky.DO_POSLEDNI_KWH.url(lang),
+        bill_article_href=clanky.SPRAVEDLIVA_CENA.url(lang),     # Czech only so far
         heat_options=[{"label": t(f"heat_{m}", lang), "value": m} for m in metrics],
         heat_value=heat if heat in metrics else metrics[0],
         heat_box={"display": "none"} if len(metrics) < 2 else {},   # part report: no choice

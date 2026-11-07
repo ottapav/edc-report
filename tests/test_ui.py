@@ -1,7 +1,7 @@
 """Every button of the page in a real browser (Playwright + Chromium), against the app
 served from this process: upload, key estimate, the exact method, the billing (its card
 and the spot tab), the spot prices (a fake OTE), the tabs and their right column, days, the heat-map
-metric, the grids, export, print, theme, language, the article link, a bad file, and the
+metric, the grids, export, print, theme, language, the article links, a bad file, and the
 reload offer after a deploy. The tests run in order on one page and fail on any console
 error or HTTP error.
 
@@ -338,9 +338,17 @@ def test_print(ui, theme):
         ui.settle()
 
 
-def test_article_link(ui):
-    href = ui.page.get_attribute("#exact-article", "href")
-    assert ui.page.request.get(ui.base_url + href).status == 200
+def test_article_links(ui):
+    """The exact method's card and the billing card each link their article, above the button."""
+    for kind, slug in (("exact", "do-posledni-kwh"), ("bill", "spravedliva-cena")):
+        href = ui.page.get_attribute(f"#{kind}-article", "href")
+        assert href.startswith(f"/clanky/{slug}/")
+        assert ui.page.request.get(ui.base_url + href).status == 200
+        assert ui.page.inner_text(f"#{kind}-article").endswith("↗")
+        above = ui.page.evaluate(
+            """k => document.getElementById(k + '-article').compareDocumentPosition(
+                   document.getElementById(k + '-btn')) & Node.DOCUMENT_POSITION_FOLLOWING""", kind)
+        assert above, kind
 
 
 # --- spot tab ---------------------------------------------------------------------------

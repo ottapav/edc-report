@@ -4,8 +4,9 @@ Vysvětlující článek pro širokou veřejnost (psaný pro TZB-info, UCEEB ČV
 na [Sdílení elektřiny do poslední kilowatthodiny](../do_posledni_kwh/README.md). Vysvětluje
 vyúčtování podle přínosu (Shapleyho hodnota) ze záložky *Vyúčtování* aplikace: co se dělí, jak
 se počítá, proč je to spravedlivé, proč na klíčích nezávisí a co znamená záporná platba.
-Zatím jen česky, na adrese **`/clanky/spravedliva-cena/`**; z aplikace na něj zatím nic
-neodkazuje.
+Zatím jen česky, na adrese **`/clanky/spravedliva-cena/`**; aplikace na něj odkazuje z karty
+*Vyúčtování sdílené elektřiny podle přínosu* nad tlačítkem výpočtu (v angličtině a němčině
+s poznámkou, že je česky).
 
 **Stav: rozpracováno.** Žlutě zvýrazněná místa (`<mark class="todo">`) je třeba před vydáním
 doplnit a značku odstranit:

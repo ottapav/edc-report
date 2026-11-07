@@ -145,10 +145,13 @@ def test_unknown_article_or_language_is_404(client):
     assert b'class="langnav"' not in page.data and b"fig-no" not in page.data
 
 
-def test_app_links_the_first_article_in_the_ui_language():
+def test_app_links_both_articles_in_the_ui_language():
+    """The exact method's card links the first article, the billing card the second one
+    (Czech in every language until it is translated)."""
     from ui import panel
     for lang in clanky.LANGS:
         out = (panel._report_labels.__wrapped__(lang, None, None)
                if hasattr(panel._report_labels, "__wrapped__")
                else panel._report_labels(lang, None, None))
         assert out["article_href"] == clanky.DO_POSLEDNI_KWH.url(lang)
+        assert out["bill_article_href"] == clanky.SPRAVEDLIVA_CENA.url(lang)
