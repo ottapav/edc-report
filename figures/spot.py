@@ -176,14 +176,15 @@ def fig_spot_members(cmp: Comparison, sp: Split | None, data: SharingData,
         j = [idx[e] for e in group]
         label = (t("others", lang).format(n=len(group)) if key == OTHER else names.get(key, key))
         rows.append((label, float(sp.member_saving[j].sum()), 0.0, cmap.get(key, OTHER_COLOUR)))
-    rows = rows[::-1]                               # producers on top
+    # producers on top (reversed axis): the first bar of the coloured trace is then the
+    # producer's, and its colour is the one the legend shows
     y = [r[0] for r in rows]
     cur = _cur(lang)
     hover = "%{y}<br>%{fullData.name}: %{x:,.0f} " + cur + "<extra></extra>"
-    fig.add_bar(y=y, x=[r[2] for r in rows], orientation="h", name=t("spot_on_spot", lang),
-                marker=dict(color=th["unshared"]), hovertemplate=hover)
     fig.add_bar(y=y, x=[r[1] for r in rows], orientation="h", name=t("spot_with_sharing", lang),
                 marker=dict(color=[r[3] for r in rows]), hovertemplate=hover)
+    fig.add_bar(y=y, x=[r[2] for r in rows], orientation="h", name=t("spot_on_spot", lang),
+                marker=dict(color=th["unshared"]), hovertemplate=hover)
     xs = [v for r in rows for v in r[1:3]]
     hi, lo = max([0.0, *xs]), min([0.0, *xs])
     notes = [dict(x=max(r[1], r[2], 0.0) + 0.01 * (hi - lo or 1.0), y=r[0],
@@ -195,9 +196,9 @@ def fig_spot_members(cmp: Comparison, sp: Split | None, data: SharingData,
         height=max(320, 110 + 44 * len(rows)),
         xaxis=dict(title=t("spot_kc", lang), range=[lo * 1.05, hi * 1.3 if hi else 1.0],
                    tickformat=",.0f", showgrid=True, zeroline=True, zerolinecolor=th["grid"]),
-        yaxis=dict(showgrid=False, ticklabelstandoff=8, type="category"),
+        yaxis=dict(showgrid=False, ticklabelstandoff=8, type="category", autorange="reversed"),
         legend=dict(orientation="h", yanchor="top", y=-0.12, xanchor="left", x=0,
-                    traceorder="reversed", font=dict(size=11)),
+                    traceorder="normal", font=dict(size=11)),
     )
     return fig
 
