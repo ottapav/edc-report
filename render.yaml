@@ -19,7 +19,8 @@ projects:
       # ONE worker: uploads, key estimates, jobs and their progress live in its memory.
       startCommand: gunicorn app:server -c gunicorn.conf.py
       healthCheckPath: /healthz
-      autoDeployTrigger: commit
+      # deploy a commit of main only when its GitHub checks (tests.yml) pass
+      autoDeployTrigger: checksPass
       envVars:
       - key: EDC_CACHE_MAX            # reports kept in memory (~25 MB each)
         value: "6"

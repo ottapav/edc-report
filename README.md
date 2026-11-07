@@ -1,11 +1,13 @@
 # EDC sharing report
 
 [![Live app](https://img.shields.io/badge/live-edc--report.uceeb.cvut.cz-339933)](https://edc-report.uceeb.cvut.cz/)
+[![Tests](https://github.com/ottapav/edc-report/actions/workflows/tests.yml/badge.svg)](https://github.com/ottapav/edc-report/actions/workflows/tests.yml)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](.python-version)
 [![Dash 4.4](https://img.shields.io/badge/Dash-4.4.1-119DFF?logo=plotly&logoColor=white)](requirements.txt)
 [![Deployed on Render](https://img.shields.io/badge/deployed%20on-Render-46E3B7?logo=render&logoColor=white)](render.yaml)
 [![UI: cs | en | de](https://img.shields.io/badge/UI-cs%20%7C%20en%20%7C%20de-555555)](#features)
 [![Last commit](https://img.shields.io/github/last-commit/ottapav/edc-report)](https://github.com/ottapav/edc-report/commits/main)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Interactive web app (Dash) that displays the electricity-sharing data of a Czech sharing
 group. The input is the CSV report generated on [edc-cr.cz](https://www.edc-cr.cz), the portal
@@ -49,6 +51,7 @@ The interface is available in Czech, English and German (switch in the top bar; 
 - [Tests](#tests)
 - [Limitations](#limitations)
 - [Data and privacy](#data-and-privacy)
+- [License](#license)
 
 ## Features
 
@@ -525,6 +528,7 @@ callbacks from both.
 | | `assets/style.css` | Styles, light/dark variables (Dash loads it automatically) |
 | | `gunicorn.conf.py`, `render.yaml`, `.python-version` | Deployment |
 | Checks | `tests/` | pytest suite (synthetic data, no real CSV needed) |
+| | `.github/workflows/tests.yml`, `requirements-dev.txt` | CI: the suite on every pull request and push to `main` |
 | | `bench/keyfit_bench.py` | Reproducible accuracy / time benchmark of the key estimate (synthetic data) |
 
 **One process on purpose.** An upload, its key estimate, a running recompute and its progress
@@ -598,7 +602,7 @@ based on Render's export of the live service, plus the settings the app relies o
 | Build | `pip install -r requirements.txt` (Python 3.11 from `.python-version`) |
 | Start | `gunicorn app:server -c gunicorn.conf.py` |
 | Health check | `/healthz` |
-| Auto-deploy | every commit to `main` |
+| Auto-deploy | a commit to `main` once its checks pass (`autoDeployTrigger: checksPass`) |
 | Environment | `EDC_CACHE_MAX=6`, `EDC_MAX_UPLOAD_MB=25`, `EDC_MAX_JOBS=2`; optionally `BASIC_AUTH_USER` and `BASIC_AUTH_PASSWORD` |
 
 To set it up from scratch, use Render → **New → Blueprint** → this repository → **Apply**.
@@ -609,7 +613,9 @@ Notes:
   `gunicorn app:app`. That works too: Dash 4 is a WSGI app, and gunicorn loads
   `gunicorn.conf.py` from the repository root on its own. Changes to `render.yaml` reach a
   service only when it is managed by a Blueprint; otherwise set the health check and the
-  environment variables in the service settings.
+  environment variables in the service settings. The same holds for the auto-deploy: set
+  *Settings → Auto-Deploy → After CI Checks Pass*. With no checks on a commit Render does not
+  deploy it, so the workflow runs on every push to `main`.
 
 * **Free plan:** 512 MB, and it sleeps after 15 minutes without traffic. The first visit then
   waits about a minute, and uploaded reports are gone; the page says so and asks for the file
@@ -635,9 +641,15 @@ Notes:
 ## Tests
 
 ```bash
-pip install pytest
+pip install -r requirements-dev.txt
 python -m pytest -q tests
 ```
+
+GitHub Actions (`.github/workflows/tests.yml`) runs the suite on Python 3.11 for every pull
+request, on the result of the merge, and for every push to `main`. To keep untested code out
+of `main`, make the check **tests** required: *Settings → Rules → Rulesets* (or *Branches*) →
+rule for `main` → *Require status checks to pass* → `tests`. Render then deploys only commits
+whose checks passed (see *Deployment on Render*).
 
 The suite runs on synthetic groups and a synthetic *all report* CSV, so no real meter data is
 needed. It checks that:
@@ -673,3 +685,7 @@ Uploaded files are parsed in memory only and never written to disk. They disappe
 cache drops them or the server restarts. `.gitignore` excludes `*.csv`, so real meter data
 does not end up in the repository. The screenshots above use a synthetic group. For a public
 deployment, set the basic-auth variables.
+
+## License
+
+[MIT](LICENSE)
