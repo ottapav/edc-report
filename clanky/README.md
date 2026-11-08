@@ -10,6 +10,9 @@ vlastní složku; aplikace ho skládá při každém otevření a obslouží ho 
 
 Starší adresy `/clanek/`, `/clanek/en/` a `/clanek/de/` přesměrují na první článek.
 
+Oba články vycházejí z reportu stejné skutečné skupiny v [`data/`](data/README.md)
+(kódy odběrných míst jsou smyšlené).
+
 ## Co je ve složce článku
 
 | Soubor | Obsah |

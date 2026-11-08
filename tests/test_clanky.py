@@ -8,7 +8,7 @@ FIG = {"cs": r"Obr\.", "en": r"Fig\.", "de": r"Abb\."}
 TAB = {"cs": r"Tabulka", "en": r"Table", "de": r"Tabelle"}
 CITE = {"cs": ("obr", "tabul\\w*"), "en": ("fig", "table"), "de": ("abb", "tabelle")}
 #: per article: (figures, tables, at least so many drawn SVG schemata), the title per language
-SHAPE = {"do_posledni_kwh": (7, 4, 4), "spravedliva_cena": (1, 3, 1)}
+SHAPE = {"do_posledni_kwh": (7, 4, 4), "spravedliva_cena": (3, 3, 1)}
 TITLE = {
     "do_posledni_kwh": {"cs": "Sdílení elektřiny", "en": "Electricity sharing", "de": "Stromteilung"},
     "spravedliva_cena": {"cs": "Spravedlivá cena sdílené kilowatthodiny"},
@@ -92,8 +92,9 @@ def test_article_typography_uses_nonbreaking_spaces():
     assert f"Fig.{NB}1" in a.render("en") and f"50{NB}%" in a.render("en")
     assert f"Abb.{NB}1" in a.render("de") and f"50{NB}%" in a.render("de")
     assert clanky.typography("v domě", "en") == "v domě"            # the Czech rule is Czech only
-    text = re.sub(r"<(pre|style|svg)\b[\s\S]*?</\1>|<[^>]+>", "",
-                  clanky.SPRAVEDLIVA_CENA.render("cs"))
+    second = clanky.SPRAVEDLIVA_CENA.render("cs")
+    assert f"4{NB}Kč/kWh" in second and f"6{NB}705{NB}Kč" in second and f"3{NB}min" in second
+    text = re.sub(r"<(pre|style|svg)\b[\s\S]*?</\1>|<[^>]+>", "", second)
     assert not re.search(r"(?<!\w)[ksvzouaiKSVZOUAI] \S", text)
 
 
@@ -155,3 +156,45 @@ def test_app_links_both_articles_in_the_ui_language():
                else panel._report_labels(lang, None, None))
         assert out["article_href"] == clanky.DO_POSLEDNI_KWH.url(lang)
         assert out["bill_article_href"] == clanky.SPRAVEDLIVA_CENA.url(lang)
+
+
+def test_the_group_data_give_the_numbers_both_articles_quote():
+    """Both articles quote the real group in clanky/data: the numbers in their text are
+    what the app computes from it (the report, and the billing at 4 and 1 Kč/kWh)."""
+    from clanky.spravedliva_cena import obrazky
+    first = clanky.DO_POSLEDNI_KWH.render("cs").replace(NB, " ")
+    second = clanky.SPRAVEDLIVA_CENA.render("cs").replace(NB, " ")
+    s = obrazky.spocitej()
+    d = s.data
+    production = float(d.production.sum())
+    consumption = sum(float(v.sum()) for v in d.demand.values())
+    assert (len(d.frame), d.frame.index[0].date().isoformat()) == (35040, "2025-09-11")
+    for text in (f"{production:,.0f} kWh", f"{consumption:,.0f} kWh"):
+        assert text.replace(",", " ") in first, text
+    from edc_data import producer_arrays
+    P, D = producer_arrays(d)
+    some = P.reshape(len(P), -1).sum(axis=1) > 0
+    enough = some & (P.reshape(len(P), -1).sum(axis=1) >= D.sum(axis=1))
+    assert f"Ze {some.sum():,} čtvrthodin".replace(",", " ") in second
+    assert f"jen ve {enough.sum():,}".replace(",", " ") in second
+    c = obrazky.cisla(s)
+
+    def kc(v, dec=0):
+        return f"{v:,.{dec}f}".replace(",", " ").replace(".", ",")
+
+    quoted = [f"{kc(c['nasdileno'])} kWh", f"{kc(c['uspora'])} Kč", f"{kc(c['nejvyse'])} Kč",
+              f"{kc(c['uslo'])} Kč", f"{kc(c['uslo_kwh'])} kWh", f"{kc(c['vyrobce'])} Kč",
+              f"{kc(c['vyrobce_podil'] * 100)} % skutečné úspory", f"{kc(c['prijem'])} Kč",
+              f"{kc(c['cena_vyrobce'], 2)} Kč za kilowatthodinu",
+              f"{kc(min(c['ceny_clenu']), 2)} až {kc(max(c['ceny_clenu']), 2)} Kč/kWh",
+              f"{kc(c['clenove_pri_dostatku'] * 100)} %",
+              f"{kc(c['nasdileno_clenu'][1])} kWh", f"{kc(c['podily'][1])} Kč",
+              f"{kc(c['nasdileno_clenu'][3])} kWh", f"{kc(c['podily'][3])} Kč",
+              f"{kc(c['pevna_prijem'])} Kč", f"{kc(c['prijem'] - c['pevna_prijem'])} Kč méně",
+              f"o {kc(-c['pevna_rozdil'][1])} Kč méně",
+              f"o {kc(c['pevna_rozdil'][3])} a {kc(c['pevna_rozdil'][4])} Kč víc",
+              f"{kc(c['podil_mesice']['2025-12'] * 100)} a {kc(c['podil_mesice']['2026-01'] * 100)} %",
+              f"{kc(c['leto'][0] * 100)} až {kc(c['leto'][1] * 100)} %",
+              f"{kc(c['leto_dost'][0] * 100)} až {kc(c['leto_dost'][1] * 100)} % čtvrthodin"]
+    for text in quoted:
+        assert text in second, text

@@ -145,16 +145,20 @@
 <p>Více výroben se počítá jako bazén z minulého článku: kterákoli výrobna může dodat kterémukoli členovi. Každá výrobna má vlastní výkupní cenu a nejlevnější výroba jde k nejdražší spotřebě. Podíl každého výrobce se počítá stejně jako podíl člena. Je-li výroben hodně a spotřeby málo, role se obrátí. Vzácní jsou pak členové a jejich podíl roste.</p>
 
 <h2>Vyúčtování skutečné skupiny</h2>
-<p>Vraťme se ke skupině z minulého článku. Má fotovoltaiku 11,44 kWp s baterií 11,6 kWh a pět odběrných míst s klíči 50 % a čtyřikrát 10 %. Za rok od září 2025 do září 2026 se členům nasdílelo 2 235 kWh. Vyúčtování jsme spočítali s cenou od prodejce <mark class="todo">[DOPLNIT]</mark> Kč/kWh pro všechny členy a výkupní cenou <mark class="todo">[DOPLNIT]</mark> Kč/kWh.</p>
-<p>V této skupině je výroba většinou vzácná. Ze 12 707 čtvrthodin, kdy bylo co sdílet, jí bylo dost pro všechny jen ve 3 727, tedy ve 29 %. Podíl výrobce proto čekáme výrazně nad polovinou.</p>
-<ul class="plain">
-  <li><mark class="todo">[DOPLNIT z aplikace]</mark> Úspora ze sdílení: … Kč z nejvýše … Kč při nejlepším sdílení (… %).</li>
-  <li><mark class="todo">[DOPLNIT z aplikace]</mark> Podíl výrobce: … Kč (… % úspory), průměrně … Kč za sdílenou kWh.</li>
-  <li><mark class="todo">[DOPLNIT z aplikace]</mark> Podíly členů a jejich ceny za kWh: od … do … Kč/kWh.</li>
-  <li><mark class="todo">[DOPLNIT z aplikace]</mark> Srovnání s pevnou cenou … Kč/kWh: kdo by si polepšil a kdo pohoršil, o kolik Kč za rok.</li>
-  <li><mark class="todo">[DOPLNIT obrázek]</mark> Kam šla úspora ze sdílení (koláč z aplikace: podíl výrobce, podíly členů, co ušlo při sdílení EDC).</li>
-  <li><mark class="todo">[DOPLNIT obrázek]</mark> Podíl výrobce na úspoře, nebo cena sdílené kWh, podle měsíce: jak se cena mění se vzácností výroby mezi létem a zimou.</li>
-</ul>
+<p>Vraťme se ke skupině z minulého článku. Má fotovoltaiku 11,44 kWp s baterií 11,6 kWh a pět odběrných míst s klíči 50 % a čtyřikrát 10 %. Za rok od září 2025 do září 2026 se členům nasdílelo 2 235 kWh. Vyúčtování jsme spočítali se stejnými cenami jako v příkladech: 4 Kč/kWh od prodejce pro všechny členy a výkupní cena 1 Kč/kWh.</p>
+<p>V této skupině je výroba většinou vzácná. Ze 12 707 čtvrthodin, kdy bylo co sdílet, jí bylo dost pro všechny jen ve 3 727, tedy ve 29 %. Podíl výrobce proto bude nad polovinou.</p>
+<p>Skupina za rok ušetřila 6 705 Kč. Nejlepší sdílení by ušetřilo 7 805 Kč. Zbylých 1 100 Kč odpovídá 367 kWh, které by se stejnými klíči rozdělila navíc přesná statická metoda [1]. Výrobce dostane 3 679 Kč, tedy 55 % skutečné úspory. Spolu s výkupní hodnotou sdílené elektřiny 2 235 Kč mu členové zaplatí 5 914 Kč, v průměru 2,65 Kč za kilowatthodinu. Kam úspora šla, ukazuje obr. 2.</p>
+<figure>
+  <div class="plate"><img src="img/kolac_uspora.png" alt="Koláčový graf: podíl výrobce 3 679 Kč (47,1 %), podíl členů 3 026 Kč (38,8 %), ušlo při sdílení EDC 1 100 Kč (14,1 %); nejvyšší možná úspora 7 805 Kč" width="1520" height="1120"></div>
+  <figcaption><span class="fig-no">Obr. 2</span>Kam šla úspora skupiny za rok, jak ji ukazuje aplikace. Procenta jsou z nejvyšší možné úspory 7 805 Kč. Ze skutečně ušetřených 6 705 Kč připadá výrobci 55 % a členům 45 %. Červená výseč je úspora, o kterou skupina přišla, protože výpočet EDC nerozdělil výrobu do poslední kilowatthodiny.</figcaption>
+</figure>
+<p>Podíl výrobce se během roku mění se vzácností výroby (obr. 3). V prosinci a lednu dostal výrobce 79 a 74 % úspory, od května do srpna 53 až 54 %. Ani v létě to není polovina, protože výroba stačila všem jen ve 32 až 43 % čtvrthodin.</p>
+<figure>
+  <div class="plate"><img src="img/vyrobce_mesice.png" alt="Sloupcový graf podílu výrobce na úspoře po měsících od září 2025 do září 2026: v prosinci 79 %, v lednu 74 %, od května do srpna 53 až 54 %, za celý rok 55 %" width="1800" height="880"></div>
+  <figcaption><span class="fig-no">Obr. 3</span>Podíl výrobce na úspoře podle měsíce. V zimě je výroba vzácná a výrobce dostane víc, v létě se jeho podíl blíží polovině. Zimní měsíce ale roční výsledek skoro neovlivní: v prosinci se nasdílelo 5 kWh, v lednu 13 kWh, od dubna do srpna 320 až 449 kWh měsíčně.</figcaption>
+</figure>
+<p>Členové zaplatí 2,39 až 2,99 Kč/kWh. Většinu svého podílu, 70 %, získali ve čtvrthodinách, kdy výroba stačila všem: tehdy dostane každý polovinu úspory ze své spotřeby. Nejvíc za kilowatthodinu platí člen s klíčem 50 %. Díky velkému klíči dostal nejvíc výroby, 777 kWh, jeho podíl na úspoře je ale jen 787 Kč. Člen s klíčem 10 %, který spotřebovával víc ve čtvrthodinách dostatku, dostal 612 kWh a podíl 984 Kč. Platí proto jen 2,39 Kč/kWh.</p>
+<p>A jak by dopadla pevná cena 2,50 Kč/kWh? Výrobce by za rok dostal 5 588 Kč, o 326 Kč méně. Nejvíc by na ní získal člen s klíčem 50 %, který by zaplatil o 379 Kč méně. Dva členové s nejnižší cenou podle přínosu by naopak zaplatili o 67 a 46 Kč víc. Pevná cena tak přesouvá peníze od výrobce a od členů s velkým přínosem k členovi s velkým klíčem.</p>
 <p>Každá skupina si může vyúčtování spočítat sama. Stačí stáhnout report sdílení z portálu EDC, nahrát ho do aplikace edc-report [8] a zadat ceny. Aplikace spočítá vyúčtování pro každého člena i výrobce a ukáže, kam úspora šla. Soubor neukládá na disk a v paměti serveru ho drží jen po dobu práce, nejdéle hodinu od posledního použití.</p>
 <p class="keypoint">Vyzkoušejte to na své skupině. <span><a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a></span></p>
 
