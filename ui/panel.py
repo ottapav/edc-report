@@ -24,6 +24,7 @@ LABELS = [
     ("table-title", "children", "table_title"),
     ("cmp-title", "children", "cmp_title"),
     ("settle-title", "children", "bill_table_title"),
+    ("bill-more-title", "children", "bill_more"),
     ("theme-btn", "title", "theme_toggle"),
     # panel
     ("lbl-source-hint", "children", "panel_source_hint"),

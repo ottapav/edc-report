@@ -237,7 +237,7 @@ def test_page_and_export_say_pool_and_show_the_pair_keys(pool_entry, monkeypatch
     title = method_title("col_exact", 3, "cs")
     assert title == "Přesná statická metoda (přepočet, bazén 3 výroben)"
     monkeypatch.setattr(members, "key_only_edit", lambda: False)   # outside a callback
-    out = report.render(key, 1, 0, "exact", None, None, None, "cs", "", "production", "light",
+    out = report.render(key, 1, None, None, None, "cs", "", "production", "light",
                         rows, members.producer_rows(data), None)
     assert out["head_b"] == title
     result = views.exact_result(entry.exact, data, enabled, members.default_names(data, "cs"),

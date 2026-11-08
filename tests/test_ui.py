@@ -216,13 +216,12 @@ def test_exact(ui):
 
 
 def test_bill_tab(ui):
-    """The billing has its own tab: its card above the columns, the sharing tab's card
-    hidden; the right column waits for the billing (only the EDC report is drawn)."""
+    """The billing has its own tab: only its card until it is computed (the columns and
+    the heat map's choice in the panel belong to the sharing tab)."""
     ui.page.click("#tab-bill")
     ui.page.wait_for_selector("#pane-bill", state="visible")
-    assert not ui.visible("#pane-sharing") and ui.visible("#pane-columns")
-    ui.page.wait_for_selector("#compare.single", state="attached")
-    assert not ui.visible("#cmp-card") and not ui.visible("#settle-card")
+    assert not ui.visible("#pane-sharing") and not ui.visible("#pane-columns")
+    assert not ui.visible("#bill-body") and not ui.visible("#panel-display")
 
 
 def test_bill_without_prices(ui):
@@ -239,21 +238,33 @@ def test_bill(ui):
     assert ui.page.input_value("#spot-feed-in") == "1,2"   # the same field on the spot tab
     cls, text = ui.run("bill")
     assert "done" in cls, text
-    ui.page.wait_for_selector("#settle-card", state="visible")
-    ui.wait_filled("#bill-result")
+    # the result over the full width: tiles, who pays what (with its notes), two figures
+    ui.page.wait_for_selector("#bill-body", state="visible")
+    ui.wait_filled("#bill-tiles")
+    assert ui.page.locator("#bill-tiles .tile").count() == 4
+    ui.page.wait_for_selector("#settle-table table", state="visible")
+    assert "ERÚ" in ui.text("#settle-table")
+    for fig in ("#fig-bill-pie", "#fig-bill-monthly"):
+        ui.page.wait_for_selector(f"{fig} .main-svg", state="visible")
+    assert "kvadratur" in ui.page.get_attribute("#bill-text", "title")   # how, as a hint
+    # the course over time on demand
+    assert not ui.visible("#fig-bill-daily")
+    ui.page.click("#bill-more summary")
+    ui.page.wait_for_selector("#fig-bill-daily .main-svg", state="visible")
+    ui.page.wait_for_selector("#fig-bill-hourly .main-svg", state="visible")
+    ui.page.click("#bill-more summary")
 
 
-def test_tabs_choose_the_right_column(ui):
-    """Both computations exist: each tab draws its own next to the EDC report."""
-    ui.page.wait_for_selector("#compare.right-bill", state="attached")
+def test_tabs_keep_their_own_content(ui):
+    """Both computations exist: the sharing tab shows the columns with the exact method,
+    the billing tab its result; neither shows the other's."""
     ui.page.click("#tab-sharing")
     ui.page.wait_for_selector("#compare.right-exact", state="attached")
     ui.page.wait_for_selector("#cmp-card", state="visible")
-    assert not ui.visible("#settle-card") and not ui.visible("#pane-bill")
+    assert not ui.visible("#bill-body") and ui.visible("#panel-display")
     ui.page.click("#tab-bill")
-    ui.page.wait_for_selector("#compare.right-bill", state="attached")
-    ui.page.wait_for_selector("#settle-card", state="visible")
-    assert not ui.visible("#cmp-card")
+    ui.page.wait_for_selector("#bill-body", state="visible")
+    assert not ui.visible("#cmp-card") and not ui.visible("#pane-columns")
     ui.page.click("#tab-sharing")                          # the next tests start there
     ui.page.wait_for_selector("#pane-sharing", state="visible")
 

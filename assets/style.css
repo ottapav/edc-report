@@ -285,8 +285,15 @@ body {
 .spot-body .tiles { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .spot-body .tile-value { font-size: 19px; white-space: nowrap; }
 
+/* ---- billing tab: tiles, who pays what, two figures, the course over time on demand ---- */
+.bill-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.bill-body > .tiles-card, .bill-body > .table-card, .bill-body > .bill-more { grid-column: 1 / -1; }
+.bill-body .tiles { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.bill-more > summary { cursor: pointer; font-weight: 600; font-size: 15px; padding: 2px 0; }
+.bill-more[open] > summary { margin-bottom: 8px; }
+
 @media (max-width: 1250px) {
-  .compare.single .col-a, .compare.dual, .spot-body { grid-template-columns: minmax(0, 1fr); }
+  .compare.single .col-a, .compare.dual, .spot-body, .bill-body { grid-template-columns: minmax(0, 1fr); }
   /* one column: the two reports follow each other */
   .compare.dual { grid-template-rows: none; }
   .compare.dual .col { display: flex; flex-direction: column; grid-row: auto; }
@@ -307,7 +314,8 @@ body {
   .report { display: block; }
   .card { break-inside: avoid; border: 0; padding: 0 0 12px; box-shadow: none; }
   /* one column on paper: the figures get the page width */
-  .compare.dual, .compare.single .col-a, .spot-body { display: block; }
+  .compare.dual, .compare.single .col-a, .spot-body, .bill-body { display: block; }
+  .bill-more:not([open]) { display: none; }
   .compare.dual .col { display: block; }
   .js-plotly-plot, .js-plotly-plot .plot-container, .js-plotly-plot .svg-container {
     max-width: 100% !important; }
