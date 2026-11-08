@@ -17,9 +17,8 @@ doplnit a značku odstranit:
   `<figure>` stejně jako v minulém článku (budou to obr. 2 a 3);
 * odkaz na minulý článek po jeho vydání (zdroj [1]).
 
-Otevřené otázky z editorské revize: kontaktní e-mail v rámečku o UCEEB (`@cvut.cz`, nebo
-`@uceeb.cz`?) a období skutečné skupiny („od září 2025 do září 2026“: 12, nebo 13 měsíců?
-sjednotit s prvním článkem).
+Otevřená otázka z editorské revize: období skutečné skupiny („od září 2025 do září 2026“:
+12, nebo 13 měsíců? sjednotit s prvním článkem). Kontaktní e-mail zůstává `@cvut.cz`.
 
 Čísla příkladů (Dana, Emil, Filip; tabulky 1 a 2; záporná platba) spočítá funkce aplikace
 `billing.compute_shapley` a `billing.settle`; příklad se zápornou platbou hlídá test
