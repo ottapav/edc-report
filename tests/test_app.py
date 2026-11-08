@@ -30,3 +30,16 @@ def test_an_unknown_language_never_reaches_the_grid_code():
             f"default_{lang}")
     col = members._name_column("cs; alert(1) //")
     assert col["valueFormatter"]["function"] == "params.value || params.data.default_cs"
+
+
+def test_callbacks_are_registered_as_written():
+    """Dash adds a callback's inputs to the state dict it is given: a dict shared by two
+    callbacks then carries the first one's inputs into the second, which fails at run time
+    (a keyword it does not take). Every callback gets its own dict; this would catch one
+    that does not: a property never is both an input and a state of one callback."""
+    from dash._callback import GLOBAL_CALLBACK_LIST
+    for cb in GLOBAL_CALLBACK_LIST:
+        inputs = [(i["id"], i["property"]) for i in cb["inputs"]]
+        state = {(s["id"], s["property"]) for s in cb["state"]}
+        assert len(inputs) == len(set(inputs)), cb["output"]
+        assert not set(inputs) & state, cb["output"]

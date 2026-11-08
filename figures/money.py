@@ -132,7 +132,9 @@ def fig_bill_monthly(per_interval: pd.DataFrame, producer_cols: list[str], *,
         x=labels, y=share, marker=dict(color=th["source"]), showlegend=False,
         text=[pct(v) for v in share], textposition="outside", cliponaxis=False,
         textfont=dict(size=11, color=th["ink"]),
-        customdata=np.column_stack([m["prod"], m["total"], notes]),
+        # numbers stay numbers for the hover's format (a numpy stack would make them text)
+        customdata=[[float(p), float(tot), note]
+                    for p, tot, note in zip(m["prod"], m["total"], notes)],
         hovertemplate="%{x}%{customdata[2]}<br>" + t("bill_monthly_hover", lang).format(
             share="%{y:,.1f} %", prod="%{customdata[0]:,.0f} " + cur,
             total="%{customdata[1]:,.0f} " + cur) + "<extra></extra>")
