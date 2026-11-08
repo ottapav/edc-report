@@ -98,7 +98,7 @@ def _save(fig: go.Figure, path: Path, w: int, h: int) -> None:
 
 def kolac(s: Skupina, out: Path) -> None:
     th = F.theme("light")
-    fig = F.fig_bill_pie(s.bill.settlement, s.data, set(s.data.dest_eans), "cs", th)
+    fig = F.fig_bill_pie(s.bill.settlement, s.data, "cs", th)
     fig.data[0].labels = ["podíl výrobce", "podíl členů", "ušlo při sdílení EDC"]
     _save(fig, out / "kolac_uspora.png", 760, 560)
 

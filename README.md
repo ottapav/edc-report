@@ -118,7 +118,11 @@ the billing by contribution (draft, Czech): <https://edc-report.uceeb.cvut.cz/cl
 * **Prices:** each member's supplier price (the *Price* column of the grid, next to the keys)
   and each producer's feed-in price (the producers' grid above it); the empty cells take the
   **base** supplier and feed-in prices of the billing card (the same fields are in the spot
-  card). Every number is typed the same way, with a decimal comma or point.
+  card). Every number is typed the same way, with a decimal comma or point. The price
+  columns show on the *Billing* and spot tabs only, the tabs that use them; hidden on the
+  *Sharing* tab they keep what was typed.
+* **The whole group:** the billing is always the whole group's; ticking members off in the
+  panel changes the energy figures of the *Sharing* tab, not the billing (nor its export).
 * **Several producers:** the producers share as a pool (any producer can supply any member);
   each has its own feed-in price.
 * **Compute:** one button computes the exact Shapley values over the whole report in the
@@ -132,8 +136,9 @@ the billing by contribution (draft, Czech): <https://edc-report.uceeb.cvut.cz/cl
   * the **settlement table**: per member the shared energy, its value at the supplier price,
     the fair share of the benefit, the payment to the producer and the effective price per
     kWh; per producer the energy it shared, its income, its share and the feed-in value it
-    gave up. Below it how a payment is computed, why one is negative (when one is) and that
-    it is a proposal for the contract;
+    gave up. The price column only when the prices differ; with one supplier and one feed-in
+    price for everybody a line above the table says them. Below it how a payment is
+    computed, why one is negative (when one is) and that it is a proposal for the contract;
   * **where the benefit went** (pie) and the **producer's share by month** (bars, with half
     and the whole period as lines): scarce production pays the producer more;
   * on demand (**Over time**, collapsed): the daily share (click a day) and the selected day

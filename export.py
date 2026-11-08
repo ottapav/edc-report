@@ -159,8 +159,8 @@ def _method_columns(entry, lang: str) -> list[tuple[str, SharingData, SharingDat
     """(header, data, exact recompute for "could have been shared") of every column the
     page can show for this report: the EDC report; with the exact recompute also the
     exact method and, when it used other keys than the report's, today's method replayed
-    with them. The page shows the report next to the billing and the replay next to the
-    exact method (:func:`ui.report._left_sides`), so the export has both."""
+    with them. The billing is computed from the report, the exact method is compared with
+    the replay (:func:`ui.report._left_sides`), so the export has both."""
     data, exact = entry.data, entry.exact
     n = len(data.source_eans)
     report, replay, exact_t = (method_title(k, n, lang)
@@ -241,11 +241,11 @@ def exact_table(entry, enabled: set[str], names: dict, lang: str) -> Table:
                  [None, None, None], title=t("loss_title", lang))
 
 
-def bill_totals_table(entry, enabled: set[str], lang: str) -> Table:
+def bill_totals_table(entry, lang: str) -> Table:
+    """The billing's totals, for the whole group (as on the page; the selection does not
+    change the billing)."""
     bill = entry.bill.settlement
-    data = entry.data
     cur = t("currency", lang)
-    sel = np.array([e in enabled for e in data.dest_eans])
     n_prod = len(bill.feed_ins)
     rows = [
         [t("bt_benefit", lang), float(bill.realized), cur],
@@ -253,7 +253,7 @@ def bill_totals_table(entry, enabled: set[str], lang: str) -> Table:
         [t("x_efficiency", lang), float(100 * bill.efficiency), "%"],
         [t("bt_lost", lang), float(max(0.0, bill.maximum - bill.realized)), cur],
         [tn("bt_producer", lang, n_prod), float(bill.producer_share.sum()), cur],
-        [t("bt_members", lang), float(bill.share[sel].sum()), cur],
+        [t("bt_members", lang), float(bill.share.sum()), cur],
         [tn("bt_income", lang, n_prod), float(bill.producer_income.sum()), cur],
         [t("bt_feed_in", lang), float(bill.feed_in_value.sum()), cur],
     ]
@@ -378,28 +378,29 @@ def compare_table(entry, enabled: set[str], names: dict, lang: str, full_ean: bo
     return Table(head, rows, fmts, bold={len(rows) - 1})
 
 
-def bill_table(entry, enabled: set[str], names: dict, lang: str, full_ean: bool) -> Table:
-    """Settlement per member, Σ, then the producers as the other side of it."""
+def bill_table(entry, names: dict, lang: str, full_ean: bool) -> Table:
+    """Settlement per member (the whole group), Σ, then the producers as the other side
+    of it."""
     data, bill = entry.data, entry.bill.settlement
     n_prod = len(data.source_eans)
-    head = [t("col_name", lang), t("col_ean", lang), t("x_included", lang),
+    head = [t("col_name", lang), t("col_ean", lang),
             t("bill_col_price", lang), t("bill_col_shared", lang), t("bill_col_saving", lang),
             t("bill_col_share", lang), tn("bill_col_payment", lang, n_prod),
             t("bill_col_unit", lang)]
-    fmts = [None, None, None, "0.00", KWH, KC, KC, KC, "0.00"]
+    fmts = [None, None, "0.00", KWH, KC, KC, KC, "0.00"]
     unit = lambda pay, kwh: float(pay / kwh) if kwh > 0 else None  # noqa: E731
-    rows = [[names.get(e, e), ean_label(e, full_ean), _yes(e in enabled, lang),
+    rows = [[names.get(e, e), ean_label(e, full_ean),
              float(bill.prices[j]), _kwh(bill.shared[j]), float(bill.saving[j]),
              float(bill.share[j]), float(bill.payment[j]),
              unit(float(bill.payment[j]), float(bill.shared[j]))]
             for j, e in enumerate(data.dest_eans)]
     kwh, paid = float(bill.shared.sum()), float(bill.payment.sum())
-    rows.append(["Σ", None, None, None, _kwh(kwh), float(bill.saving.sum()),
+    rows.append(["Σ", None, None, _kwh(kwh), float(bill.saving.sum()),
                  float(bill.share.sum()), float(paid), unit(paid, kwh)])
     bold = {len(rows) - 1}
     for i, src in enumerate(data.source_eans):
         rows.append([t("bill_producer", lang).format(name=names.get(src, src)),
-                     ean_label(src, full_ean), None, float(bill.feed_ins[i]),
+                     ean_label(src, full_ean), float(bill.feed_ins[i]),
                      _kwh(bill.supplied[i]), float(bill.feed_in_value[i]),
                      float(bill.producer_share[i]),
                      float(bill.producer_income[i]),
@@ -547,7 +548,7 @@ def sheets(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
     if entry.exact is not None:
         summary.append(exact_table(entry, enabled, names, lang))
     if entry.bill is not None:
-        summary.append(bill_totals_table(entry, enabled, lang))
+        summary.append(bill_totals_table(entry, lang))
     if entry.fit is not None:
         summary.append(fit_table(entry, lang))
     out = [Sheet(t("x_sheet_summary", lang), summary),
@@ -563,7 +564,7 @@ def sheets(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
                          [pair_table(entry, names, lang, full_ean, pair_keys)]))
     if entry.bill is not None:
         out.append(Sheet(t("x_sheet_bill", lang),
-                         [bill_table(entry, enabled, names, lang, full_ean)]))
+                         [bill_table(entry, names, lang, full_ean)]))
     if spot_cmp is not None:
         out.append(Sheet(t("x_sheet_spot", lang),
                          spot_tables(spot_cmp, data, enabled, names, lang, full_ean,

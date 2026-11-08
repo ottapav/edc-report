@@ -262,11 +262,12 @@ def _number_column(field: str, header: str, editable: bool, width: int, lang: st
             **extra}
 
 
-def columns(lang: str, editable: bool, pool: bool = False) -> list[dict]:
+def columns(lang: str, editable: bool, pool: bool = False, prices: bool = True) -> list[dict]:
     """Grid columns; formatters depend on the language (decimal comma, default names).
     Keys and prices are editable only for an all report. With several producers
     (``pool``) the key column shows the pool's key, made of the keys per producer
-    (typed in their own grid), and cannot be edited here."""
+    (typed in their own grid), and cannot be edited here. ``prices``: the price column
+    shows (on the tabs that use the prices; hidden it keeps what was typed)."""
     key = (_number_column("key", t("key_pool_col", lang), False, 64, lang, negative=True,
                           headerTooltip=t("key_pool_tip", lang))
            if pool else
@@ -279,7 +280,7 @@ def columns(lang: str, editable: bool, pool: bool = False) -> list[dict]:
         _TAIL_COLUMN,
         key,
         _number_column("price", t("price_col", lang), editable, 58, lang,
-                       headerTooltip=t("price_col_tip", lang)),
+                       headerTooltip=t("price_col_tip", lang), hide=not prices),
     ]
 
 
@@ -292,13 +293,14 @@ def rows(data: SharingData) -> list[dict]:
             for e in data.dest_eans]
 
 
-def producer_columns(lang: str) -> list[dict]:
-    """Producers grid: name, EAN, feed-in price (typed like the members' keys and prices)."""
+def producer_columns(lang: str, prices: bool = True) -> list[dict]:
+    """Producers grid: name, EAN, feed-in price (typed like the members' keys and prices;
+    shown on the tabs that use the prices)."""
     return [
         _name_column(lang),
         _TAIL_COLUMN,
         _number_column("price", t("feed_col", lang), True, 64, lang,
-                       headerTooltip=t("feed_tip", lang)),
+                       headerTooltip=t("feed_tip", lang), hide=not prices),
     ]
 
 

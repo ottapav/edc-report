@@ -258,13 +258,20 @@ def test_bill(ui):
 def test_tabs_keep_their_own_content(ui):
     """Both computations exist: the sharing tab shows the columns with the exact method,
     the billing tab its result; neither shows the other's."""
+    price = '#members .ag-header-cell[col-id="price"]'    # AG Grid drops hidden columns
+    feed_in = '#producers .ag-header-cell[col-id="price"]'
     ui.page.click("#tab-sharing")
     ui.page.wait_for_selector("#compare.right-exact", state="attached")
     ui.page.wait_for_selector("#cmp-card", state="visible")
     assert not ui.visible("#bill-body") and ui.visible("#panel-display")
+    ui.page.wait_for_selector(price, state="detached")      # the prices: not used here
+    ui.page.wait_for_selector(feed_in, state="detached")
+    assert not ui.visible("#lbl-source-hint")
     ui.page.click("#tab-bill")
     ui.page.wait_for_selector("#bill-body", state="visible")
     assert not ui.visible("#cmp-card") and not ui.visible("#pane-columns")
+    ui.page.wait_for_selector(price, state="visible")
+    ui.page.wait_for_selector(feed_in, state="visible")
     ui.page.click("#tab-sharing")                          # the next tests start there
     ui.page.wait_for_selector("#pane-sharing", state="visible")
 

@@ -84,9 +84,7 @@ def _labels(lang):
         heat_options=Output("heat-metric", "options"),
         heat_value=Output("heat-metric", "value"),
         heat_box=Output("heat-box", "style"),
-        columns=Output("members", "columnDefs"),
         source_title=Output("lbl-source", "children"),
-        producer_columns=Output("producers", "columnDefs"),
         exact_title=Output("exact-btn", "title"),
         exact_pool=Output("exact-pool", "children"),
         article_href=Output("exact-article", "href"),
@@ -111,15 +109,34 @@ def _report_labels(lang, key, heat):
         heat_options=[{"label": t(f"heat_{m}", lang), "value": m} for m in metrics],
         heat_value=heat if heat in metrics else metrics[0],
         heat_box={"display": "none"} if len(metrics) < 2 else {},   # part report: no choice
-        columns=members.columns(lang, editable=not part, pool=multi and not part),
         source_title=tn("panel_source", lang, len(data.source_eans) if data else 1),
-        producer_columns=members.producer_columns(lang),
         exact_title=t("part_no_recompute", lang) if part else "",
         # several producers: say up front that the key estimate and the recompute pool them
         exact_pool=(html.P(t("pool_note", lang).format(n=len(data.source_eans)),
                            className="hint pool-note") if multi and not part else []),
         bill_title=t("part_no_bill", lang) if part else "",
     )
+
+
+@callback(
+    Output("members", "columnDefs"),
+    Output("producers", "columnDefs"),
+    Output("lbl-source-hint", "style"),
+    Input("lang", "value"),
+    Input("data-key", "data"),
+    Input("tabs", "value"),
+)
+def _grid_columns(lang, key, tab):
+    """The grids' columns in the language; the price columns (and the hint about the
+    producers' price) only on the tabs that use the prices: the billing and the spot."""
+    entry = store.get(key)
+    data = entry.data if entry else None
+    part = data is not None and data.fmt != "all"
+    multi = data is not None and len(data.source_eans) > 1
+    prices = tab in ("bill", "spot")
+    return (members.columns(lang, editable=not part, pool=multi and not part, prices=prices),
+            members.producer_columns(lang, prices=prices),
+            {} if prices else {"display": "none"})
 
 
 # Theme: default from the system, the icon toggles and remembers the choice.

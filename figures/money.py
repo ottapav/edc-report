@@ -11,7 +11,6 @@ settlement from :class:`billing.Billing`.
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -21,25 +20,18 @@ from i18n import fmt_num, month_label, t, tn
 
 from .base import (
     OTHER, OTHER_COLOUR, THEMES, area, colour_map, daily_layout, date_text, day_slice,
-    figure, hatch, intraday_layout, intraday_legend, member_groups, no_data, pie,
+    figure, intraday_layout, intraday_legend, member_groups, no_data, pie,
     producer_greens, producer_hatch,
 )
 
-UNSELECTED = "__unselected__"  # shares of the unticked members, summed
-
-
-def bill_columns(frame: pd.DataFrame, data: SharingData, enabled: set[str],
+def bill_columns(frame: pd.DataFrame, data: SharingData,
                  top: tuple[str, ...] | None) -> tuple[pd.DataFrame, int]:
-    """Per-interval Kč for plotting: ticked members (the rest of a large group folded
-    into OTHER), the unticked members summed (UNSELECTED), the producers; and the number
-    of folded members."""
+    """Per-interval Kč for plotting, the whole group: the members (the rest of a large
+    group folded into OTHER), the producers; and the number of folded members."""
     out, n_rest = {}, 0
-    for key, members in member_groups(data, enabled, top):
+    for key, members in member_groups(data, set(data.dest_eans), top):
         out[key] = frame[members[0]] if key != OTHER else frame[members].sum(axis=1)
         n_rest = len(members) if key == OTHER else n_rest
-    unsel = [e for e in data.dest_eans if e not in enabled]
-    if unsel:
-        out[UNSELECTED] = frame[unsel].sum(axis=1)
     for col in frame.columns:
         if is_producer_col(col):
             out[col] = frame[col]
@@ -51,8 +43,6 @@ def _label(col: str, names: dict[str, str], data: SharingData, lang: str,
     if is_producer_col(col):
         src = col[len(PRODUCER):]
         return names[src] if src == POOL else t("bill_producer", lang).format(name=names[src])
-    if col == UNSELECTED:
-        return t("bill_unselected", lang)
     if col == OTHER:
         return t("others", lang).format(n=n_rest)
     return names.get(col, col)
@@ -67,30 +57,26 @@ def _areas(fig: go.Figure, frame: pd.DataFrame, data: SharingData, names: dict, 
     for col in frame.columns:
         if col in greens:
             colour, pattern = greens[col], producer_hatch(th, greens[col])
-        elif col == UNSELECTED:
-            colour, pattern = th["others"], hatch(th)
         else:
             colour, pattern = cmap.get(col, OTHER_COLOUR), None
         area(fig, frame.index, frame[col].to_numpy(), _label(col, names, data, lang, n_rest),
-             colour, th, unit, pattern=pattern, line_width=1.0 if col == UNSELECTED else 0.6)
+             colour, th, unit, pattern=pattern, line_width=0.6)
 
 
-def fig_bill_pie(bill: Billing, data: SharingData, enabled: set[str], lang: str = "cs",
+def fig_bill_pie(bill: Billing, data: SharingData, lang: str = "cs",
                  th: dict | None = None) -> go.Figure:
-    """Where the benefit went: the producer's share, the shares of the ticked and the
-    unticked members, and what the EDC sharing missed against the best possible one.
-    The slices add up to the best possible benefit."""
+    """Where the benefit went: the producers' and the members' shares, and what the EDC
+    sharing missed against the best possible one. The slices add up to the best possible
+    benefit."""
     th = th or THEMES["light"]
     cur = t("currency", lang)
     fig = figure(t("bill_pie_title", lang), lang, 500, th)
     if bill.maximum <= 0:
         return no_data(fig, lang, th)
-    sel = np.array([e in enabled for e in data.dest_eans])
     slices = [   # label, value, colour, hatched, pulled out
         (tn("bill_pie_producer", lang, len(data.source_eans)), float(bill.producer_share.sum()),
          th["source"], False, False),
-        (t("bill_pie_members", lang), float(bill.share[sel].sum()), th["members"], False, False),
-        (t("bill_pie_unselected", lang), float(bill.share[~sel].sum()), th["others"], True, False),
+        (t("bill_pie_members", lang), float(bill.share.sum()), th["members"], False, False),
         (t("bill_pie_lost", lang), bill.maximum - bill.realized, th["wasted"], False, True),
     ]
     note = [t("bill_pie_total", lang).format(total=fmt_num(bill.maximum, lang), cur=cur),
