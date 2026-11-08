@@ -126,18 +126,16 @@ def energy_tiles(data: SharingData, enabled: set[str], lang: str, *,
     return tiles(items, note)
 
 
-def bill_tiles(bill: Billing, data: SharingData, enabled: set[str], lang: str) -> list:
-    """Four tiles in Kč: the benefit (and what the EDC sharing missed), the producers'
-    and the members' shares, what the producers receive (and its feed-in value)."""
+def bill_tiles(bill: Billing, data: SharingData, lang: str) -> list:
+    """Four tiles in Kč, for the whole group: the benefit (and what the EDC sharing
+    missed), the producers' and the members' shares, what the producers receive (and
+    its feed-in value)."""
     cur = t("currency", lang)
     kc = lambda x: f"{fmt_num(x, lang)} {cur}"  # noqa: E731
-    sel = np.array([e in enabled for e in data.dest_eans])
-    n_sel, n = int(sel.sum()), len(data.dest_eans)
-    member_share = float(bill.share[sel].sum())
+    member_share = float(bill.share.sum())
     lost = max(0.0, bill.maximum - bill.realized)
     kwh = float(bill.shared.sum())
     of_benefit = lambda x: f"{_share(x, bill.realized, lang)} {t('bt_of_benefit', lang)}"  # noqa: E731
-    scope = t("bt_selected", lang).format(n=n_sel, m=n) if n_sel < n else NBSP
     income, fiv = float(bill.producer_income.sum()), float(bill.feed_in_value.sum())
     producer_share = float(bill.producer_share.sum())
     unit = f"{fmt_num(income / kwh, lang, 2)} {cur}" if kwh else "—"
@@ -149,8 +147,7 @@ def bill_tiles(bill: Billing, data: SharingData, enabled: set[str], lang: str) -
                  t("bt_lost_sub", lang).format(lost=kc(lost))), GREEN),
         tile(tn("bt_producer", lang, n_prod), kc(producer_share),
              two_lines(of_benefit(producer_share)), GREEN),
-        tile(t("bt_members", lang), kc(member_share),
-             two_lines(of_benefit(member_share), scope), BLUE),
+        tile(t("bt_members", lang), kc(member_share), two_lines(of_benefit(member_share)), BLUE),
         tile(tn("bt_income", lang, n_prod), kc(income),
              two_lines(t("bt_income_sub", lang).format(unit=unit),
                        t("bt_income_sub2", lang).format(fiv=kc(fiv))), None),
@@ -242,31 +239,46 @@ def cmp_table(data: SharingData, exact: Recomputed, enabled: set[str], names: di
     return [table(head, rows, foot), hint(t("cmp_error_hint", lang))]
 
 
-def bill_table(bill: Billing, data: SharingData, names: dict, lang: str, top=None,
-               enabled: set[str] | None = None):
-    """Settlement per member; Σ row, then the producers as the other side of it."""
-    enabled = set(data.dest_eans) if enabled is None else enabled
+def one_price(bill: Billing) -> bool:
+    """Every member has the same supplier price and every producer the same feed-in price."""
+    return bool(np.ptp(bill.prices) < 1e-9 and np.ptp(bill.feed_ins) < 1e-9)
+
+
+def bill_prices_note(bill: Billing, lang: str) -> list:
+    """Above the settlement table when everybody has the same prices (the table then has
+    no price column): which prices those are."""
+    if not one_price(bill):
+        return []
+    price = lambda x: f"{fmt_num(x, lang, 2)}{NBSP}{t('currency', lang)}/kWh"  # noqa: E731
+    return [hint(t("bill_prices_one", lang).format(price=price(bill.prices[0]),
+                                                   feed=price(bill.feed_ins[0])))]
+
+
+def bill_table(bill: Billing, data: SharingData, names: dict, lang: str, top=None):
+    """Settlement per member (the whole group); Σ row, then the producers as the other
+    side of it. The price column only when the prices differ (else :func:`bill_prices_note`)."""
     cmap = colour_map(data, top)
     n_prod = len(data.source_eans)
     kc = lambda x: fmt_num(x, lang, 2)  # noqa: E731
     unit = lambda pay, kwh: fmt_num(pay / kwh, lang, 2) if kwh > 0 else "—"  # noqa: E731
-    head = [_name_head(lang), t("bill_col_price", lang), t("bill_col_shared", lang),
-            t("bill_col_saving", lang), t("bill_col_share", lang),
+    priced = not one_price(bill)
+    price = lambda x: num(fmt_num(x, lang, 2)) if priced else ""  # noqa: E731
+    head = [_name_head(lang), *([t("bill_col_price", lang)] if priced else []),
+            t("bill_col_shared", lang), t("bill_col_saving", lang), t("bill_col_share", lang),
             tn("bill_col_payment", lang, n_prod), t("bill_col_unit", lang)]
     pay = lambda text, x: cell(text, "num neg" if x < -0.005 else "num")  # noqa: E731
-    rows = [("" if e in enabled else "off",
-             name_cell(names[e], e, cmap[e]) + num(fmt_num(bill.prices[j], lang, 2))
+    rows = [("", name_cell(names[e], e, cmap[e]) + price(bill.prices[j])
              + num(fmt_num(bill.shared[j], lang, 1)) + num(kc(bill.saving[j]))
              + num(kc(bill.share[j]), True) + pay(kc(bill.payment[j]), bill.payment[j])
              + pay(unit(bill.payment[j], bill.shared[j]), bill.payment[j]))
             for j, e in enumerate(data.dest_eans)]
     kwh, paid = float(bill.shared.sum()), float(bill.payment.sum())
-    total = (cell("<b>Σ</b>") + cell("") + num(fmt_num(kwh, lang, 1), True)
+    total = (cell("<b>Σ</b>") + (cell("") if priced else "") + num(fmt_num(kwh, lang, 1), True)
              + num(kc(float(bill.saving.sum())), True) + num(kc(float(bill.share.sum())), True)
              + num(kc(paid), True) + num(unit(paid, kwh), True))
     producers = [
         name_cell(t("bill_producer", lang).format(name=names[src]), src, GREEN)
-        + num(fmt_num(bill.feed_ins[i], lang, 2)) + num(fmt_num(bill.supplied[i], lang, 1))
+        + price(bill.feed_ins[i]) + num(fmt_num(bill.supplied[i], lang, 1))
         + num(kc(bill.feed_in_value[i]) + muted(t("bill_feed_in_value", lang)))
         + num(kc(bill.producer_share[i]), True)
         + num(kc(bill.producer_income[i]) + muted(t("bill_receives", lang)))

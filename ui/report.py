@@ -27,6 +27,9 @@ from .layout import fig_id, job_ids, spot_fig_id
 
 HIDDEN = {"display": "none"}
 _EXACT_REV = dict(exact_rev=Input(job_ids("exact")["rev"], "data"))
+#: the billing is the whole group's: the selection does not change it, names do
+_NAMES = dict(changed=Input("members", "cellValueChanged"),
+              src_changed=Input("producers", "cellValueChanged"))
 _BILL_REV = dict(bill_rev=Input(job_ids("bill")["rev"], "data"))
 _MEMBERS = dict(selected=Input("members", "selectedRows"),
                 changed=Input("members", "cellValueChanged"),
@@ -326,19 +329,20 @@ def hourly(day, key, exact_rev, selected, changed, src_changed, lang, theme_name
                 monthly_h=Output("fig-bill-monthly", "style"),
                 daily=Output("fig-bill-daily", "figure"),
                 daily_h=Output("fig-bill-daily", "style")),
-    inputs=dict(key=Input("data-key", "data"), **_BILL_REV, **_MEMBERS,
+    inputs=dict(key=Input("data-key", "data"), **_BILL_REV, **_NAMES,
                 lang=Input("lang", "value"), theme_name=Input("theme", "data")),
     state=dict(**_MEMBER_STATE, sel_day=State("day-picker", "date")),
 )
-def render_bill(key, bill_rev, selected, changed, src_changed, lang, theme_name, rows,
-                src_rows, sel_day):
+def render_bill(key, bill_rev, changed, src_changed, lang, theme_name, rows, src_rows,
+                sel_day):
     """The billing tab below its card, once the billing is computed: the tiles, where
     the benefit went and the producers' share by month side by side, the daily share
     (in the collapsed "over time" card). The settlement table comes with the card's
-    result (:func:`ui.compute.bill_result`)."""
+    result (:func:`ui.compute.bill_result`). Always the whole group: ticking members
+    off in the panel does not change the billing."""
     if members.key_only_edit():
         raise dash.exceptions.PreventUpdate
-    s = _scope(key, selected, lang, theme_name, src_rows, rows)
+    s = _scope(key, None, lang, theme_name, src_rows, rows)
     if s is None or s.entry.bill is None:
         return dict(body=HIDDEN, tiles=[], pie={}, pie_h={}, monthly={}, monthly_h={},
                     daily={}, daily_h={})
@@ -349,7 +353,7 @@ def render_bill(key, bill_rev, selected, changed, src_changed, lang, theme_name,
     pie.update_layout(height=monthly.layout.height)      # side by side, the same height
     daily = fig_bill_daily(cols, s.data, s.names, n_rest=n_rest, sel_day=_day(sel_day),
                            **s.opts)
-    return dict(body={}, tiles=views.bill_tiles(bill.settlement, s.data, s.enabled, lang),
+    return dict(body={}, tiles=views.bill_tiles(bill.settlement, s.data, lang),
                 pie=pie, pie_h=_height(pie), monthly=monthly, monthly_h=_height(monthly),
                 daily=daily, daily_h=_height(daily))
 
@@ -357,15 +361,14 @@ def render_bill(key, bill_rev, selected, changed, src_changed, lang, theme_name,
 @callback(
     output=[Output("fig-bill-hourly", "figure"), Output("fig-bill-hourly", "style")],
     inputs=dict(day=Input("day-picker", "date"), key=Input("data-key", "data"), **_BILL_REV,
-                **_MEMBERS, lang=Input("lang", "value"), theme_name=Input("theme", "data")),
+                **_NAMES, lang=Input("lang", "value"), theme_name=Input("theme", "data")),
     state=dict(_MEMBER_STATE),      # a copy: Dash adds the inputs to the dict it gets
 )
-def bill_hourly(day, key, bill_rev, selected, changed, src_changed, lang, theme_name, rows,
-                src_rows):
+def bill_hourly(day, key, bill_rev, changed, src_changed, lang, theme_name, rows, src_rows):
     """The share of the benefit on the selected day, per 15 min (Kč, its own y axis)."""
     if members.key_only_edit():
         raise dash.exceptions.PreventUpdate
-    s = _scope(key, selected, lang, theme_name, src_rows, rows)
+    s = _scope(key, None, lang, theme_name, src_rows, rows)
     if s is None or s.entry.bill is None or not day:
         return {}, {}
     cols, n_rest = _bill_frame(s)

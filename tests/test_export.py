@@ -124,15 +124,18 @@ def test_exact_billing_and_fit_add_their_sheets(entry_key):
     assert sigma[6] - sigma[5] == pytest.approx(loss.lost, abs=0.02)
     bill = entry.bill.settlement
     rows = list(wb[t("x_sheet_bill", "cs")].iter_rows(values_only=True))
-    assert _row(wb[t("x_sheet_bill", "cs")], "Σ")[7] == pytest.approx(bill.payment.sum(), abs=0.01)
+    assert _row(wb[t("x_sheet_bill", "cs")], "Σ")[6] == pytest.approx(bill.payment.sum(), abs=0.01)
+    # the billing is the whole group's, whatever is ticked
+    members_share = _row(summary, t("bt_members", "cs"))[1]
+    assert members_share == pytest.approx(bill.share.sum(), abs=0.01)
     assert len(rows) == 1 + len(data.dest_eans) + 1 + len(data.source_eans)
     assert _row(summary, t("x_rounds", "cs"))[1] == entry.fit.rounds
     # keys other than the report's: the energy table compares with EDC replayed with them
     entry.exact = recompute.recompute(data, list(k), rounds=5)
     summary = _book(entry, enabled)[t("x_sheet_summary", "cs")]
     heads = [r for r in summary.iter_rows(values_only=True) if r[0] == t("x_item", "cs")]
-    # the page shows the report next to the billing and the replay next to the exact
-    # method, so the export has all three
+    # the billing is computed from the report, the exact method is compared with the
+    # replay, so the export has all three
     assert heads[1][1:5] == (t("col_edc", "cs"), t("col_edc_replay", "cs"),
                              t("col_exact", "cs"), t("x_unit", "cs"))
     # with unticked members "could have been shared" of the report is an upper bound, in

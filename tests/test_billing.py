@@ -10,7 +10,7 @@ import billing as B
 import figures
 import jobs
 import store
-from ui import compute, members, report, views
+from ui import compute, members, panel, report, views
 import edc_data as core
 from conftest import all_report_csv, synthetic_group
 
@@ -220,14 +220,14 @@ def test_bill_job_and_result(entry_key):
     state = compute.poll_state(job_id, 0, "cs")
     assert state[2] == "progress done" and state[5] == 1
     assert len(entry.bill.totals.consumers) == 5
-    out = compute.bill_result(1, entry_key, "cs", None, 1.2, 4.3, None, None, rows, [])
+    out = compute.bill_result(1, entry_key, "cs", 1.2, 4.3, None, None, rows, [])
     assert out["table"] and out["stale"] == [] and "s" in out["timing"]
     notes = " ".join(str(n.children) for n in out["table"][1:])     # under the table
     assert "×" in notes and "ERÚ" in notes
     # a changed price marks the billing as stale until the button is pressed again
-    assert compute.bill_result(1, entry_key, "cs", None, 1.2, 4.4, None, None, rows, [])["stale"]
+    assert compute.bill_result(1, entry_key, "cs", 1.2, 4.4, None, None, rows, [])["stale"]
     src = [{"ean": entry.data.source_eans[0], "price": 1.3}]
-    assert compute.bill_result(1, entry_key, "cs", None, 1.2, 4.3, None, None, rows, src)["stale"]
+    assert compute.bill_result(1, entry_key, "cs", 1.2, 4.3, None, None, rows, src)["stale"]
 
 
 def test_bill_needs_prices(entry_key):
@@ -268,7 +268,7 @@ def test_billing_tab_figures(entry_key):
     assert list(bars.y) == pytest.approx(list(expect[m.sum(axis=1) > 0.005]))
     assert list(half.y) == [50, 50] and "whole period" in whole.name
     assert whole.y[0] == pytest.approx(100 * bill.producer_share.sum() / bill.realized, abs=0.1)
-    tiles = views.bill_tiles(bill, data, enabled, "cs")[0].children
+    tiles = views.bill_tiles(bill, data, "cs")[0].children
     assert len(tiles) == 4
 
 
@@ -283,7 +283,7 @@ def test_german_interface(entry_key):
     assert figures.fig_bill_monthly(entry.bill.per_interval, entry.bill.producer_cols,
                                     lang="de", th=th).data
     assert figures.fig_bill_pie(bill, data, enabled, "de", th).data
-    assert views.bill_tiles(bill, data, enabled, "de")
+    assert views.bill_tiles(bill, data, "de")
     assert views.bill_table(bill, data, names, "de")
     rows = members.rows(data)
     assert all(r["default_de"] and r["default_cs"] and r["default_en"] for r in rows)
@@ -382,3 +382,32 @@ def test_a_member_kept_short_by_the_keys_is_paid_the_difference():
     assert note and "Rozdíl mu doplatí výrobce" in note[0].children
     assert views.negative_payment_note(B.settle(res, [4.0, 4.8, 3.2]).payment, 1, "cs") == []
     assert "výrobci" in views.negative_payment_note(bill.payment, 2, "cs")[0].children
+
+
+def test_one_price_for_everybody_moves_out_of_the_table(entry_key):
+    """The same prices for all: no price column, a line above the table says them; as
+    soon as one member's price differs, the column is back."""
+    entry, rows, _job = _billed(entry_key, default=4.3)
+    data, bill = entry.data, entry.bill.settlement
+    names = members.default_names(data, "cs")
+    same = bill.prices.copy()
+    bill.prices[:] = 4.3
+    try:
+        head = str(views.bill_table(bill, data, names, "cs"))
+        note = str(views.bill_prices_note(bill, "cs"))
+        assert "Cena [Kč/kWh]" not in head and "4,30" in note and "pro všechny členy" in note
+        bill.prices[0] = 5.0
+        assert "Cena [Kč/kWh]" in str(views.bill_table(bill, data, names, "cs"))
+        assert views.bill_prices_note(bill, "cs") == []
+    finally:
+        bill.prices[:] = same
+
+
+def test_price_columns_only_on_the_tabs_that_use_them(entry_key):
+    """The members' price and the producers' feed-in price (and the hint about it) show on
+    the billing and the spot tabs; on the sharing tab they are hidden, keeping what was typed."""
+    hidden = lambda cols: {c["field"]: c.get("hide", False) for c in cols}["price"]  # noqa: E731
+    for tab, shown in (("sharing", False), ("bill", True), ("spot", True)):
+        cols, src_cols, hint_style = panel._grid_columns("cs", entry_key, tab)
+        assert hidden(cols) is not shown and hidden(src_cols) is not shown
+        assert (hint_style == {}) is shown

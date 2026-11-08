@@ -318,13 +318,12 @@ def exact_result(rev, key, lang, selected, changed, src_changed, rows, src_rows)
     output=dict(timing=Output(_BILL["text"], "title"), stale=Output("bill-stale", "children"),
                 table=Output("settle-table", "children")),
     inputs=dict(rev=Input(_BILL["rev"], "data"), key=Input("data-key", "data"),
-                lang=Input("lang", "value"), selected=Input("members", "selectedRows"),
+                lang=Input("lang", "value"),
                 feed_in=Input("feed-in", "value"), default=Input("price-default", "value"),
                 **_EDITS),
     state=dict(_GRIDS),             # a copy: Dash adds the inputs to the dict it gets
 )
-def bill_result(rev, key, lang, selected, feed_in, default, changed, src_changed, rows,
-                src_rows):
+def bill_result(rev, key, lang, feed_in, default, changed, src_changed, rows, src_rows):
     """The settlement table with its notes, the timing as the hint of the card's "✓ … s",
     and a note in the card when the prices have changed since the last billing."""
     entry = store.get(key)
@@ -332,13 +331,13 @@ def bill_result(rev, key, lang, selected, feed_in, default, changed, src_changed
         return dict(timing="", stale=[], table=[])
     data, result = entry.data, entry.bill
     names = members.names(data, lang, src_rows, rows)
-    table = views.bill_table(result.settlement, data, names, lang, top_dests(data.frame, data),
-                             members.enabled(data, selected))
+    table = views.bill_table(result.settlement, data, names, lang, top_dests(data.frame, data))
     inputs, _missing = bill_inputs(data, rows, src_rows, feed_in, default)
     totals = result.totals
     changed = inputs is None or any(
         abs(a - b) > 1e-9 for a, b in zip([*inputs[0], *inputs[1]],
                                           [*totals.prices, *totals.feed_ins]))
     notes = views.bill_notes(result.settlement.payment, len(data.source_eans), lang)
-    return dict(timing=views.bill_timing(result, lang), table=[table, *notes],
+    return dict(timing=views.bill_timing(result, lang),
+                table=[*views.bill_prices_note(result.settlement, lang), table, *notes],
                 stale=views.hint(t("bill_stale", lang), "stale") if changed else [])
