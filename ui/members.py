@@ -231,6 +231,8 @@ def key_only_edit() -> bool:
 
 
 def _name_column(lang: str) -> dict:
+    # the language comes from the browser and ends up in grid code: only a known one
+    lang = lang if lang in LANGS else "cs"
     return {"field": "name", "headerName": t("col_name", lang), "editable": True, "flex": 1,
             "minWidth": 84,
             "valueFormatter": {"function": f"params.value || params.data.default_{lang}"},

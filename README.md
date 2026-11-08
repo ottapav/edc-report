@@ -550,7 +550,7 @@ callbacks from both.
 | | `figures/` | Plotly figures: `base.py` themes, member colours and the shared chart shapes (stacked bars, pie, stacked areas by day and within a day, heatmap, pairing of the two columns); `energy.py` the report in kWh; `money.py` the billing in Kč; `spot.py` the spot comparison in Kč |
 | | `i18n.py`, `i18n_de.py` | CZ/EN/DE strings, number and date formatting |
 | Server state | `config.py` | Settings from environment variables |
-| | `store.py` | Uploaded reports and their results (key estimate, recompute, billing, spot prices), newest `EDC_CACHE_MAX` kept |
+| | `store.py` | Uploaded reports and their results (key estimate, recompute, billing, spot prices): newest `EDC_CACHE_MAX` and at most `EDC_CACHE_MB` kept, deleted after `EDC_REPORT_TTL_S` without use |
 | | `jobs.py` | Background computations: queue, child process, cancellation, progress; the spot prices are fetched without a CPU slot |
 | UI | `ui/layout.py` | The page and its three tabs; the computation cards come from one `job_card()` with ids `<kind>-btn`, `<kind>-progress`, … |
 | | `ui/members.py` | The members grid (tick, name, key, price) and reading what was typed in it |
@@ -593,7 +593,27 @@ Because a job is a process, it can be **cancelled**, and the slot is freed at on
 * when the page stops polling for `EDC_JOB_IDLE_S` seconds (tab closed). A waiting job leaves
   the queue the same way;
 * when a key estimate runs longer than `EDC_FIT_TIMEOUT` seconds. It stops itself after about
-  20 s with the best keys so far, so this is only a safety net.
+  20 s with the best keys so far, so this is only a safety net;
+* when any job has worked for `EDC_JOB_TIMEOUT_S` seconds (default 30 min);
+* when the same report starts another job of the same kind (the new result replaces it).
+
+**Limits against overload.** Anyone can send the callbacks the page sends, with or without
+its buttons, so the server limits what one client can take. At most `EDC_MAX_PENDING` jobs are
+unfinished at once; more are refused with "server busy", and a report has one job of a kind
+at a time. An upload is parsed in a forked child too (`jobs.parse_report`), one at a time,
+reading only the columns its format needs. The child may take `EDC_PARSE_MB` of memory beyond
+what it inherited, so a huge or odd file fails alone ("too large, upload a shorter period")
+instead of the server running out of memory. Every child also volunteers to the kernel's OOM
+killer (`oom_score_adj` 1000): if memory runs out anyway, a computation dies, not the server
+with every user's upload.
+
+**Browser protections.** Every response carries a Content Security Policy (nothing loaded
+from or sent to other sites but the articles' web fonts, no plugins, no framing), together
+with `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` and, behind the hosting's
+TLS proxy, HSTS. Dash and the grid evaluate code given as text, so the policy allows
+`'unsafe-eval'` and inline scripts; values from the browser that end up in such code (the
+language) are checked against the known ones, and every name typed into the page is escaped
+in the HTML tables and written as text, never as a formula, into the export.
 
 The child resets gunicorn's signal handlers, so killing it really stops it. `/healthz` shows
 `jobs_running`, `jobs_queued` and `max_jobs`. Two other safeguards:
@@ -658,7 +678,9 @@ Notes:
 * **Free plan:** 512 MB, and it sleeps after 15 minutes without traffic. The first visit then
   waits about a minute, and uploaded reports are gone; the page says so and asks for the file
   again. The *0.5c-512mb* plan ($7/month) stays up.
-* **Memory:** both plans have 512 MB. Keep `EDC_CACHE_MAX` about 6.
+* **Memory:** both plans have 512 MB: the server itself takes ~110 MB, the reports up to
+  `EDC_CACHE_MB` (150), the parsing of an upload up to `EDC_PARSE_MB` (200). On a larger
+  instance raise both (a year of 15-min data for ~100 members needs ~250 MB to parse).
 * **Keep one worker.** Do not add `--workers N`, and do not rely on `WEB_CONCURRENCY` (see
   *Architecture*).
 * **After a deploy** the server has restarted, so uploaded reports are gone, and a page
@@ -676,8 +698,14 @@ Notes:
 | `EDC_MAX_JOBS` | 2 | key estimations / recomputes running at once (others queue); set to the number of CPUs of the instance |
 | `EDC_FIT_TIMEOUT` | 120 | seconds after which a key estimate is killed |
 | `EDC_JOB_IDLE_S` | 180 | seconds without a progress poll after which a job is cancelled (page closed) |
-| `EDC_CACHE_MAX` | 6 | uploaded reports kept in memory (oldest dropped) |
+| `EDC_JOB_TIMEOUT_S` | 1800 | seconds of work after which any job is stopped |
+| `EDC_MAX_PENDING` | 12 | unfinished jobs (running, queued, spot fetches) at most; more are refused as "server busy" |
+| `EDC_CACHE_MAX` | 6 | uploaded reports kept in memory at most (oldest dropped) |
+| `EDC_CACHE_MB` | 150 | ... and at most this many MB of them (estimated, room for a recompute included) |
+| `EDC_REPORT_TTL_S` | 3600 | seconds without use after which a report is deleted from memory |
 | `EDC_MAX_UPLOAD_MB` | 25 | largest accepted CSV |
+| `EDC_PARSE_MB` | 200 | memory the parsing of one upload may take; a file that needs more is refused |
+| `EDC_PARSE_WAIT_S`, `EDC_PARSE_TIMEOUT_S` | 30, 60 | how long an upload waits for another one's parsing, and may take itself |
 | `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD` | empty | password-protect the whole app when both are set |
 | `LOG_LEVEL` | info | gunicorn log level |
 
@@ -709,6 +737,11 @@ needed. It checks that:
 * the Shapley values of the billing equal brute force over all coalitions, the bounded node
   count matches the exact one, and the settlement adds up (payments, shares, haléř);
 * memoisation reuses frames;
+* the limits hold: a child over its memory budget fails alone, an upload too large to parse
+  is refused, a report has one job of a kind, too many jobs are refused, jobs stop at their
+  time limit, reports are deleted after their lifetime and the store keeps to its memory
+  budget; every response carries the security headers, an unknown language never reaches
+  the grid's code, and a name that looks like a formula stays text in the export;
 * every button works in a real browser (`tests/test_ui.py`, Playwright + Chromium, against the
   app served from the test process, with a fake OTE): upload, key estimate, recompute, the
   billing from its card and from the spot tab (also refused without prices), the spot prices
@@ -733,8 +766,11 @@ needed. It checks that:
 
 ## Data and privacy
 
-Uploaded files are parsed in memory only and never written to disk. They disappear when the
-cache drops them or the server restarts. `.gitignore` excludes `*.csv`, so real meter data
+Uploaded files are parsed in memory only and never written to disk. A report is deleted
+from memory after an hour without use (`EDC_REPORT_TTL_S`), or earlier when newer reports
+need the room or the server restarts; prepared exports after 10 minutes. The key that finds
+a report is random and lives only in the page's memory (a reload forgets it). Only the
+report's dates leave the server (to OTE and ČNB, for the spot prices). `.gitignore` excludes `*.csv`, so real meter data
 does not end up in the repository. The screenshots above use a synthetic group. For a public
 deployment, set the basic-auth variables.
 

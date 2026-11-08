@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import gc
 import multiprocessing as mp
+import pickle
 import queue
+import resource
 import signal
 import time
 from typing import Callable
@@ -33,15 +35,64 @@ class JobTimeout(Exception):
     """The job ran longer than its time limit and was killed."""
 
 
+class WorkerDied(RuntimeError):
+    """The child process ended without a result (killed, e.g. out of memory)."""
+
+    def __init__(self, exitcode: int | None):
+        super().__init__(f"worker process exited ({exitcode})")
+        self.exitcode = exitcode
+
+    @property
+    def killed(self) -> bool:
+        """Killed by SIGKILL: the kernel's OOM killer (or a hard stop)."""
+        return self.exitcode == -signal.SIGKILL
+
+
+def limit_memory(extra_mb: float) -> tuple[int, int] | None:
+    """In a child: let it take at most ``extra_mb`` MB of address space beyond what it
+    inherited, so that a runaway allocation fails there (MemoryError) instead of taking
+    the whole server down. Returns the previous limits (for :func:`unlimit_memory`), or
+    None where /proc is missing (nothing done)."""
+    try:
+        with open("/proc/self/status") as f:
+            size = next(int(line.split()[1]) * 1024 for line in f if line.startswith("VmSize:"))
+    except (OSError, StopIteration, ValueError):
+        return None
+    before = resource.getrlimit(resource.RLIMIT_AS)
+    soft = size + int(extra_mb * 2**20)
+    if before[1] != resource.RLIM_INFINITY:
+        soft = min(soft, before[1])
+    resource.setrlimit(resource.RLIMIT_AS, (soft, before[1]))
+    return before
+
+
+def unlimit_memory(before: tuple[int, int] | None) -> None:
+    """Put back the limits :func:`limit_memory` replaced (the child does this itself before
+    it sends anything back: pickling the result needs room the budget did not count)."""
+    if before is not None:
+        resource.setrlimit(resource.RLIMIT_AS, before)
+
+
 def _child(fn, args, kwargs, q) -> None:  # runs in the child process
     # The child inherits the web server's signal handlers; gunicorn's SIGTERM handler
     # only flags "shutting down", so terminate() would not stop the child. Restore the
     # defaults first.
     for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT):
         signal.signal(sig, signal.SIG_DFL)
+    # When memory runs out, the kernel kills the process with the highest score: make it
+    # this child, never the web server (which holds every user's upload).
+    try:
+        with open("/proc/self/oom_score_adj", "w") as f:
+            f.write("1000")
+    except OSError:
+        pass
     # Freezing the inherited heap keeps the garbage collector from walking (and
     # copy-on-write faulting) all of it, which would also be billed to any timing.
     gc.freeze()
+    # start the queue's feeder thread now, before ``fn`` may limit the memory (a thread
+    # cannot start under a tight limit), and keep the limit to restore before replying
+    q.put(("s", None))
+    limits = resource.getrlimit(resource.RLIMIT_AS)
     last = {"phase": None, "frac": -1.0}
 
     def progress(phase: str, frac: float) -> None:
@@ -50,9 +101,19 @@ def _child(fn, args, kwargs, q) -> None:  # runs in the child process
             q.put(("p", phase, frac))
 
     try:
-        q.put(("r", fn(*args, progress=progress, **kwargs)))
+        result = fn(*args, progress=progress, **kwargs)
+        unlimit_memory(limits)
+        q.put(("r", result))
+    except MemoryError:
+        unlimit_memory(limits)
+        q.put(("m", None))
     except BaseException as exc:  # reported to the parent
-        q.put(("e", repr(exc)))
+        unlimit_memory(limits)
+        try:
+            pickle.dumps(exc)
+            q.put(("e", exc))
+        except Exception:
+            q.put(("e", RuntimeError(repr(exc))))
 
 
 def run_in_child(
@@ -63,6 +124,7 @@ def run_in_child(
     progress: ProgressFn,
     cancelled: Callable[[], bool] | None = None,
     timeout: float | None = None,
+    reraise: bool = False,
 ):
     """Call ``fn(*args, progress=..., **kwargs)`` in a child process and return its result.
 
@@ -70,7 +132,9 @@ def run_in_child(
     message the child sends. ``cancelled()`` is polled about four times a second; when
     it returns True the child is killed and :class:`JobCancelled` raised. After
     ``timeout`` seconds the child is killed and :class:`JobTimeout` raised. A failing
-    or crashing child raises :class:`RuntimeError`.
+    or crashing child raises :class:`RuntimeError` (``worker failed: …``), or with
+    ``reraise`` the child's own exception; a child that ran out of memory raises
+    :class:`MemoryError`, one that ended without a result :class:`WorkerDied`.
     """
     kwargs = kwargs or {}
     if "fork" not in mp.get_all_start_methods():
@@ -95,14 +159,20 @@ def run_in_child(
                 try:                                  # exited: its last message may still be in flight
                     msg = q.get(timeout=1.0)
                 except queue.Empty:
-                    raise RuntimeError(f"worker process exited ({proc.exitcode})") from None
+                    raise WorkerDied(proc.exitcode) from None
+            if msg[0] == "s":                         # the child has started
+                continue
             if msg[0] == "p":
                 progress(msg[1], msg[2])
             elif msg[0] == "r":
                 done = True
                 return msg[1]
+            elif msg[0] == "m":
+                raise MemoryError("the worker process ran out of memory")
+            elif reraise:
+                raise msg[1]
             else:
-                raise RuntimeError(f"worker failed: {msg[1]}")
+                raise RuntimeError(f"worker failed: {msg[1]!r}")
     finally:
         if not done and proc.is_alive():
             proc.terminate()

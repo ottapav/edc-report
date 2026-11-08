@@ -47,6 +47,14 @@ def started(job_id: str) -> dict:
                 text=no_update)                       # the poll draws the bar
 
 
+def start_job(start, lang: str, *args, **kwargs) -> dict:
+    """``started(start(*args, **kwargs))``, or refused when the server is busy."""
+    try:
+        return started(start(*args, **kwargs))
+    except jobs.Busy:
+        return refused("server_busy", lang)
+
+
 def _usable(entry, lang: str, part_reason: str) -> dict | None:
     """Why a computation cannot start, as the card's outputs; None if it can."""
     if entry is None:                    # server restarted / went to sleep since the upload
@@ -88,12 +96,13 @@ def start_exact(n, key, rows, reserve, lang, pair_rows=None):
         problem = members.pair_problem(typed, entry.fit)
         if problem:
             return refused(problem, lang)
-        return started(jobs.start_exact(key, None, members.reserve(reserve), pairs=typed))
+        return start_job(jobs.start_exact, lang, key, None, members.reserve(reserve),
+                         pairs=typed)
     typed = members.keys(entry.data, rows)
     problem = members.key_problem(typed, entry.fit)
     if problem:
         return refused(problem, lang)
-    return started(jobs.start_exact(key, typed, members.reserve(reserve)))
+    return start_job(jobs.start_exact, lang, key, typed, members.reserve(reserve))
 
 
 @callback(
@@ -116,7 +125,7 @@ def start_bill(n, key, rows, src_rows, feed_in, default, lang, n_spot=None):
     inputs, missing = bill_inputs(entry.data, rows, src_rows, feed_in, default)
     if missing:
         return refused(missing, lang)
-    return started(jobs.start_bill(key, *inputs))
+    return start_job(jobs.start_bill, lang, key, *inputs)
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +144,7 @@ def poll_state(job_id: str | None, rev: int | None, lang: str) -> tuple:
             return True, False, nu, nu, nu, nu
         return True, False, "progress error", {"width": "0%"}, t("job_lost", lang), nu
     job.seen = time.perf_counter()                       # the page is alive
+    store.get(job.data_key)                              # ... and so is its report
     if job.final is not None:
         # Idempotent: the interval may fire again before the first "done" response
         # arrives, and Dash then drops that first response as outdated - so every

@@ -588,6 +588,8 @@ def _write(ws, tables: list[Table]) -> None:
             r += 1
         for c, h in enumerate(tbl.head, 1):
             cell = ws.cell(r, c, h)
+            if isinstance(h, str) and h.startswith("="):
+                cell.data_type = "s"                 # e.g. a producer's name as a header
             cell.font, cell.fill = _BOLD, _HEAD_FILL
             cell.alignment = Alignment(wrap_text=True, vertical="top")
             widths[c] = max(widths.get(c, 0), min(len(str(h)), 28))
@@ -597,6 +599,8 @@ def _write(ws, tables: list[Table]) -> None:
         for i, row in enumerate(tbl.rows):
             for c, v in enumerate(row, 1):
                 cell = ws.cell(r, c, v)
+                if isinstance(v, str) and v.startswith("="):
+                    cell.data_type = "s"             # a typed name stays text, not a formula
                 fmt = tbl.formats[c - 1] if c - 1 < len(tbl.formats) else None
                 if c > 1 and i in tbl.row_formats and v is not None and not isinstance(v, str):
                     fmt = tbl.row_formats[i]
