@@ -21,27 +21,27 @@
   {{JAZYKY}}
   <p class="kicker">Sdílení elektřiny · UCEEB ČVUT v Praze</p>
   <h1>Spravedlivá cena sdílené kilowatthodiny</h1>
-  <p class="perex">V minulém článku jsme ukázali, jak rozdělit výrobu mezi členy skupiny sdílení do poslední kilowatthodiny [1]. Zbývá otázka peněz: kolik má člen za sdílenou kilowatthodinu zaplatit výrobci. Elektroenergetické datové centrum ji neřeší, cenu si členové sjednají sami. Ukážeme pravidlo, které rozdělí úsporu ze sdílení podle toho, co kdo skupině přináší. Jmenuje se Shapleyho hodnota a v teorii her je nejznámější odpovědí na otázku, jak spravedlivě rozdělit společný zisk.</p>
-  <p class="byline">Ing. Pavel Otta, PhD. · Řídicí systémy a optimalizace, UCEEB ČVUT v Praze</p>
+  <p class="perex">V minulém článku jsme ukázali, jak rozdělit výrobu mezi členy skupiny sdílení do poslední kilowatthodiny. Zbývá otázka peněz: kolik má člen za sdílenou kilowatthodinu zaplatit výrobci. Elektroenergetické datové centrum (EDC) to neřeší, cenu si členové sjednávají sami. Ukážeme pravidlo z teorie her, Shapleyho hodnotu, které rozdělí úsporu ze sdílení podle toho, co kdo skupině přináší, a vysvětlíme, proč je spravedlivé.</p>
+  <p class="byline">Ing. Pavel Otta, Ph.D. · Řídicí systémy a optimalizace, UCEEB ČVUT v Praze</p>
 </header>
 
 <aside class="inbrief" aria-label="V kostce">
   <p class="inbrief-h">V kostce</p>
   <ul>
     <li><strong>Problém:</strong> EDC rozdělí kilowatthodiny, ne peníze. Cenu sdílené elektřiny si členové sjednají ve smlouvě, obvykle jako pevnou cenu za kWh. Ta ale nerozlišuje, zda byla výroba vzácná, nebo jí bylo nazbyt.</li>
-    <li><strong>Co se dělí:</strong> úspora skupiny. Člen nekoupí kilowatthodinu od prodejce a výrobce ji neprodá za výkupní cenu. Rozdíl obou cen je společný zisk.</li>
+    <li><strong>Co se dělí:</strong> úspora skupiny. Člen nekoupí kilowatthodinu od prodejce a výrobce ji neprodá za výkupní cenu. Rozdíl obou cen je společná úspora.</li>
     <li><strong>Řešení:</strong> <strong>Shapleyho hodnota</strong> dá každému jeho průměrný přínos skupině. Je to jediné pravidlo, které splňuje čtyři jednoduché požadavky na spravedlnost.</li>
     <li><strong>Výsledek:</strong> když je výroby dost pro všechny, dělí se úspora napůl. Když je vzácná, dostane výrobce víc. Klíče přitom rozhodují jen o kilowatthodinách, o penězích už ne.</li>
-    <li><strong>Vyzkoušení:</strong> vyúčtování podle přínosu spočítá volně dostupná aplikace edc-report přímo z reportu EDC, přesně a za celé období.</li>
+    <li><strong>Vyzkoušení:</strong> vyúčtování podle přínosu spočítá volně dostupná aplikace edc-report přímo z reportu sdílení, přesně a za celé období.</li>
   </ul>
 </aside>
 
 <h2>Kilowatthodiny rozdělí EDC, peníze smlouva</h2>
-<p>Výpočet EDC končí u kilowatthodin. Pro každou čtvrthodinu určí, kolik z výroby připadne kterému členovi. Za tuto elektřinu člen nezaplatí prodejci cenu silové elektřiny, distribuční poplatky ale platí dál. Výrobce ji naopak neprodá svému obchodníkovi za výkupní cenu.</p>
-<p>Kolik za sdílenou elektřinu zaplatí člen výrobci, EDC ani dodavatelé neřeší. Řídí se to smlouvou o sdílení, kterou si členové uzavřou mezi sebou [1]. V rodině se často sdílí zadarmo. Jinde se nejčastěji sjedná pevná cena za kilowatthodinu, třeba 2,50 Kč. Je srozumitelná a snadno se účtuje.</p>
+<p>Výpočet EDC končí u kilowatthodin. Pro každou čtvrthodinu určí, kolik z výroby připadne kterému členovi. Za tuto elektřinu člen nezaplatí prodejci cenu silové elektřiny, distribuční poplatky ale platí dál. Výrobce ji naopak neprodá za výkupní cenu obchodníkovi, který od něj přetoky vykupuje.</p>
+<p>Kolik za sdílenou elektřinu zaplatí člen výrobci, EDC ani prodejci neřeší. Řídí se to smlouvou o sdílení, kterou si členové uzavřou mezi sebou [1]. V rodině se často sdílí zadarmo. Jinde se nejčastěji sjedná pevná cena za kilowatthodinu, třeba 2,50 Kč. Je srozumitelná a snadno se účtuje.</p>
 <p>Pevná cena má ale tři slabiny:</p>
 <ul class="plain">
-  <li><strong>Nerozlišuje, kdy byla elektřina vzácná.</strong> V červnovém poledni je výroby nazbyt a výrobce by přetoky jinak prodal za výkupní cenu. V listopadovém ránu je výroby málo a členové se o každou kilowatthodinu přetahují. Pevná cena obě situace oceňuje stejně.</li>
+  <li><strong>Nerozlišuje, kdy byla elektřina vzácná.</strong> V červnovém poledni je výroby nazbyt a výrobce by přetoky jinak prodal za výkupní cenu. Za listopadového rána je výroby málo a členové se o každou kilowatthodinu přetahují. Pevná cena obě situace oceňuje stejně.</li>
   <li><strong>Nebere v úvahu různé ceny členů.</strong> Kilowatthodina, která nahradí drahou elektřinu od prodejce, ušetří víc než ta, která nahradí levnou.</li>
   <li><strong>Svazuje peníze s klíči.</strong> Kdo má větší klíč, dostane víc levné elektřiny a víc ušetří. Nastavení klíčů je pak i sporem o peníze, a ne jen o to, jak nasdílet co nejvíc.</li>
 </ul>
@@ -50,18 +50,22 @@
 <h2>Co se vlastně dělí: úspora ze sdílení</h2>
 <p>Než začneme dělit, musíme vědět, kolik peněz je k rozdělení. Sdílená kilowatthodina má pro člena hodnotu ceny od prodejce, protože ji nemusel koupit. Výrobce ji neprodal, a přišel tak o výkupní cenu. Skupina jako celek proto na každé sdílené kilowatthodině ušetří rozdíl obou cen.</p>
 <div class="formula">úspora = ( cena od prodejce − výkupní cena ) × nasdíleno</div>
-<p>Cenou od prodejce rozumíme silovou elektřinu. Distribuci člen platí dál, a do úspory proto nepatří. Kde sdílení ušetří i jiné složky ceny, například při sdílení v bytovém domě bez využití distribuční soustavy, lze je k ceně od prodejce přičíst.</p>
-<p>V příkladech počítáme s cenou od prodejce 4 Kč/kWh a výkupní cenou 1 Kč/kWh. Každá sdílená kilowatthodina tedy skupině ušetří 3 Kč. Kdyby člen platil výrobci celou cenu od prodejce, nechal by si celou úsporu výrobce. Kdyby platil jen výkupní cenu, nechal by si ji celou člen. Spravedlivá cena leží někde mezi 1 a 4 Kč/kWh. Otázka zní, kde přesně.</p>
+<p>Cenou od prodejce rozumíme silovou elektřinu. Distribuci člen platí dál, a do úspory proto nepatří. Kde sdílení ušetří i jiné složky ceny, lze je k ceně od prodejce přičíst. Ceny dosazujeme tak, jak je kdo skutečně platí nebo dostává: cenu od prodejce u domácnosti včetně DPH, výkupní cenu u výrobce, který není plátcem DPH, bez ní.</p>
+<p>V příkladech počítáme s cenou od prodejce 4 Kč/kWh a výkupní cenou 1 Kč/kWh. Každá sdílená kilowatthodina tedy skupině ušetří 3 Kč. Kdyby člen platil výrobci celou cenu od prodejce, nechal by si celou úsporu výrobce. Kdyby platil jen výkupní cenu, nechal by si ji celou člen. Spravedlivá cena leží někde mezi 1 a 4 Kč/kWh. Otázka zní, kde přesně. Obr. 1 předem ukazuje, kam ji Shapleyho hodnota umístí ve dvou situacích, které rozebereme dále.</p>
+<figure>
+  <div class="svgplate">{{ZEBRICEK}}</div>
+  <figcaption><span class="fig-no">Obr. 1</span>Kam padne cena sdílené kilowatthodiny. Mezi výkupní cenou 1 Kč a cenou od prodejce 4 Kč leží úspora 3 Kč/kWh, kterou si výrobce a člen dělí. Když je výroby dost pro všechny, dělí se napůl a cena je 2,50 Kč/kWh. Když je výroba vzácná jako v tabulce 1, dostane výrobce víc a členové zaplatí v průměru 2,75 Kč/kWh.</figcaption>
+</figure>
 
 <h2>Shapleyho hodnota: co kdo skupině přinese</h2>
-<p>Odpověď nabízí teorie her. Americký matematik Lloyd Shapley v roce 1953 navrhl, jak rozdělit zisk, který vytvoří skupina společně [2]. V roce 2012 dostal Nobelovu cenu za ekonomii za teorii stabilních alokací a praxi návrhu trhů [3]. Jeho myšlenka je jednoduchá. Představme si, že hráči vstupují do skupiny jeden po druhém. Každý přinese to, o kolik se úspora skupiny jeho příchodem zvýší. Přínos ale závisí na pořadí, a <span class="term">Shapleyho hodnota</span> je proto průměrný přínos přes všechna možná pořadí.</p>
+<p>Odpověď nabízí teorie her. Americký matematik Lloyd Shapley v roce 1953 navrhl, jak rozdělit zisk, který vytvoří skupina společně [2]. V roce 2012 dostal spolu s Alvinem Rothem Nobelovu cenu za ekonomii, i když za jinou práci: za teorii stabilních alokací a praxi návrhu trhů [3]. Jeho myšlenka je jednoduchá. Představme si, že hráči vstupují do skupiny jeden po druhém. Každý přinese to, o kolik se úspora skupiny jeho příchodem zvýší. Přínos ale závisí na pořadí, a <span class="term">Shapleyho hodnota</span> je proto průměrný přínos přes všechna možná pořadí.</p>
 <p>Hráči jsou v našem případě výrobce a členové skupiny. Hrají vždy o úsporu jedné čtvrthodiny.</p>
 
 <h3>Dva hráči: napůl</h3>
 <p>Začněme výrobcem a jediným členem, Danou. Výrobce sám nic neušetří, přetoky jen prodá. Dana sama také nic neušetří. Úspora vzniká jen společně. Přijde-li první výrobce, přínos má Dana. Přijde-li první Dana, přínos má výrobce. V průměru tedy dostane každý polovinu. Cena sdílené kilowatthodiny leží přesně uprostřed, v příkladu na 2,50 Kč/kWh.</p>
 
 <h3>Dost výroby pro všechny: pořád napůl</h3>
-<p>Přidejme Emila. Výrobna v jedné čtvrthodině dodá 10 kWh, Dana potřebuje 4 kWh a Emil 5 kWh. Výroby je dost pro oba. Dana přinese 4 kWh × 3 Kč = 12 Kč, pokud už je výrobce ve skupině, jinak nic. Výrobce přijde dřív než Dana přesně v polovině pořadí. Dana proto dostane polovinu svých 12 Kč, tedy 6 Kč. Emil stejnou úvahou dostane 7,50 Kč a výrobce zbytek, 13,50 Kč.</p>
+<p>Přidejme Emila. Výrobna v jedné čtvrthodině dodá 10 kWh, Dana potřebuje 4 kWh a Emil 5 kWh. Výroby je dost pro oba. Dana přinese 4 kWh × 3 Kč = 12 Kč, pokud už je výrobce ve skupině, jinak nic. V polovině všech pořadí přijde výrobce dřív než Dana a jen tehdy Dana něco přinese. Dana proto dostane polovinu svých 12 Kč, tedy 6 Kč. Emil stejnou úvahou dostane 7,50 Kč a výrobce zbytek, 13,50 Kč.</p>
 <p>Úspora z každé sdílené kilowatthodiny se tedy opět dělí napůl. Platí to obecně: když výroba stačí všem, dostane výrobce i každý člen polovinu úspory ze své elektřiny.</p>
 
 <h3>Málo výroby: výrobce dostane víc</h3>
@@ -81,27 +85,27 @@
 </table>
 </div>
 <p class="tcap">Tabulka 1: Přínos každého hráče v Kč podle pořadí, v jakém do skupiny přišel. Výrobna dodá 6 kWh, Dana potřebuje 4 kWh, Emil 5 kWh, úspora je 3 Kč/kWh. Každý řádek rozdělí celou úsporu 18 Kč.</p>
-<p>Výrobce dostane 10,50 Kč z 18 Kč, tedy 58 %. Když je výroby málo, je vzácným zdrojem výrobna a její přínos roste. Členové jsou naopak zastupitelní: co nespotřebuje Dana, spotřebuje Emil. Za sdílenou kilowatthodinu teď členové zaplatí v průměru 2,75 Kč místo 2,50 Kč. Kdyby výrobna dodala jen 3 kWh, které by spotřeboval každý z nich i sám, dostal by výrobce dvě třetiny úspory.</p>
+<p>Výrobce dostane 10,50 Kč z 18 Kč, tedy 58 %. Když je výroby málo, je vzácným zdrojem výrobna a její přínos roste. Členové jsou naopak zastupitelní: co nespotřebuje Dana, spotřebuje Emil. Za sdílenou kilowatthodinu teď členové zaplatí v průměru 2,75 Kč místo 2,50 Kč: výrobce dostane výkupní cenu 1 Kč a k ní svůj podíl 10,50 Kč na 6 kWh, tedy 1,75 Kč. Kdyby výrobna dodala jen 3 kWh a každý z členů by je stačil spotřebovat sám, dostal by výrobce dvě třetiny úspory.</p>
 <p>Platí to obecně. Výrobce s jednou výrobnou dostane vždy aspoň polovinu úspory, přesně polovinu tehdy, když je výroby dost pro všechny. Čím je výroba vzácnější, tím víc. Je to podobné jako na trhu, kde má vyšší cenu to, čeho je málo. Shapleyho hodnota k tomu ale nepotřebuje vyjednávání ani nabídky. Stačí naměřená data.</p>
 
 <h2>Proč je to spravedlivé</h2>
 <p>Slovo spravedlivý je ošidné, každý si pod ním představí něco jiného. Shapley proto nezačal vzorcem, ale požadavky, které by mělo splňovat každé rozumné dělení. Vystačil se čtyřmi:</p>
 <ol class="plain">
   <li><strong>Rozdělí se celá úspora.</strong> Nic nezbude a nic nechybí. Výrobce dostane přesně tolik, kolik členové zaplatí.</li>
-  <li><strong>Stejný přínos, stejný podíl.</strong> Dva členové, kteří skupině přinášejí totéž, dostanou totéž. Nezáleží na jménu, na klíči ani na tom, kdo se přihlásil dřív.</li>
+  <li><strong>Stejný přínos, stejný podíl.</strong> Dva členové, kteří skupině přinášejí totéž, dostanou totéž. Nezáleží na jménu ani na tom, kdo se do skupiny přihlásil dřív.</li>
   <li><strong>Kdo nic nepřináší, nic nedostane.</strong> Člen, který v době výroby nic nespotřebuje, z úspory nedostane nic. Stejně dopadne člen, jehož cena od prodejce není vyšší než výkupní cena, protože sdílení s ním nic neušetří.</li>
   <li><strong>Čtvrthodiny se sčítají.</strong> Podíl za měsíc nebo rok je součtem podílů za jednotlivé čtvrthodiny. Každou čtvrthodinu lze posoudit zvlášť a výsledky jen sečíst.</li>
 </ol>
-<p>Shapley dokázal, že tyto čtyři požadavky splňuje jediné pravidlo [2]. Je to právě průměrný přínos přes všechna pořadí. Kdo přijme tyto čtyři požadavky, přijímá tím i Shapleyho hodnotu. Kdo s výsledkem nesouhlasí, musí říct, který z požadavků mu vadí.</p>
+<p>Shapley dokázal, že tyto čtyři požadavky splňuje jediné pravidlo [2]. Je to právě průměrný přínos přes všechna pořadí. Kdo přijme tyto čtyři požadavky, přijímá tím i Shapleyho hodnotu. Kdo s výsledkem nesouhlasí, měl by umět říct, který z požadavků mu vadí.</p>
 
 <aside class="box">
 <p class="box-h">Kde se Shapleyho hodnota používá</p>
-<p>Shapleyho hodnota je jedním z nejpoužívanějších pravidel pro dělení společných nákladů a zisků. Klasickým příkladem jsou poplatky za přistání na letišti. Dráhu sdílejí malá i velká letadla, ale délku dráhy si vynutí jen ta největší. Shapleyho hodnota pak dává jednoduché pravidlo: náklady na každý úsek dráhy si rovným dílem rozdělí přistání, která ho potřebují [4]. Dnes se stejná myšlenka používá i k vysvětlení, které vstupy rozhodly o výsledku modelu strojového učení [5]. V energetice ji výzkumníci navrhují pro dělení přínosů v komunitách s bateriemi [6, 7].</p>
+<p>Shapleyho hodnota je jedním z nejpoužívanějších pravidel pro dělení společných nákladů a zisků. Klasickým příkladem jsou poplatky za přistání na letišti. Dráhu sdílejí malá i velká letadla, ale délku dráhy si vynutí jen ta největší. Shapleyho hodnota pak dává jednoduché pravidlo: náklady na každý úsek dráhy si rovným dílem rozdělí přistání, která ho potřebují [4]. Dnes se stejná myšlenka používá i k vysvětlení, které vstupy rozhodly o výsledku modelu strojového učení [5]. V energetice ji výzkumníci navrhují pro dělení přínosů v energetických komunitách, například ze společné baterie [6, 7].</p>
 </aside>
 
 <h2>Klíče rozhodují o kilowatthodinách, vyúčtování o penězích</h2>
-<p>Vraťme se k příkladu z minulého článku. Výrobna v jedné čtvrthodině dodá 12 kWh. Dana má klíč 50 % a potřebuje 4 kWh, Emil má klíč 30 % a potřebuje 5 kWh, Filip má klíč 20 % a potřebuje 6 kWh. Přesná statická metoda dá Daně 4 kWh, Emilovi 4,8 kWh a Filipovi 3,2 kWh. Rozdělí se všech 12 kWh a skupina ušetří 36 Kč.</p>
-<p>Shapleyho hodnota tuto úsporu rozdělí takto: výrobce 20,25 Kč, Dana 3,75 Kč, Emil 5,25 Kč a Filip 6,75 Kč. Výroby je méně, než členové potřebují, a výrobce proto dostane víc než polovinu, 56 %. Filip má největší spotřebu a přináší výrobě nejvíc využití, a tak z členů dostane nejvíc.</p>
+<p>Vraťme se k příkladu z minulého článku. Výrobna v jedné čtvrthodině dodá 12 kWh. Dana má klíč 50 % a potřebuje 4 kWh, Emil má klíč 30 % a potřebuje 5 kWh, Filip má klíč 20 % a potřebuje 6 kWh. Přesná statická metoda, která dělí výrobu do poslední kilowatthodiny [1], dá Daně 4 kWh, Emilovi 4,8 kWh a Filipovi 3,2 kWh. Rozdělí se všech 12 kWh a skupina ušetří 36 Kč.</p>
+<p>Shapleyho hodnota tuto úsporu rozdělí takto: výrobce 20,25 Kč, Dana 3,75 Kč, Emil 5,25 Kč a Filip 6,75 Kč. Výroby je méně, než členové potřebují, a výrobce proto dostane víc než polovinu, 56 %. Filip má největší spotřebu a dokáže využít nejvíc výroby, a tak z členů dostane nejvíc.</p>
 <p>Do vyúčtování se podíl promítne jednoduše. Člen ušetřil u prodejce cenu za nasdílené kilowatthodiny. Výrobci z toho zaplatí vše kromě svého podílu na úspoře:</p>
 <div class="formula">platba výrobci = cena od prodejce × nasdíleno − podíl na úspoře</div>
 <p>Dana dostala celé své 4 kWh a u prodejce ušetřila 16 Kč. Výrobci zaplatí 16 − 3,75 = 12,25 Kč, tedy 3,06 Kč/kWh. Filip dostal jen 3,2 kWh, ačkoli by spotřeboval 6. Ušetřil 12,80 Kč a výrobci zaplatí 6,05 Kč, tedy jen 1,89 Kč/kWh. Výrobce dostane součet plateb, 32,25 Kč. To je výkupní hodnota 12 kWh (12 Kč) plus jeho podíl 20,25 Kč.</p>
@@ -120,42 +124,56 @@
 </table>
 </div>
 <p class="tcap">Tabulka 2: Vyúčtování příkladu pro dvoje klíče. Cena je u členů platba výrobci za kWh, u výrobce průměrný příjem za kWh. Podíly na úspoře se se změnou klíčů nemění.</p>
-<p>Tabulka 2 ukazuje totéž vyúčtování pro klíče po třetinách. Každý teď dostane 4 kWh, ale podíly na úspoře zůstanou stejné. Každý člen ušetří přesně svůj podíl, ať jsou klíče jakékoli. Klíče mění jen to, kolik kilowatthodin člen dostane a kolik za ně zaplatí. Kdo dostane víc, než odpovídá jeho přínosu, zaplatí za kilowatthodinu víc.</p>
+<p>Tabulka 2 ukazuje totéž vyúčtování pro klíče po třetinách. Každý teď dostane 4 kWh, ale podíly na úspoře zůstanou stejné. Každý člen ušetří přesně svůj podíl, ať jsou klíče jakékoli. Klíče mění jen to, kolik kilowatthodin člen dostane a kolik za ně zaplatí. Kdo dostane víc kilowatthodin, zaplatí za každou víc: jeho podíl na úspoře se rozpočítá na víc kilowatthodin.</p>
 <p>Klíče tak přestanou být sporem o peníze. Skupina je může nastavit tak, aby se nasdílelo co nejvíc, třeba podle průběhu spotřeby. Vydělají na tom všichni, protože roste úspora, kterou si dělí.</p>
 
-<h3>Když klíč člena odstaví: záporná platba</h3>
-<p>Oddělit peníze od klíčů má jeden důsledek, který stojí za vysvětlení. Kdyby měl Filip klíč 0 %, nedostal by v naší čtvrthodině nic, ačkoli by spotřeboval 6 kWh. Dana s klíčem 70 % a Emil s 30 % by dostali 4 a 5 kWh a 3 kWh by odešly do sítě. Skupina by ušetřila jen 27 Kč z možných 36 Kč, a podíly všech se proto zmenší na tři čtvrtiny.</p>
-<p>Filipovi tak zůstane podíl 5,06 Kč, přestože u prodejce neušetřil nic. Jeho platba výrobci vyjde záporná: výrobce mu 5,06 Kč doplatí. Dana zaplatí 13,19 Kč a Emil 16,06 Kč, výrobce dostane celkem 24,19 Kč.</p>
-<p>Není to chyba, ale důsledek pravidla. Filip skupině přináší stejně jako dřív, jen mu klíč nedovolil přínos využít. Ztrátu z nevhodných klíčů nesou všichni poměrně a Filip nepřijde o víc než ostatní. Záporná platba je proto užitečný signál, že klíč člena je hluboko pod jeho přínosem. Klíče nastavené podle spotřeby ji obvykle odstraní a zároveň zvýší úsporu celé skupiny. Aplikace zápornou platbu v tabulce vyúčtování zvýrazní a vysvětlí.</p>
-
-<h2>Jak vyúčtování počítá aplikace</h2>
-<p>Vyúčtování podle přínosu má v aplikaci edc-report [8] vlastní záložku „Vyúčtování“, vedle záložek „Sdílení“ a „Sdílení × prodej na spotu“. Vychází z reportu sdílení, který si každá skupina stáhne z portálu EDC. Ke každému členovi se zadá cena od prodejce a ke každé výrobně výkupní cena. Výpočet pak proběhne pro každou čtvrthodinu zvlášť a výsledky se sečtou.</p>
-
 <h3>Úspora při nejlepším sdílení</h3>
-<p>Shapleyho hodnota potřebuje vědět, kolik by ušetřila každá možná podskupina. Pro podskupiny ale žádné klíče sjednané nejsou. Aplikace proto počítá úsporu podskupiny při nejlepším možném sdílení: výroba jde nejdřív k členům s nejvyšší cenou od prodejce. Díky tomu podíly nezávisejí na klíčích a nikdo si nepolepší jen tím, že si vyjedná větší klíč.</p>
-
-<h3>Různé ceny a více výroben</h3>
-<p>Mají-li členové různé ceny od prodejců, přináší sdílená kilowatthodina víc tam, kde nahradí dražší elektřinu. Člen s drahým prodejcem proto při nedostatku výroby přispívá víc a dostane větší podíl. Člen, jehož cena není vyšší než výkupní cena, nedostane nic, protože sdílení s ním nic neušetří.</p>
-<p>Více výroben aplikace počítá jako bazén z minulého článku: kterákoli výrobna může dodat kterémukoli členovi. Každá výrobna má vlastní výkupní cenu a nejlevnější výroba jde k nejdražší spotřebě. Podíl výrobny se počítá stejně jako podíl člena. Je-li výroben hodně a spotřeby málo, role se obrátí. Vzácní jsou pak členové a jejich podíl roste.</p>
+<p>Proč podíly na klíčích nezávisejí? Shapleyho hodnota potřebuje vědět, kolik by ušetřila každá možná podskupina. Pro podskupiny ale žádné klíče sjednané nejsou. Vyúčtování proto počítá úsporu podskupiny při nejlepším možném sdílení: výroba jde nejdřív k členům s nejvyšší cenou od prodejce. Díky tomu podíly nezávisejí na klíčích a nikdo si nepolepší jen tím, že si vyjedná větší klíč.</p>
 
 <h3>Přepočet na skutečnou úsporu</h3>
-<p>Skutečné sdílení podle reportu EDC bývá horší než nejlepší možné. Klíče nejsou dokonalé a dnešní výpočet nedělí do konce. Aplikace proto z reportu spočítá skutečnou úsporu a podíly všech zmenší ve stejném poměru. Ztrátu oproti nejlepšímu sdílení tak nesou všichni poměrně.</p>
-<p>V příkladu z tabulky 2 by dnešní výpočet v pěti kolech rozdělil 11,87 kWh místo 12 kWh. Skupina by ušetřila 35,61 Kč z možných 36 Kč, tedy 98,9 %. Podíly všech čtyř hráčů se proto zmenší o 1,1 %. Aplikace zároveň ukáže, kolik úspory skupině ušlo.</p>
+<p>Skutečné sdílení, jak ho zachytí report z portálu EDC, bývá horší než nejlepší možné. Klíče nejsou dokonalé a dnešní výpočet nedělí do konce. Vyúčtování proto z reportu spočítá skutečnou úsporu a podíly všech zmenší ve stejném poměru. Ztrátu oproti nejlepšímu sdílení tak nesou všichni poměrně.</p>
+<p>V příkladu z tabulky 2 by dnešní výpočet EDC, který dělí výrobu podle klíčů v pěti kolech, rozdělil 11,87 kWh místo 12 kWh. Skupina by ušetřila 35,61 Kč z možných 36 Kč, tedy 98,9 %. Podíly všech čtyř hráčů se proto zmenší o 1,1 %. Aplikace zároveň ukáže, kolik úspory skupině ušlo.</p>
 
-<h3>Co aplikace ukáže</h3>
+<h3>Záporná platba: když klíč člena odstaví</h3>
+<p>Oddělit peníze od klíčů má jeden důsledek, který stojí za vysvětlení. Kdyby měl Filip klíč 0 %, nedostal by v naší čtvrthodině nic, ačkoli by spotřeboval 6 kWh. Dana s klíčem 70 % a Emil s 30 % by dostali 4 a 5 kWh a 3 kWh by odešly do sítě. Skupina by ušetřila jen 27 Kč z možných 36 Kč, a podíly všech se proto zmenší na tři čtvrtiny.</p>
+<p>Filipovi tak zůstane podíl 5,06 Kč, přestože u prodejce neušetřil nic. Jeho platba výrobci vyjde záporná: výrobce mu 5,06 Kč doplatí. Dana zaplatí 13,19 Kč a Emil 16,06 Kč, výrobce dostane celkem 24,19 Kč.</p>
+<p>Není to chyba, ale důsledek pravidla. Filip skupině přináší stejně jako dřív, jen mu klíč nedovolil přínos využít. O klíčích přitom nerozhodl on, ale celá skupina. Ztrátu z nevhodných klíčů nesou všichni poměrně a Filip nepřijde o víc než ostatní. Záporná platba je proto užitečný signál, že klíč člena je hluboko pod jeho přínosem. Klíče nastavené podle spotřeby ji obvykle odstraní a zároveň zvýší úsporu celé skupiny. Aplikace zápornou platbu v tabulce vyúčtování zvýrazní a vysvětlí.</p>
+
+<h2>Od příkladu k celé skupině</h2>
+<p>Skutečné vyúčtování se počítá stejně jako příklady, jen pro každou čtvrthodinu celého období zvlášť, a výsledky se sečtou. Ke každému členovi se zadá cena od prodejce a ke každé výrobně výkupní cena.</p>
+<p>Mají-li členové různé ceny od prodejců, přináší sdílená kilowatthodina víc tam, kde nahradí dražší elektřinu. Člen s drahým prodejcem proto při nedostatku výroby přispívá víc a dostane větší podíl. Člen, jehož cena není vyšší než výkupní cena, nedostane nic (viz třetí požadavek).</p>
+<p>Více výroben se počítá jako bazén z minulého článku: kterákoli výrobna může dodat kterémukoli členovi. Každá výrobna má vlastní výkupní cenu a nejlevnější výroba jde k nejdražší spotřebě. Podíl každého výrobce se počítá stejně jako podíl člena. Je-li výroben hodně a spotřeby málo, role se obrátí. Vzácní jsou pak členové a jejich podíl roste.</p>
+
+<h2>Vyúčtování skutečné skupiny</h2>
+<p>Vraťme se ke skupině z minulého článku. Má fotovoltaiku 11,44 kWp s baterií 11,6 kWh a pět odběrných míst s klíči 50 % a čtyřikrát 10 %. Za rok od září 2025 do září 2026 se členům nasdílelo 2 235 kWh. Vyúčtování jsme spočítali s cenou od prodejce <mark class="todo">[DOPLNIT]</mark> Kč/kWh pro všechny členy a výkupní cenou <mark class="todo">[DOPLNIT]</mark> Kč/kWh.</p>
+<p>V této skupině je výroba většinou vzácná. Ze 12 707 čtvrthodin, kdy bylo co sdílet, jí bylo dost pro všechny jen ve 3 727, tedy ve 29 %. Podíl výrobce proto čekáme výrazně nad polovinou.</p>
 <ul class="plain">
-  <li><strong>Vyúčtování podle člena:</strong> nasdílené kilowatthodiny, jejich hodnota za cenu od prodejce, podíl na úspoře, platba výrobci a cena za kWh.</li>
-  <li><strong>Výrobce:</strong> nasdílená energie, příjem od členů, výkupní hodnota a podíl na úspoře.</li>
-  <li><strong>Grafy:</strong> kam šla úspora, podíly po dnech a průběh vybraného dne po čtvrthodinách. Grafy se sčítají přesně na vyúčtování.</li>
+  <li><mark class="todo">[DOPLNIT z aplikace]</mark> Úspora ze sdílení: … Kč z nejvýše … Kč při nejlepším sdílení (… %).</li>
+  <li><mark class="todo">[DOPLNIT z aplikace]</mark> Podíl výrobce: … Kč (… % úspory), průměrně … Kč za sdílenou kWh.</li>
+  <li><mark class="todo">[DOPLNIT z aplikace]</mark> Podíly členů a jejich ceny za kWh: od … do … Kč/kWh.</li>
+  <li><mark class="todo">[DOPLNIT z aplikace]</mark> Srovnání s pevnou cenou … Kč/kWh: kdo by si polepšil a kdo pohoršil, o kolik Kč za rok.</li>
+  <li><mark class="todo">[DOPLNIT obrázek]</mark> Kam šla úspora ze sdílení (koláč z aplikace: podíl výrobce, podíly členů, co ušlo při sdílení EDC).</li>
+  <li><mark class="todo">[DOPLNIT obrázek]</mark> Podíl výrobce na úspoře, nebo cena sdílené kWh, podle měsíce: jak se cena mění se vzácností výroby mezi létem a zimou.</li>
 </ul>
-<p>Platby se zaokrouhlí na celé haléře tak, aby výrobce dostal přesně to, co členové zaplatí.</p>
+<p>Každá skupina si může vyúčtování spočítat sama. Stačí stáhnout report sdílení z portálu EDC, nahrát ho do aplikace edc-report [8] a zadat ceny. Aplikace spočítá vyúčtování pro každého člena i výrobce a ukáže, kam úspora šla. Soubor neukládá na disk a v paměti serveru ho drží jen po dobu práce, nejdéle hodinu od posledního použití.</p>
+<p class="keypoint">Vyzkoušejte to na své skupině. <span><a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a></span></p>
+
+<h2>Co dál: návrh pro smlouvu o sdílení</h2>
+<p>Vyúčtování podle přínosu nemění výpočet EDC ani zúčtování u prodejců. Je to návrh, jak ve smlouvě o sdílení určit cenu. Členové se na něm musí dohodnout předem. Smlouva by měla říct, s jakými cenami od prodejců a výkupními cenami se počítá a jak často se vyúčtovává.</p>
+<p>Několik věcí je dobré mít na paměti:</p>
+<ul class="plain">
+  <li><strong>Ceny.</strong> Aplikace počítá s jednou cenou od prodejce pro každého člena a jednou výkupní cenou pro každou výrobnu za celé období. Výsledek je tak přesný, jak dobře zadané ceny odpovídají skutečnosti.</li>
+  <li><strong>Jiná pojetí spravedlnosti.</strong> Shapleyho hodnota není jediné možné dělení. Při velkém nedostatku výroby by si výrobce mohl vybrat jen jednoho člena a sjednat si s ním víc. Shapleyho hodnota tuto vyjednávací sílu tlumí: je to dohoda o spravedlivém dělení, ne tržní cena. Stejně jako u klíčů je volba pravidla věcí dohody členů.</li>
+  <li><strong>Právní rámec.</strong> Podle Energetického regulačního úřadu nemusí být sdílení za úplatu podnikáním, pokud peníze slouží jako příspěvek na pokrytí nákladů výroby [9]. Cena podle přínosu ale může být vyšší než náklady výroby, v našich příkladech vychází 2,50 až 3,06 Kč/kWh. Pak může jít o podnikání, které vyžaduje licenci ERÚ na výrobu elektřiny. Před sjednáním ceny je dobré to ověřit.</li>
+</ul>
+<p>Minulý článek ukázal, jak rozdělit kilowatthodiny do poslední. Tento ukazuje, jak spravedlivě rozdělit peníze. Obě části fungují samostatně: vyúčtování podle přínosu lze použít s jakýmkoli výpočtem EDC. S přesnou statickou metodou se ale nasdílí víc, a je tedy víc co dělit. Klíče pak mohou sloužit jen tomu, aby se nasdílelo co nejvíc, a o penězích rozhodne vyúčtování podle přínosu.</p>
 
 <aside class="box">
 <p class="box-h">Pro zájemce a programátory</p>
 <p>Shapleyho hodnota hráče <em>i</em>&nbsp;ve skupině <em>N</em> s <em>n</em> hráči je vážený průměr jeho přínosů ke všem podskupinám <em>S</em>, které ho neobsahují:</p>
 <div class="formula">φ<sub>i</sub> = Σ<sub>S ⊆ N ∖ {i}</sub> |S|! · (n − |S| − 1)! / n! · ( v(S ∪ {i}) − v(S) )</div>
 <p>Váha je podíl pořadí, ve kterých hráč <em>i</em>&nbsp;přijde právě po podskupině <em>S</em>. Úspora podskupiny v jedné čtvrthodině je při jedné ceně <em>p</em> a výkupní ceně <em>f</em>:</p>
-<div class="formula">v(S) = (p − f) · min ( G(S) ; D(S) ) &nbsp;<span class="c">G = přebytek výroben, D = spotřeba členů v podskupině</span></div>
+<div class="formula">v(S) = (p − f) · min(G(S); D(S)) &nbsp;<span class="c">G = přebytek výroben, D = spotřeba členů v podskupině</span></div>
 <p>Při různých cenách se úspora rozloží na cenové hladiny a každá hladina je hra stejného tvaru. Výpočet přes všechna pořadí je v Pythonu na pár řádků:</p>
 <pre><code>from itertools import permutations
 
@@ -173,8 +191,8 @@ def shapley(hraci, v):
 P, d, uspora = 6, {"Dana": 4, "Emil": 5}, 3      # kWh, kWh, Kč/kWh
 v = lambda S: uspora * min(P, sum(d[h] for h in S if h in d)) if "výrobce" in S else 0
 print(shapley(["výrobce", "Dana", "Emil"], v))  # výrobce 10.5, Dana 3.0, Emil 4.5</code></pre>
-<p>Pořadí je ale hodně. Pro 10 hráčů je jich 3,6 milionu, pro 20 hráčů přes 2 × 10<sup>18</sup>. A rok má 35 040 čtvrthodin. Odborné práce o sdílení s bateriemi proto Shapleyho hodnotu obvykle jen odhadují náhodným výběrem pořadí [6, 7].</p>
-<p>Aplikace ji počítá přesně. Úspora podskupiny totiž závisí jen na součtu výroby a spotřeby jejích členů. Místo pořadí stačí sledovat rozdělení tohoto součtu, když každý další hráč vstoupí s pravděpodobností <em>u</em>&nbsp;(Owenova multilineární extenze [9]). Rozdělení se spočítá dynamickým programováním po setinách kWh, integrál přes <em>u</em>&nbsp;Gaussovou kvadraturou s pevnou mezí chyby. Postup navazuje na práci [10] a rozšiřuje ji o výrobny, cenové hladiny a rychlé odebrání jednoho hráče. Když výroba stačí všem, použije aplikace rovnou pravidlo napůl. Testy porovnávají výsledky s výpočtem přes všechny podskupiny s přesností 10<sup>−9</sup> Kč. Jak dlouho výpočet trvá, ukazuje tabulka 3.</p>
+<p>Pořadí je ale hodně. Pro 10 hráčů je jich 3,6 milionu, pro 20 hráčů přes 2 × 10<sup>18</sup>. A rok má 35 040 čtvrthodin. Odborné práce o energetických komunitách proto Shapleyho hodnotu obvykle jen odhadují náhodným výběrem pořadí [6, 7].</p>
+<p>Aplikace ji počítá přesně. Úspora podskupiny totiž závisí jen na součtu výroby a spotřeby jejích členů. Místo pořadí stačí sledovat rozdělení tohoto součtu, když každý další hráč vstoupí s pravděpodobností <em>u</em>&nbsp;(Owenova multilineární extenze [10]). Rozdělení se spočítá dynamickým programováním po setinách kWh, integrál přes <em>u</em>&nbsp;Gaussovou kvadraturou s pevnou mezí chyby. Postup navazuje na práci [11] a rozšiřuje ji o výrobny, cenové hladiny a rychlé odebrání jednoho hráče. Když výroba stačí všem, použije aplikace rovnou pravidlo napůl. Testy porovnávají výsledky s výpočtem přes všechny podskupiny s přesností 10<sup>−9</sup> Kč. Jak dlouho výpočet trvá, ukazuje tabulka 3.</p>
 <div class="tbl">
 <table>
   <thead><tr><th>Členové</th><th>Výrobny</th><th>Období</th><th>Doba výpočtu</th></tr></thead>
@@ -188,32 +206,8 @@ print(shapley(["výrobce", "Dana", "Emil"], v))  # výrobce 10.5, Dana 3.0, Emil
   </tbody>
 </table>
 </div>
-<p class="tcap">Tabulka 3: Doba výpočtu vyúčtování na jednom jádře pro syntetické skupiny. Čas roste s počtem členů a s počtem různých cen.</p>
+<p class="tcap">Tabulka 3: Doba výpočtu vyúčtování na jednom jádře pro syntetické skupiny. Čas roste s počtem členů a s počtem různých cen: 150 členů za měsíc trvá 38 s, mají-li všichni stejnou cenu, a 3 min, má-li skoro každý jinou. Na serveru aplikace může výpočet trvat několikrát déle.</p>
 </aside>
-
-<h2>Co vyúčtování ukáže u skutečné skupiny</h2>
-<p>Vraťme se ke skupině z minulého článku. Má fotovoltaiku 11,44 kWp s baterií 11,6 kWh a pět odběrných míst s klíči 50 % a čtyřikrát 10 %. Za rok od září 2025 do září 2026 se členům nasdílelo 2 235 kWh. Vyúčtování jsme spočítali s cenou od prodejce <mark class="todo">[DOPLNIT]</mark> Kč/kWh pro všechny členy a výkupní cenou <mark class="todo">[DOPLNIT]</mark> Kč/kWh.</p>
-<p>V této skupině je výroba většinou vzácná. Ze 12 707 čtvrthodin, kdy bylo co sdílet, jí bylo dost pro všechny jen ve 3 727. Podíl výrobce proto čekáme výrazně nad polovinou.</p>
-<ul class="plain">
-  <li><mark class="todo">[DOPLNIT z aplikace]</mark> Úspora ze sdílení: … Kč z nejvýše … Kč při nejlepším sdílení (… %).</li>
-  <li><mark class="todo">[DOPLNIT z aplikace]</mark> Podíl výrobce: … Kč (… % úspory), průměrně … Kč za sdílenou kWh.</li>
-  <li><mark class="todo">[DOPLNIT z aplikace]</mark> Podíly členů a jejich ceny za kWh: od … do … Kč/kWh.</li>
-  <li><mark class="todo">[DOPLNIT z aplikace]</mark> Srovnání s pevnou cenou … Kč/kWh: kdo by si polepšil a kdo pohoršil, o kolik Kč za rok.</li>
-  <li><mark class="todo">[DOPLNIT obrázek]</mark> Kam šla úspora ze sdílení (koláč z aplikace: podíl výrobce, podíly členů, co ušlo při sdílení EDC).</li>
-  <li><mark class="todo">[DOPLNIT obrázek]</mark> Podíl výrobce na úspoře, nebo cena sdílené kWh, podle měsíce: jak se cena mění se vzácností výroby mezi létem a zimou.</li>
-</ul>
-<p>Každá skupina si může vyúčtování spočítat sama. Stačí stáhnout report sdílení z portálu EDC, nahrát ho do aplikace a zadat ceny. Nahraný soubor se nikam neukládá.</p>
-<p class="keypoint">Vyzkoušejte to na své skupině. <span><a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a></span></p>
-
-<h2>Co dál: návrh pro smlouvu o sdílení</h2>
-<p>Vyúčtování podle přínosu nemění výpočet EDC ani zúčtování u dodavatelů. Je to návrh, jak ve smlouvě o sdílení určit cenu. Členové se na něm musí dohodnout předem. Smlouva by měla říct, s jakými cenami od prodejců a výkupními cenami se počítá a jak často se vyúčtovává.</p>
-<p>Několik věcí je dobré mít na paměti:</p>
-<ul class="plain">
-  <li><strong>Ceny.</strong> Aplikace počítá s jednou cenou od prodejce pro každého člena a jednou výkupní cenou pro každou výrobnu za celé období. Výsledek je tak přesný, jak dobře zadané ceny odpovídají skutečnosti.</li>
-  <li><strong>Jiná pojetí spravedlnosti.</strong> Shapleyho hodnota není jediné možné dělení. Při velkém nedostatku výroby by si výrobce mohl vybrat jen jednoho člena a sjednat si s ním víc. Shapleyho hodnota tuto vyjednávací sílu tlumí: je to dohoda o spravedlivém dělení, ne tržní cena. Stejně jako u klíčů je volba pravidla věcí dohody členů.</li>
-  <li><strong>Právní rámec.</strong> Úplata za sdílenou elektřinu nad náklady výroby může být podnikáním a vyžadovat licenci ERÚ na výrobu elektřiny. Před sjednáním ceny je dobré to ověřit.</li>
-</ul>
-<p>Minulý článek ukázal, jak rozdělit kilowatthodiny do poslední. Tento ukazuje, jak spravedlivě rozdělit peníze. Obě části fungují samostatně: vyúčtování podle přínosu lze použít s jakýmkoli výpočtem EDC. S přesnou statickou metodou se ale nasdílí víc, a je tedy víc co dělit. Klíče pak mohou sloužit jen tomu, aby se nasdílelo co nejvíc, a o penězích rozhodne vyúčtování podle přínosu.</p>
 
 <aside class="about">
 <p><strong>Univerzitní centrum energeticky efektivních budov ČVUT v Praze (UCEEB)</strong> se věnuje výzkumu energetiky budov. Tým Řídicí systémy a optimalizace se zabývá řízením a optimalizací energetických systémů. Kontakt: pavel.otta@cvut.cz</p>
@@ -225,12 +219,13 @@ print(shapley(["výrobce", "Dana", "Emil"], v))  # výrobce 10.5, Dana 3.0, Emil
 <li>P. Otta: Sdílení elektřiny do poslední kilowatthodiny. TZB-info, 2026, <mark class="todo">[DOPLNIT datum a odkaz po vydání]</mark>.</li>
 <li>L. S. Shapley: A value for n-person games. In: H. W. Kuhn, A. W. Tucker (eds.): Contributions to the Theory of Games II. Annals of Mathematics Studies 28, Princeton University Press, 1953, s. 307–317.</li>
 <li>The Prize in Economic Sciences 2012. Tisková zpráva Královské švédské akademie věd, <a href="https://www.nobelprize.org/prizes/economic-sciences/2012/press-release/">nobelprize.org</a>.</li>
-<li>S. C. Littlechild, G. Owen: A simple expression for the Shapley value in a special case. Management Science 20(3), 1973.</li>
+<li>S. C. Littlechild, G. Owen: A simple expression for the Shapley value in a special case. Management Science 20(3), 1973, s. 370–372.</li>
 <li>S. M. Lundberg, S.-I. Lee: A unified approach to interpreting model predictions. Advances in Neural Information Processing Systems 30, 2017.</li>
 <li>L. Han, T. Morstyn, M. McCulloch: Estimation of the Shapley value of a peer-to-peer energy sharing game using coalitional stratified random sampling. 2019, <a href="https://arxiv.org/abs/1903.11047">arXiv:1903.11047</a>.</li>
 <li>S. Cremers, V. Robu, P. Zhang, M. Andoni, S. Norbu, D. Flynn: Efficient methods for approximating the Shapley value for asset sharing in energy communities. Applied Energy 331, 2023, 120328, <a href="https://doi.org/10.1016/j.apenergy.2022.120328">doi:10.1016/j.apenergy.2022.120328</a>.</li>
 <li>P. Otta: edc-report. Aplikace pro rozbor reportu sdílení a vyúčtování podle přínosu, aplikace <a href="https://edc-report.uceeb.cvut.cz/">edc-report.uceeb.cvut.cz</a>, zdrojový kód <a href="https://github.com/ottapav/edc-report">github.com/ottapav/edc-report</a>.</li>
-<li>G. Owen: Multilinear extensions of games. Management Science 18(5), 1972.</li>
+<li>Limit pro povinnou licenci na výrobu elektřiny se od srpna zvýšil (vyjádření ERÚ). oEnergetice.cz, ČTK, 25. 9. 2025, <a href="https://oenergetice.cz/energeticka-legislativa-cr/limit-pro-povinnou-licenci-na-vyrobu-elektriny-se-od-srpna-zvysil">oenergetice.cz</a>.</li>
+<li>G. Owen: Multilinear extensions of games. Management Science 18(5), 1972, s. P64–P79.</li>
 <li>F. Illés: Linearly representable games and pseudo-polynomial calculation of the Shapley value. 2022, <a href="https://arxiv.org/abs/2205.12324">arXiv:2205.12324</a>.</li>
 </ol>
 </section>
