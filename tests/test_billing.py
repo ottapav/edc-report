@@ -244,17 +244,18 @@ def test_billing_tab_figures(entry_key):
     entry, _rows, _job = _billed(entry_key, "en")
     data, bill = entry.data, entry.bill.settlement
     assert report.right_mode(entry) is None                     # no recompute yet
-    enabled = set(data.dest_eans[:3])                           # two members unticked
-    cols, n_rest = figures.bill_columns(entry.bill.per_interval, data, enabled, None)
+    cols, n_rest = figures.bill_columns(entry.bill.per_interval, data, None)  # all members
     assert n_rest == 0
     prod = B.producer_col(data.source_eans[0])
-    assert list(cols.columns) == list(data.dest_eans[:3]) + [figures.UNSELECTED, prod]
+    assert list(cols.columns) == list(data.dest_eans) + [prod]
     assert cols.drop(columns=prod).to_numpy().sum() == pytest.approx(bill.share.sum(),
                                                                      rel=1e-5)
     assert cols[prod].sum() == pytest.approx(bill.producer_share.sum(), abs=0.05)
     names = members.default_names(data, "en")
     th = figures.theme("dark")
-    pie = figures.fig_bill_pie(bill, data, enabled, "en", th)
+    pie = figures.fig_bill_pie(bill, data, "en", th)
+    assert list(pie.data[0].labels) == ["producer's share", "members' share",
+                                        "missed by the EDC sharing"][:len(pie.data[0].labels)]
     assert sum(pie.data[0].values) == pytest.approx(bill.maximum, abs=0.01 * len(data.dest_eans))
     day = str(data.frame.index[len(data.frame) // 2].date())
     assert figures.fig_bill_daily(cols, data, names, lang="en", sel_day=day, th=th).data
@@ -268,7 +269,7 @@ def test_billing_tab_figures(entry_key):
     assert list(bars.y) == pytest.approx(list(expect[m.sum(axis=1) > 0.005]))
     assert list(half.y) == [50, 50] and "whole period" in whole.name
     assert whole.y[0] == pytest.approx(100 * bill.producer_share.sum() / bill.realized, abs=0.1)
-    tiles = views.bill_tiles(bill, data, "cs")[0].children
+    tiles = views.bill_tiles(bill, "cs")[0].children
     assert len(tiles) == 4
 
 
@@ -276,14 +277,13 @@ def test_german_interface(entry_key):
     """The German strings drive the same figures, tiles and member grid as the others."""
     entry, _rows, _job = _billed(entry_key, "de")
     data, bill = entry.data, entry.bill.settlement
-    enabled = set(data.dest_eans[:3])
     names = members.default_names(data, "de")
     assert names[data.dest_eans[0]].startswith("Verbrauch")
     th = figures.theme("light")
     assert figures.fig_bill_monthly(entry.bill.per_interval, entry.bill.producer_cols,
                                     lang="de", th=th).data
-    assert figures.fig_bill_pie(bill, data, enabled, "de", th).data
-    assert views.bill_tiles(bill, data, "de")
+    assert figures.fig_bill_pie(bill, data, "de", th).data
+    assert views.bill_tiles(bill, "de")
     assert views.bill_table(bill, data, names, "de")
     rows = members.rows(data)
     assert all(r["default_de"] and r["default_cs"] and r["default_en"] for r in rows)
@@ -297,7 +297,7 @@ def test_paired_figures_line_up(entry_key):
     enabled = set(data.dest_eans)
     names = members.default_names(data, "cs")
     df = core.filter_dests(data, enabled)
-    cols, _ = figures.bill_columns(entry.bill.per_interval, data, enabled, None)
+    cols, _ = figures.bill_columns(entry.bill.per_interval, data, None)
     fa = figures.fig_daily(df, data, names, lang="cs")
     fb = figures.fig_bill_daily(cols, data, names, lang="cs")
     figures.pair_figures(fa, fb)
@@ -340,9 +340,8 @@ def test_billing_of_several_producers(pool_key):
     assert res.feed_ins == [1.0, 1.5, 2.0] and len(res.producers) == 3
     bill = entry.bill.settlement
     assert bill.producer_income.sum() == pytest.approx(bill.payment.sum(), abs=1e-9)
-    enabled = set(data.dest_eans)
     names = members.default_names(data, "cs")
-    cols, _ = figures.bill_columns(entry.bill.per_interval, data, enabled, None)
+    cols, _ = figures.bill_columns(entry.bill.per_interval, data, None)
     assert [c for c in cols.columns if B.is_producer_col(c)] == entry.bill.producer_cols
     th = figures.theme("light")
     monthly = figures.fig_bill_monthly(entry.bill.per_interval, entry.bill.producer_cols,

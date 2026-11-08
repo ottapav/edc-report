@@ -126,7 +126,7 @@ def energy_tiles(data: SharingData, enabled: set[str], lang: str, *,
     return tiles(items, note)
 
 
-def bill_tiles(bill: Billing, data: SharingData, lang: str) -> list:
+def bill_tiles(bill: Billing, lang: str) -> list:
     """Four tiles in Kč, for the whole group: the benefit (and what the EDC sharing
     missed), the producers' and the members' shares, what the producers receive (and
     its feed-in value)."""
