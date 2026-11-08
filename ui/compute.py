@@ -76,6 +76,16 @@ def bill_inputs(data: SharingData, rows, src_rows, feed_default, default):
     return (prices, feed_ins), None
 
 
+def bill_stale(entry: store.Entry, rows, src_rows, feed_default, default) -> bool:
+    """The prices in the grids and the card are no longer the ones the last billing used
+    (or some are missing): the page and the export say so."""
+    inputs, _missing = bill_inputs(entry.data, rows, src_rows, feed_default, default)
+    totals = entry.bill.totals
+    return inputs is None or any(
+        abs(a - b) > 1e-9 for a, b in zip([*inputs[0], *inputs[1]],
+                                          [*totals.prices, *totals.feed_ins]))
+
+
 @callback(
     output=start_outputs("exact"),
     inputs=dict(n=Input(_EXACT["btn"], "n_clicks")),
@@ -332,12 +342,8 @@ def bill_result(rev, key, lang, feed_in, default, changed, src_changed, rows, sr
     data, result = entry.data, entry.bill
     names = members.names(data, lang, src_rows, rows)
     table = views.bill_table(result.settlement, data, names, lang, top_dests(data.frame, data))
-    inputs, _missing = bill_inputs(data, rows, src_rows, feed_in, default)
-    totals = result.totals
-    changed = inputs is None or any(
-        abs(a - b) > 1e-9 for a, b in zip([*inputs[0], *inputs[1]],
-                                          [*totals.prices, *totals.feed_ins]))
     notes = views.bill_notes(result.settlement.payment, len(data.source_eans), lang)
+    stale = bill_stale(entry, rows, src_rows, feed_in, default)
     return dict(timing=views.bill_timing(result, lang),
                 table=[*views.bill_prices_note(result.settlement, lang), table, *notes],
-                stale=views.hint(t("bill_stale", lang), "stale") if changed else [])
+                stale=views.hint(t("bill_stale", lang), "stale") if stale else [])

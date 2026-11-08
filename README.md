@@ -186,11 +186,13 @@ the billing by contribution (draft, Czech): <https://edc-report.uceeb.cvut.cz/cl
 
 * **Summary as Excel** (*Download summary* in the panel): one `.xlsx` with the numbers of the
   page for the current selection (ticked members, names, language), as numbers rather than
-  text. Sheets: *Summary* (facts; energy tiles with the shares under them, for every
+  text, whichever tab is open: everything computed for the report. Sheets: *Summary* (facts; energy tiles with the shares under them, for every
   column the page can show: the EDC report, after the recompute the exact method and, with
   keys other than the report's, EDC replayed with them; sharing error, keys and reserve;
   billing totals; key estimate), *Destinations* (the per-destination table), *Comparison*
-  (after the recompute), *Billing* (after the billing), *Spot* (once the OTE prices are
+  (after the recompute), *Billing* (after the billing, always the whole group; when the
+  prices have changed since, a red line above its tables says so, as the page does), *Spot*
+  (once the OTE prices are
   there: totals, per member and producer, per month) and *Daily* (the series of the daily
   plots per day, for each of those columns).
 * The values are the page's: the same sources, and percentages and money in full
@@ -198,8 +200,9 @@ the billing by contribution (draft, Czech): <https://edc-report.uceeb.cvut.cz/cl
   figure the page shows.
 * EANs are shortened to their last three digits as on the page; *Full EANs in the export*
   writes them whole.
-* **Print / PDF** prints the report (to paper or PDF via the browser) without the panel and
-  the buttons, one column per page width. A dark page is printed in the light theme and
+* **Print / PDF** prints the open tab (to paper or PDF via the browser), with its figures,
+  without the panel and the buttons, one column per page width; the billing's course over
+  time only when it is open. A dark page is printed in the light theme and
   switched back afterwards.
 
 **Interface:**

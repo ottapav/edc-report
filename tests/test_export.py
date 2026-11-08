@@ -202,3 +202,27 @@ def test_a_name_that_looks_like_a_formula_stays_text(entry_key):
              if isinstance(c.value, str) and c.value.startswith("=")]
     assert cells and {c.value for c in cells} >= {evil}
     assert all(c.data_type == "s" for c in cells)
+
+
+def test_an_outdated_billing_says_so_in_the_export(entry_key):
+    """Prices changed after the billing: the export keeps that billing (it holds for the
+    prices in its Price column) and says so above both its tables, as the page does."""
+    import app
+    key, _ = entry_key
+    entry = _billed(key)
+    rows = [{"ean": e, "price": 4.0 + 0.3 * j} for j, e in enumerate(entry.data.dest_eans)]
+    warn = t("x_bill_stale", "cs")
+    client = app.server.test_client()
+
+    def warned(rows, feed_in):
+        url = ui_export.summary_file(key, None, rows, [], "cs", "", [], None,
+                                     (feed_in, None, None, None))
+        wb = load_workbook(io.BytesIO(client.get(url).data))
+        return [warn in _cells(wb[t(f"x_sheet_{s}", "cs")]) for s in ("summary", "bill")]
+
+    assert warned(rows, 1.2) == [False, False]                  # the prices it was made with
+    assert warned([{**r, "price": 5.0} if j == 0 else r for j, r in enumerate(rows)],
+                  1.2) == [True, True]                         # a member's price changed
+    assert warned(rows, 1.0) == [True, True]                   # the feed-in price changed
+    page = compute.bill_result(1, key, "cs", 1.0, None, None, None, rows, [])["stale"]
+    assert page                                               # the page says it too

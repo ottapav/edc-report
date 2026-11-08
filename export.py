@@ -46,6 +46,7 @@ XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 KWH, PCT, KC, KW, INT = "#,##0.00", "0.0", "#,##0.00", "#,##0.00", "#,##0"
 _HEAD_FILL = PatternFill("solid", fgColor="E8EEE8")
 _SECTION_FONT = Font(bold=True, size=12)
+_WARN_FONT = Font(bold=True, color="B42318")
 _BOLD = Font(bold=True)
 
 
@@ -82,6 +83,8 @@ class Table:
     bold: set[int] = field(default_factory=set)
     #: number format of whole rows, overriding the columns' (a % row in a kWh table)
     row_formats: dict[int, str] = field(default_factory=dict)
+    #: a warning written under the title, above the table (e.g. an outdated billing)
+    note: str | None = None
 
 
 @dataclass
@@ -241,9 +244,9 @@ def exact_table(entry, enabled: set[str], names: dict, lang: str) -> Table:
                  [None, None, None], title=t("loss_title", lang))
 
 
-def bill_totals_table(entry, lang: str) -> Table:
+def bill_totals_table(entry, lang: str, stale: bool = False) -> Table:
     """The billing's totals, for the whole group (as on the page; the selection does not
-    change the billing)."""
+    change the billing); ``stale``: the prices have changed since, a warning above."""
     bill = entry.bill.settlement
     cur = t("currency", lang)
     n_prod = len(bill.feed_ins)
@@ -258,7 +261,8 @@ def bill_totals_table(entry, lang: str) -> Table:
         [t("bt_feed_in", lang), float(bill.feed_in_value.sum()), cur],
     ]
     return Table([t("x_item", lang), t("x_value", lang), t("x_unit", lang)], rows,
-                 [None, None, None], title=t("col_bill", lang))
+                 [None, None, None], title=t("col_bill", lang),
+                 note=t("x_bill_stale", lang) if stale else None)
 
 
 def pool_of(data: SharingData, K) -> list[float]:
@@ -378,9 +382,9 @@ def compare_table(entry, enabled: set[str], names: dict, lang: str, full_ean: bo
     return Table(head, rows, fmts, bold={len(rows) - 1})
 
 
-def bill_table(entry, names: dict, lang: str, full_ean: bool) -> Table:
+def bill_table(entry, names: dict, lang: str, full_ean: bool, stale: bool = False) -> Table:
     """Settlement per member (the whole group), Σ, then the producers as the other side
-    of it."""
+    of it; ``stale``: the prices have changed since, a warning above."""
     data, bill = entry.data, entry.bill.settlement
     n_prod = len(data.source_eans)
     head = [t("col_name", lang), t("col_ean", lang),
@@ -405,7 +409,7 @@ def bill_table(entry, names: dict, lang: str, full_ean: bool) -> Table:
                      float(bill.producer_share[i]),
                      float(bill.producer_income[i]),
                      unit(float(bill.producer_income[i]), float(bill.supplied[i]))])
-    return Table(head, rows, fmts, bold=bold)
+    return Table(head, rows, fmts, bold=bold, note=t("x_bill_stale", lang) if stale else None)
 
 
 def _daily_flows(d: SharingData, enabled: set[str], lang: str, suffix: str = "") -> dict:
@@ -539,16 +543,17 @@ def spot_tables(cmp, data: SharingData, enabled: set[str], names: dict, lang: st
 
 def sheets(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
            full_ean: bool = False, pair_keys=None, spot_cmp=None, spot_mix=None,
-           spot_split=None) -> list[Sheet]:
+           spot_split=None, bill_stale: bool = False) -> list[Sheet]:
     """The sheets of the export for this report and selection (what has been computed
-    decides which ones there are); ``spot_cmp`` is the spot comparison as on the page."""
+    decides which ones there are); ``spot_cmp`` is the spot comparison as on the page;
+    ``bill_stale``: the prices have changed since the billing (its tables say so)."""
     data = entry.data
     summary = [info_table(entry, enabled, names, lang, group, full_ean),
                energy_table(entry, enabled, lang)]
     if entry.exact is not None:
         summary.append(exact_table(entry, enabled, names, lang))
     if entry.bill is not None:
-        summary.append(bill_totals_table(entry, lang))
+        summary.append(bill_totals_table(entry, lang, bill_stale))
     if entry.fit is not None:
         summary.append(fit_table(entry, lang))
     out = [Sheet(t("x_sheet_summary", lang), summary),
@@ -564,7 +569,7 @@ def sheets(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
                          [pair_table(entry, names, lang, full_ean, pair_keys)]))
     if entry.bill is not None:
         out.append(Sheet(t("x_sheet_bill", lang),
-                         [bill_table(entry, names, lang, full_ean)]))
+                         [bill_table(entry, names, lang, full_ean, bill_stale)]))
     if spot_cmp is not None:
         out.append(Sheet(t("x_sheet_spot", lang),
                          spot_tables(spot_cmp, data, enabled, names, lang, full_ean,
@@ -586,6 +591,9 @@ def _write(ws, tables: list[Table]) -> None:
             r += 1                                   # blank row between tables
         if tbl.title:
             ws.cell(r, 1, tbl.title).font = _SECTION_FONT
+            r += 1
+        if tbl.note:                                 # one line, over the empty cells right
+            ws.cell(r, 1, tbl.note).font = _WARN_FONT
             r += 1
         for c, h in enumerate(tbl.head, 1):
             cell = ws.cell(r, c, h)
@@ -625,14 +633,14 @@ def _write(ws, tables: list[Table]) -> None:
 
 def summary_xlsx(entry, enabled: set[str], names: dict, lang: str, *, group: str = "",
                  full_ean: bool = False, pair_keys=None, spot_cmp=None,
-                 spot_mix=None, spot_split=None) -> bytes:
+                 spot_mix=None, spot_split=None, bill_stale: bool = False) -> bytes:
     """The export of one report as the bytes of an .xlsx file; ``pair_keys`` are the
     keys per producer as in the page's grid (several producers)."""
     wb = Workbook()
     wb.remove(wb.active)
     for sh in sheets(entry, enabled, names, lang, group=group, full_ean=full_ean,
                      pair_keys=pair_keys, spot_cmp=spot_cmp, spot_mix=spot_mix,
-                     spot_split=spot_split):
+                     spot_split=spot_split, bill_stale=bill_stale):
         _write(wb.create_sheet(_sheet_title(sh.name)), sh.tables)
     wb.properties.title = t("report_title", lang)
     wb.properties.creator = "EDC sharing report"
