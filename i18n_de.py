@@ -288,6 +288,7 @@ STRINGS: dict[str, str] = {
     "x_sheet_members": "Verbrauchsstellen",
     "x_sheet_compare": "Vergleich",
     "x_sheet_bill": "Abrechnung",
+    "x_bill_stale": "Achtung: Die Preise haben sich seit dieser Abrechnung geändert. Sie gilt für die Preise in ihrer Spalte Preis; für die neuen Preise auf der Registerkarte Abrechnung neu berechnen.",
     "x_sheet_daily": "Täglich",
     "x_item": "Posten",
     "x_value": "Wert",

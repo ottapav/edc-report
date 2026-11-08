@@ -14,6 +14,7 @@ from i18n import t
 from spot import split
 
 from . import members
+from .compute import bill_stale
 from .spot import comparison, part_on_spot
 
 
@@ -26,7 +27,8 @@ def summary_file(key, selected, rows, src_rows, lang, group, full_ean,
                  pair_rows=None, spot_inputs=None) -> str | None:
     """Prepare the workbook of the report ``key`` for this selection; return the link to
     download it (None when the report is gone). ``spot_inputs``: (default feed-in,
-    default supplier price, fee, curtail) as typed, for the spot sheet."""
+    default supplier price, fee, curtail) as typed, for the spot sheet and to tell whether
+    the billing is older than the prices (then its sheets say so, as the page does)."""
     entry = store.get(key)
     if entry is None:
         return None
@@ -40,10 +42,12 @@ def summary_file(key, selected, rows, src_rows, lang, group, full_ean,
         spot_cmp = comparison(entry, rows, src_rows, *(spot_inputs or (None, None, None, None)))
         spot_mix, _why = part_on_spot(entry, spot_cmp, rows, pair_rows, lang)
         spot_split = split(spot_cmp, entry.bill)
+    stale = (entry.bill is not None and spot_inputs is not None
+             and bill_stale(entry, rows, src_rows, *spot_inputs[:2]))
     content = export.summary_xlsx(
         entry, members.enabled(data, selected), members.names(data, lang, src_rows, rows),
         lang, group=group, full_ean="full" in (full_ean or []), pair_keys=pairs,
-        spot_cmp=spot_cmp, spot_mix=spot_mix, spot_split=spot_split)
+        spot_cmp=spot_cmp, spot_mix=spot_mix, spot_split=spot_split, bill_stale=stale)
     name = export.file_name(data, lang, group)
     return f"/export/{store.put_file(name, content)}/{quote(name)}"
 
