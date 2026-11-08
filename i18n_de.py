@@ -202,6 +202,7 @@ STRINGS: dict[str, str] = {
     "bill_more": "Zeitverlauf: täglicher und viertelstündlicher Anteil am Nutzen",
     "bt_lost_sub": "durch die EDC-Teilung verpasst: {lost}",
     "bt_income_sub2": "davon Einspeisewert {fiv}",
+    "bt_feed_in": "Einspeisewert",          # the export
     "bill_article": "Wie die Abrechnung nach Beitrag funktioniert: erklärender Artikel (auf Tschechisch) ↗",
     "bill_btn": "Abrechnung nach Beitrag berechnen",
     "feed_in": "Grund-Einspeisepreis [CZK/kWh]",

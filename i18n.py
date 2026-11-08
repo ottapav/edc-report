@@ -215,6 +215,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "bill_more": "Over time: the daily and 15-min share of the benefit",
         "bt_lost_sub": "missed by the EDC sharing: {lost}",
         "bt_income_sub2": "of which feed-in value {fiv}",
+        "bt_feed_in": "Feed-in value",          # the export
         "bill_article": "How the billing by contribution works: explanatory article (in Czech) ↗",
         "bill_btn": "Compute the billing by contribution",
         "feed_in": "Base feed-in price [CZK/kWh]",
@@ -644,6 +645,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "bill_more": "Průběh v čase: denní a čtvrthodinový podíl na úspoře",
         "bt_lost_sub": "ušlo při sdílení EDC: {lost}",
         "bt_income_sub2": "z toho výkupní hodnota {fiv}",
+        "bt_feed_in": "Výkupní hodnota",          # the export
         "bill_article": "Jak vyúčtování podle přínosu funguje: vysvětlující článek ↗",
         "bill_btn": "Spočítat vyúčtování podle přínosu",
         "feed_in": "Základní výkupní cena [Kč/kWh]",
