@@ -144,7 +144,7 @@ def _panel() -> html.Aside:
             ]),
             html.P(id="lbl-day-hint", className="hint"),
         ]),
-        html.Section(className="panel-section", children=[
+        html.Section(id="panel-display", className="panel-section", children=[
             html.H3(id="lbl-display"),
             html.Div(id="heat-box", children=[
                 html.Label(id="lbl-heat-metric", className="field-label"),
@@ -275,23 +275,36 @@ def _sharing_pane() -> list:
 
 
 def _bill_pane() -> list:
-    """The billing tab above the columns: the card of the billing by contribution."""
+    """The billing tab: the card of the billing by contribution, then (once computed) its
+    result over the full width: the tiles, who pays what, where the benefit went and the
+    producers' share by month; the course over time only on demand."""
     return [
         job_card("bill", [_number_input("feed-in", "lbl-feed-in"),
                           _number_input("price-default", "lbl-price-default")],
-                 [html.Div(id="bill-stale"), html.Div(id="bill-result")],
-                 link=clanky.SPRAVEDLIVA_CENA.url("cs")),
+                 [html.Div(id="bill-stale")], link=clanky.SPRAVEDLIVA_CENA.url("cs")),
+        html.Div(id="bill-body", className="bill-body", style={"display": "none"}, children=[
+            html.Section(className="card tiles-card", children=html.Div(id="bill-tiles")),
+            html.Section(id="settle-card", className="card table-card", children=[
+                html.H2(id="settle-title"), html.Div(id="settle-table", className="table-wrap")]),
+            _graph("fig-bill-pie", "bill-pie-card"),
+            _graph("fig-bill-monthly", "bill-monthly-card"),
+            html.Details(id="bill-more", className="card bill-more", children=[
+                html.Summary(id="bill-more-title"),
+                html.Div(className="daily-card", children=dcc.Graph(
+                    id="fig-bill-daily", config=GRAPH_CONFIG)),
+                dcc.Graph(id="fig-bill-hourly", config=GRAPH_CONFIG),
+            ]),
+        ]),
     ]
 
 
 def _columns() -> list:
-    """The two columns of the sharing and billing tabs, and the full-width table of
-    the tab's computation below them."""
+    """The two columns of the sharing tab (the EDC report; the exact method next to it
+    once computed), and the full-width comparison table below them."""
     return [
         html.Div(id="compare", className="compare single",
                  children=[_column("a"), _column("b")]),
         _wide_card("cmp"),          # exact method: EDC vs exact per destination
-        _wide_card("settle"),       # billing: settlement per member
     ]
 
 

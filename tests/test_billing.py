@@ -221,7 +221,9 @@ def test_bill_job_and_result(entry_key):
     assert state[2] == "progress done" and state[5] == 1
     assert len(entry.bill.totals.consumers) == 5
     out = compute.bill_result(1, entry_key, "cs", None, 1.2, 4.3, None, None, rows, [])
-    assert out["result"] and out["table"] and out["stale"] == []
+    assert out["table"] and out["stale"] == [] and "s" in out["timing"]
+    notes = " ".join(str(n.children) for n in out["table"][1:])     # under the table
+    assert "×" in notes and "ERÚ" in notes
     # a changed price marks the billing as stale until the button is pressed again
     assert compute.bill_result(1, entry_key, "cs", None, 1.2, 4.4, None, None, rows, [])["stale"]
     src = [{"ean": entry.data.source_eans[0], "price": 1.3}]
@@ -235,13 +237,13 @@ def test_bill_needs_prices(entry_key):
     assert out["cls"] == "progress error" and "price" in out["text"]
 
 
-def test_billing_in_the_right_column(entry_key):
-    """The billing draws the same five figures as the exact method, in Kč; its
-    per-interval values add up to the settlement."""
+def test_billing_tab_figures(entry_key):
+    """The billing tab: four tiles, where the benefit went, the producer's share by month,
+    the daily and 15-min share; its per-interval values add up to the settlement. The
+    columns of the sharing tab stay the exact method's."""
     entry, _rows, _job = _billed(entry_key, "en")
     data, bill = entry.data, entry.bill.settlement
-    assert report.right_mode(entry, "bill") == "bill"          # the billing tab
-    assert report.right_mode(entry, "sharing") is None          # no recompute yet
+    assert report.right_mode(entry) is None                     # no recompute yet
     enabled = set(data.dest_eans[:3])                           # two members unticked
     cols, n_rest = figures.bill_columns(entry.bill.per_interval, data, enabled, None)
     assert n_rest == 0
@@ -252,15 +254,22 @@ def test_billing_in_the_right_column(entry_key):
     assert cols[prod].sum() == pytest.approx(bill.producer_share.sum(), abs=0.05)
     names = members.default_names(data, "en")
     th = figures.theme("dark")
-    split = figures.fig_bill_split(bill, data, names, enabled, lang="en", th=th)
-    assert len(split.data) == 2 and split.layout.height >= 320
     pie = figures.fig_bill_pie(bill, data, enabled, "en", th)
     assert sum(pie.data[0].values) == pytest.approx(bill.maximum, abs=0.01 * len(data.dest_eans))
     day = str(data.frame.index[len(data.frame) // 2].date())
     assert figures.fig_bill_daily(cols, data, names, lang="en", sel_day=day, th=th).data
     assert figures.fig_bill_intraday(cols, data, names, day, lang="en", th=th).data
-    assert figures.fig_bill_heatmap(entry.bill.per_interval.sum(axis=1), lang="en", th=th).data
-    assert views.bill_tiles(bill, data, enabled, "cs")
+    monthly = figures.fig_bill_monthly(entry.bill.per_interval, entry.bill.producer_cols,
+                                       lang="en", th=th)
+    bars, half, whole = monthly.data
+    per = entry.bill.per_interval
+    m = per.resample("MS").sum()
+    expect = 100 * m[entry.bill.producer_cols].sum(axis=1) / m.sum(axis=1)
+    assert list(bars.y) == pytest.approx(list(expect[m.sum(axis=1) > 0.005]))
+    assert list(half.y) == [50, 50] and "whole period" in whole.name
+    assert whole.y[0] == pytest.approx(100 * bill.producer_share.sum() / bill.realized, abs=0.1)
+    tiles = views.bill_tiles(bill, data, enabled, "cs")[0].children
+    assert len(tiles) == 4
 
 
 def test_german_interface(entry_key):
@@ -271,7 +280,8 @@ def test_german_interface(entry_key):
     names = members.default_names(data, "de")
     assert names[data.dest_eans[0]].startswith("Verbrauch")
     th = figures.theme("light")
-    assert figures.fig_bill_split(bill, data, names, enabled, lang="de", th=th).data
+    assert figures.fig_bill_monthly(entry.bill.per_interval, entry.bill.producer_cols,
+                                    lang="de", th=th).data
     assert figures.fig_bill_pie(bill, data, enabled, "de", th).data
     assert views.bill_tiles(bill, data, enabled, "de")
     assert views.bill_table(bill, data, names, "de")
@@ -281,17 +291,12 @@ def test_german_interface(entry_key):
 
 
 def test_paired_figures_line_up(entry_key):
-    """Right-column figures take the left one's member order, height and legend rows."""
+    """Paired figures take one height and the same number of legend rows."""
     entry, _rows, _job = _billed(entry_key)
-    data, bill = entry.data, entry.bill.settlement
+    data = entry.data
     enabled = set(data.dest_eans)
     names = members.default_names(data, "cs")
     df = core.filter_dests(data, enabled)
-    order = figures.flow_order(df, data)
-    left = figures.fig_total_by_flow(df, data, names, lang="cs")
-    right = figures.fig_bill_split(bill, data, names, enabled, lang="cs", order=order)
-    member_rows = lambda f: list(f.layout.yaxis.ticktext[:len(order)])  # noqa: E731
-    assert member_rows(left) == member_rows(right) == [names[e] for e in order]
     cols, _ = figures.bill_columns(entry.bill.per_interval, data, enabled, None)
     fa = figures.fig_daily(df, data, names, lang="cs")
     fb = figures.fig_bill_daily(cols, data, names, lang="cs")
@@ -340,16 +345,12 @@ def test_billing_of_several_producers(pool_key):
     cols, _ = figures.bill_columns(entry.bill.per_interval, data, enabled, None)
     assert [c for c in cols.columns if B.is_producer_col(c)] == entry.bill.producer_cols
     th = figures.theme("light")
-    # the flow chart pairs one pool row with one producers' row, so the members line up
-    df = core.filter_dests(data, enabled)
-    order = figures.flow_order(df, data)
-    left = figures.fig_total_by_flow(df, data, names, lang="cs")
-    split = figures.fig_bill_split(bill, data, names, enabled, lang="cs", th=th, order=order)
-    assert list(left.layout.yaxis.ticktext)[:-1] == list(split.layout.yaxis.ticktext)[:-1]
+    monthly = figures.fig_bill_monthly(entry.bill.per_interval, entry.bill.producer_cols,
+                                       lang="cs", th=th)
+    assert monthly.layout.title.text.startswith("Podíl výrobců")     # all three together
     assert figures.fig_bill_daily(cols, data, names, lang="cs", th=th).data
     table = views.bill_table(bill, data, names, "cs")
     assert table is not None
-    assert "Výrobny (bazén)" in split.layout.yaxis.ticktext
 
 
 def test_panel_grids_and_ean_tails(pool_key):

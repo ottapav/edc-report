@@ -36,3 +36,18 @@ def test_german_number_and_date_formats():
     assert i18n.plotly_separators("de") == ",."
     assert i18n.decimal_char("de") == "," and i18n.decimal_char("en") == "."
     assert i18n.date_picker_format("de") == "DD.MM.YYYY"
+
+
+def test_every_text_the_code_asks_for_exists():
+    """Each t("…") / tn("…") key in the code is in the strings (tn: the key or key_n),
+    so removing a text that something still uses fails here, not as a raw key on the page
+    or in the export."""
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    files = [p for p in root.rglob("*.py") if "tests" not in p.parts and ".git" not in p.parts]
+    keys = {m.group(2) for p in files
+            for m in re.finditer(r'\b(t|tn)\("([a-z][a-z0-9_]*)"', p.read_text(encoding="utf-8"))}
+    known = set(i18n.STRINGS["en"])
+    missing = sorted(k for k in keys if k not in known and f"{k}_n" not in known)
+    assert missing == []

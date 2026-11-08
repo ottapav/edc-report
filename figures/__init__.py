@@ -14,8 +14,8 @@ from .energy import (
     heat_metrics, heat_pivot, intraday_ymax,
 )
 from .money import (
-    UNSELECTED, bill_columns, fig_bill_daily, fig_bill_heatmap, fig_bill_intraday,
-    fig_bill_pie, fig_bill_split,
+    UNSELECTED, bill_columns, fig_bill_daily, fig_bill_intraday, fig_bill_monthly,
+    fig_bill_pie,
 )
 from .spot import (
     fig_spot_daily, fig_spot_intraday, fig_spot_members, fig_spot_mix, fig_spot_monthly,
@@ -24,7 +24,7 @@ from .spot import (
 
 __all__ = [
     "OTHER", "THEMES", "UNSELECTED", "bill_columns", "colour_map", "fig_bill_daily",
-    "fig_bill_heatmap", "fig_bill_intraday", "fig_bill_pie", "fig_bill_split", "fig_daily",
+    "fig_bill_intraday", "fig_bill_monthly", "fig_bill_pie", "fig_daily",
     "fig_spot_daily", "fig_spot_intraday", "fig_spot_members", "fig_spot_mix", "fig_spot_monthly",
     "fig_spot_parties",
     "fig_heatmap", "fig_intraday", "fig_total_by_flow", "fig_wasted_pie", "flow_order",

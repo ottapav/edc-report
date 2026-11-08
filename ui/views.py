@@ -127,7 +127,8 @@ def energy_tiles(data: SharingData, enabled: set[str], lang: str, *,
 
 
 def bill_tiles(bill: Billing, data: SharingData, enabled: set[str], lang: str) -> list:
-    """Six tiles in Kč, two sub-lines each like the paired energy tiles."""
+    """Four tiles in Kč: the benefit (and what the EDC sharing missed), the producers'
+    and the members' shares, what the producers receive (and its feed-in value)."""
     cur = t("currency", lang)
     kc = lambda x: f"{fmt_num(x, lang)} {cur}"  # noqa: E731
     sel = np.array([e in enabled for e in data.dest_eans])
@@ -141,24 +142,18 @@ def bill_tiles(bill: Billing, data: SharingData, enabled: set[str], lang: str) -
     producer_share = float(bill.producer_share.sum())
     unit = f"{fmt_num(income / kwh, lang, 2)} {cur}" if kwh else "—"
     n_prod = len(bill.feed_ins)
-    one_price = bool(np.ptp(bill.feed_ins) < 1e-9) if n_prod else True
-    feed_price = f"{fmt_num(fiv / kwh if kwh and not one_price else bill.feed_ins[0], lang, 2)}"
-    feed_price = (feed_price if one_price else f"{t('bt_avg', lang)} {feed_price}") + f" {cur}/kWh"
     items = [
         tile(t("bt_benefit", lang), kc(bill.realized),
              two_lines(t("bt_benefit_sub", lang).format(
-                 eff=fmt_pct(100 * bill.efficiency, lang), max=kc(bill.maximum))), GREEN),
-        tile(t("bt_lost", lang), kc(lost),
-             two_lines(f"{_share(lost, bill.maximum, lang)} {t('bt_of_max', lang)}"), RED),
+                 eff=fmt_pct(100 * bill.efficiency, lang), max=kc(bill.maximum)),
+                 t("bt_lost_sub", lang).format(lost=kc(lost))), GREEN),
         tile(tn("bt_producer", lang, n_prod), kc(producer_share),
              two_lines(of_benefit(producer_share)), GREEN),
         tile(t("bt_members", lang), kc(member_share),
              two_lines(of_benefit(member_share), scope), BLUE),
         tile(tn("bt_income", lang, n_prod), kc(income),
-             two_lines(t("bt_income_sub", lang).format(unit=unit)), None),
-        tile(t("bt_feed_in", lang), kc(fiv),
-             two_lines(t("bt_feed_in_sub", lang).format(price=feed_price,
-                                                        kwh=fmt_num(kwh, lang, 1))), GREY),
+             two_lines(t("bt_income_sub", lang).format(unit=unit),
+                       t("bt_income_sub2", lang).format(fiv=kc(fiv))), None),
     ]
     return tiles(items, t("bt_note", lang))
 
@@ -616,17 +611,17 @@ def spot_table(cmp: Comparison, sp: Split | None, data: SharingData, names: dict
             hint(t("spot_table_hint", lang))]
 
 
-def bill_result(result: BillResult, n_producers: int, lang: str) -> list:
-    """Summary of the billing in its card (the table is below the columns)."""
-    bill, res = result.settlement, result.totals
-    cur = t("currency", lang)
-    money = lambda x: f"{fmt_num(x, lang, 2)}{NBSP}{cur}"  # noqa: E731
-    return [
-        html.P(t("bill_summary", lang).format(real=money(bill.realized), max=money(bill.maximum),
-                                              eff=fmt_pct(100 * bill.efficiency, lang, 1)),
-               className="fit-line"),
-        hint(tn("bill_hint", lang, n_producers)),
-        hint(t("bill_timing", lang).format(
-            secs=fmt_duration(res.seconds, lang), scarce=fmt_num(res.n_scarce, lang),
-            covered=fmt_num(res.n_covered, lang), night=fmt_num(res.n_night, lang))),
-    ]
+def bill_timing(result: BillResult, lang: str) -> str:
+    """How long the billing took and how (the hint of its "✓ … s" in the card)."""
+    res = result.totals
+    return t("bill_timing", lang).format(
+        secs=fmt_duration(res.seconds, lang), scarce=fmt_num(res.n_scarce, lang),
+        covered=fmt_num(res.n_covered, lang), night=fmt_num(res.n_night, lang))
+
+
+def bill_notes(payments, n_producers: int, lang: str) -> list:
+    """Under the settlement table: how a payment is computed, why one is negative (when
+    one is), and that it is a proposal for the contract."""
+    return [hint(tn("bill_hint", lang, n_producers)),
+            *negative_payment_note(payments, n_producers, lang),
+            hint(t("bill_legal", lang))]

@@ -1,11 +1,9 @@
-"""The billing figures (Kč): the five shapes of the energy report again, so the right
-column of the page lines up with the left one.
+"""The billing figures (Kč) of the billing tab.
 
-* value of the shared electricity per member  (:func:`fig_bill_split`)
 * where the benefit went                      (:func:`fig_bill_pie`)
+* the producers' share by month              (:func:`fig_bill_monthly`)
 * daily share of the benefit                  (:func:`fig_bill_daily`)
 * the benefit on one day, per 15 min          (:func:`fig_bill_intraday`)
-* mean benefit, hour × month                  (:func:`fig_bill_heatmap`)
 
 The per-interval values come from :attr:`billing.BillResult.per_interval`, the
 settlement from :class:`billing.Billing`.
@@ -17,14 +15,14 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from billing import PRODUCER, Billing, is_producer_col, producer_col
+from billing import PRODUCER, Billing, is_producer_col
 from edc_data import POOL, SharingData
-from i18n import fmt_num, t, tn
+from i18n import fmt_num, month_label, t, tn
 
 from .base import (
     OTHER, OTHER_COLOUR, THEMES, area, colour_map, daily_layout, date_text, day_slice,
-    figure, hatch, hbars, heatmap, hour_month_pivot, intraday_layout, intraday_legend,
-    member_groups, no_data, order_rows, pie, producer_greens, producer_hatch,
+    figure, hatch, intraday_layout, intraday_legend, member_groups, no_data, pie,
+    producer_greens, producer_hatch,
 )
 
 UNSELECTED = "__unselected__"  # shares of the unticked members, summed
@@ -77,58 +75,6 @@ def _areas(fig: go.Figure, frame: pd.DataFrame, data: SharingData, names: dict, 
              colour, th, unit, pattern=pattern, line_width=1.0 if col == UNSELECTED else 0.6)
 
 
-def fig_bill_split(bill: Billing, data: SharingData, names: dict[str, str], enabled: set[str],
-                   *, lang: str = "cs", th: dict | None = None,
-                   top: tuple[str, ...] | None = None,
-                   order: list[str] | None = None) -> go.Figure:
-    """Value of the shared electricity per member: share of the benefit (member's
-    colour) + payment to the producers (grey) = value at the supplier price; each
-    producer: its share (hatched green) + feed-in value (grey) = what it receives.
-    Members sit on the rows of the paired flow chart (``order``)."""
-    th = th or THEMES["light"]
-    cur = t("currency", lang)
-    fig = figure(t("bill_split_title", lang), lang, 420, th)
-    idx = {e: j for j, e in enumerate(data.dest_eans)}
-    sel = [e for e in data.dest_eans if e in enabled]
-    if not sel and bill.producer_income.sum() <= 0:
-        return no_data(fig, lang, th)
-    cmap = colour_map(data, top)
-    share_lab, pays_lab = t("bill_col_share_short", lang), t("bill_pays", lang)
-
-    def row(key, label, share, pay, c_share, c_pay, pay_lab, summary=False):
-        return dict(key=key, label=label, summary=summary,
-                    text=f"{fmt_num(share, lang, 0)} + {fmt_num(pay, lang, 0)} ({pay_lab}) {cur}",
-                    segs=[(share, c_share, share_lab), (pay, c_pay, pay_lab)])
-
-    groups = member_groups(data, enabled, top)
-    n_rest = len(groups[-1][1]) if groups and groups[-1][0] == OTHER else 0
-    rows: list[dict | None] = [
-        row(key, _label(key, names, data, lang, n_rest),
-            float(sum(bill.share[idx[e]] for e in members)),
-            float(sum(bill.payment[idx[e]] for e in members)),
-            cmap.get(key, OTHER_COLOUR), th["unmet"], pays_lab)
-        for key, members in groups]
-    rows = order_rows(rows, order, key=lambda r: r["segs"][0][0] + r["segs"][1][0])
-    many = len(rows) > 1
-    # the producers in one row, like the pool's row of the paired flow chart (several
-    # producers: the settlement table has each of them)
-    src = data.source_eans[0] if len(data.source_eans) == 1 else POOL
-    rows.append(row(producer_col(src), _label(producer_col(src), names, data, lang),
-                    float(bill.producer_share.sum()), float(bill.feed_in_value.sum()),
-                    th["source"], th["unshared"], t("bill_feed_in_value", lang)))
-    if many:
-        rows += [None, row(None, t("bill_total_members", lang),
-                           float(sum(bill.share[idx[e]] for e in sel)),
-                           float(sum(bill.payment[idx[e]] for e in sel)),
-                           th["total"], th["unmet"], pays_lab, summary=True)]
-    shapes = ["x" if is_producer_col(r["key"]) else "" for r in rows if r is not None]
-    slots = [dict(name=share_lab, pattern=dict(shape=shapes, size=6, solidity=0.3,
-                                               fgcolor=th["source_ink"])),
-             dict(name=pays_lab)]
-    return hbars(fig, rows, slots, th=th, unit=cur, hover_decimals=2,
-                 xtitle=t("bill_split_xlabel", lang), xpad=1.5, inside_above=0.75)
-
-
 def fig_bill_pie(bill: Billing, data: SharingData, enabled: set[str], lang: str = "cs",
                  th: dict | None = None) -> go.Figure:
     """Where the benefit went: the producer's share, the shares of the ticked and the
@@ -151,6 +97,64 @@ def fig_bill_pie(bill: Billing, data: SharingData, enabled: set[str], lang: str 
             t("bill_pie_subtitle", lang)]
     return pie(fig, [s for s in slices if s[1] > 0.005], note, th=th, unit=cur,
                hover_decimals=2)
+
+
+def fig_bill_monthly(per_interval: pd.DataFrame, producer_cols: list[str], *,
+                     lang: str = "cs", th: dict | None = None) -> go.Figure:
+    """The producers' share of the benefit in each calendar month: scarce production
+    (winter) pays the producer more, enough for everybody pays half. Lines: half, and
+    the share over the whole period. A month the report covers only partly says so in
+    its hover."""
+    th = th or THEMES["light"]
+    n_prod = len(producer_cols)
+    fig = figure(tn("bill_monthly_title", lang, n_prod), lang, 500, th)
+    total = per_interval.sum(axis=1)
+    prod = per_interval[producer_cols].sum(axis=1)
+    m = pd.DataFrame({"prod": prod, "total": total}).resample("MS").sum()
+    m = m[m["total"] > 0.005]
+    if m.empty:
+        return no_data(fig, lang, th)
+    share = 100 * m["prod"] / m["total"]
+    whole = 100 * float(m["prod"].sum() / m["total"].sum())
+    first, last = per_interval.index.min(), per_interval.index.max()
+    cur = t("currency", lang)
+    labels, notes = [], []
+    for ts in m.index:
+        labels.append(month_label(ts, lang))
+        part = ""
+        if ts.year == first.year and ts.month == first.month and first.day > 1:
+            part = t("bill_month_from", lang).format(day=first.day)
+        elif ts.year == last.year and ts.month == last.month and last.day < ts.days_in_month:
+            part = t("bill_month_to", lang).format(day=last.day)
+        notes.append(f" ({part})" if part else "")
+    pct = lambda v: f"{fmt_num(v, lang, 0)} %"  # noqa: E731
+    fig.add_bar(
+        x=labels, y=share, marker=dict(color=th["source"]), showlegend=False,
+        text=[pct(v) for v in share], textposition="outside", cliponaxis=False,
+        textfont=dict(size=11, color=th["ink"]),
+        # numbers stay numbers for the hover's format (a numpy stack would make them text)
+        customdata=[[float(p), float(tot), note]
+                    for p, tot, note in zip(m["prod"], m["total"], notes)],
+        hovertemplate="%{x}%{customdata[2]}<br>" + t("bill_monthly_hover", lang).format(
+            share="%{y:,.1f} %", prod="%{customdata[0]:,.0f} " + cur,
+            total="%{customdata[1]:,.0f} " + cur) + "<extra></extra>")
+    for y, name, dash in ((50.0, t("bill_monthly_half", lang), "dash"),
+                          (whole, t("bill_monthly_whole", lang).format(pct=pct(whole)), "dot")):
+        fig.add_scatter(x=[-0.5, len(labels) - 0.5], y=[y, y], mode="lines", name=name,
+                        line=dict(color=th["muted"], width=1.5, dash=dash), hoverinfo="skip",
+                        xaxis="x2")
+    fig.update_layout(
+        bargap=0.25, hovermode="closest",
+        xaxis=dict(type="category", tickangle=-30, showgrid=False),
+        # the lines span the whole plot width (their own axis over the bars' categories)
+        xaxis2=dict(type="linear", overlaying="x", visible=False,
+                    range=[-0.5, len(labels) - 0.5]),
+        yaxis=dict(title=tn("bill_monthly_axis", lang, n_prod), range=[0, 105],
+                   ticksuffix=" %", showgrid=True),
+        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="left", x=0,
+                    font=dict(size=11)),
+    )
+    return fig
 
 
 def fig_bill_daily(cols: pd.DataFrame, data: SharingData, names: dict[str, str], *,
@@ -181,11 +185,3 @@ def fig_bill_intraday(cols: pd.DataFrame, data: SharingData, names: dict[str, st
     _areas(fig, day_df, data, names, lang, th, top, n_rest)
     intraday_legend(fig)
     return fig
-
-
-def fig_bill_heatmap(total: pd.Series, *, lang: str = "cs", th: dict | None = None) -> go.Figure:
-    """Mean benefit of the whole group (Kč per 15 min), hour of day × month."""
-    th = th or THEMES["light"]
-    fig = figure(t("bill_heat_title", lang), lang, 440, th)
-    return heatmap(fig, hour_month_pivot(total), cbar=t("bill_heat_cbar", lang),
-                   unit=t("currency", lang), z_max=None, lang=lang, th=th)

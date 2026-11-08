@@ -78,7 +78,7 @@ the billing by contribution (draft, Czech): <https://edc-report.uceeb.cvut.cz/cl
 * **Heatmap hour × month:** the **total production** (independent of the selection) or the
   **total consumption** of the ticked members. A part report has neither, so it shows the
   shared energy. Neither depends on the sharing method, so next to the exact method it is
-  shown once (the billing column has its own heatmap in Kč).
+  shown once. The choice between them is in the panel on the *Sharing* tab only.
 * **Per-member table:** consumption, shared, unmet, coverage and data availability.
 
 **Selection panel:**
@@ -124,19 +124,21 @@ the billing by contribution (draft, Czech): <https://edc-report.uceeb.cvut.cz/cl
 * **Compute:** one button computes the exact Shapley values over the whole report in the
   background, with a progress bar.
 * **Its own tab:** the *Sharing*, *Billing* and *Sharing × selling on spot* tabs sit side by
-  side. The billing card (prices, button, progress) is on the *Billing* tab, the exact
-  method's card on the *Sharing* tab; both tabs show the same two columns, the EDC report on
-  the left and the tab's computation on the right.
-* **Right column:** like the exact method, the billing is drawn next to the EDC report, with
-  the same cards in Kč: tiles (benefit, what the EDC sharing missed, producer's and members'
-  shares, producer's income, feed-in value), the value of the shared electricity per member
-  (share + payment), where the benefit went, the daily share (click a day), the selected day
-  in 15-min steps and the hour × month heatmap. Before the billing is computed the tab shows
-  the EDC report alone.
-* **Settlement table** (full width below): per member the shared energy, its value at the
-  supplier price, the fair share of the benefit, the payment to the producer and the
-  effective price per kWh; per producer the energy it shared, its income, its share and the
-  feed-in value it gave up.
+  side. The *Billing* tab shows only the billing, over the full width: its card (prices,
+  button, progress; how long it took and how is the hint of the "✓ … s"), and once computed:
+  * four **tiles**: the benefit (of the best possible, and what the EDC sharing missed), the
+    producer's and the members' shares, what the producer receives (on average per kWh, and
+    the feed-in value in it);
+  * the **settlement table**: per member the shared energy, its value at the supplier price,
+    the fair share of the benefit, the payment to the producer and the effective price per
+    kWh; per producer the energy it shared, its income, its share and the feed-in value it
+    gave up. Below it how a payment is computed, why one is negative (when one is) and that
+    it is a proposal for the contract;
+  * **where the benefit went** (pie) and the **producer's share by month** (bars, with half
+    and the whole period as lines): scarce production pays the producer more;
+  * on demand (**Over time**, collapsed): the daily share (click a day) and the selected day
+    in 15-min steps.
+  The columns of the EDC report and the exact method belong to the *Sharing* tab.
 
 **Sharing × selling on spot** (third tab; all report):
 
@@ -453,7 +455,7 @@ benefit the report achieved.
 
 **Plots.** The computation also keeps the Shapley values of every 15-min interval with
 production (float32, about 4 bytes per member and interval), scaled the same way, so the
-daily, hourly and heatmap figures add up to the settlement.
+monthly, daily and hourly figures add up to the settlement.
 
 **Time** (one core, synthetic groups, `compute_shapley`):
 
@@ -745,7 +747,8 @@ needed. It checks that:
 * every button works in a real browser (`tests/test_ui.py`, Playwright + Chromium, against the
   app served from the test process, with a fake OTE): upload, key estimate, recompute, the
   billing from its card and from the spot tab (also refused without prices), the spot prices
-  and their fee and curtailment, the tabs and their right column, the day buttons, the heat-map metric,
+  and their fee and curtailment, what each tab shows (the billing's tiles, table, figures and
+  its collapsed course over time), the day buttons, the heat-map metric,
   unticking a member, typing a key and putting the estimate back, export (with full EANs),
   print (light and dark), theme, the three languages, the article links, a bad file, two
   producers, and the reload offer after a deploy. Any console or HTTP error fails the test.

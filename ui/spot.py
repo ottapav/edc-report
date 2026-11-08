@@ -30,20 +30,21 @@ HIDDEN = {"display": "none"}
 
 
 # Tabs: only the panes' visibility changes, in the browser; nothing is unmounted, so
-# the callbacks of the hidden tab keep their components. The sharing and billing tabs
-# share the columns (pane-columns); each shows its own card above them.
+# the callbacks of the hidden tab keep their components. The columns (EDC report vs the
+# exact method) and the heat map's choice in the panel belong to the sharing tab.
 clientside_callback(
     """
     function(tab) {
         const show = {}, hide = {display: 'none'};
-        return [tab === 'sharing' ? show : hide, tab === 'bill' ? show : hide,
-                tab === 'spot' ? hide : show, tab === 'spot' ? show : hide];
+        const on = name => tab === name ? show : hide;
+        return [on('sharing'), on('bill'), on('sharing'), on('spot'), on('sharing')];
     }
     """,
     Output("pane-sharing", "style"),
     Output("pane-bill", "style"),
     Output("pane-columns", "style"),
     Output("pane-spot", "style"),
+    Output("panel-display", "style"),
     Input("tabs", "value"),
 )
 
@@ -198,7 +199,7 @@ def render_spot(key, rev, tab, selected, changed, src_changed, feed_in, default,
 
 
 @callback(Output(spot_fig_id("hourly"), "figure"), Output(spot_fig_id("hourly"), "style"),
-          inputs=dict(day=Input("day-picker", "date"), **_INPUTS), state=_STATE)
+          inputs=dict(day=Input("day-picker", "date"), **_INPUTS), state=dict(_STATE))
 def spot_hourly(day, key, rev, tab, selected, changed, src_changed, feed_in, default, fee,
                 curtail, lang, theme_name, rows, src_rows):
     """The selected day: the spot price against the members' prices, and the surplus."""

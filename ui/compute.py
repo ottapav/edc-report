@@ -300,7 +300,7 @@ def exact_stale(_changed, rows, _pair_changed, reserve, _rev, lang, pair_rows, k
     inputs=dict(rev=Input(_EXACT["rev"], "data"), key=Input("data-key", "data"),
                 lang=Input("lang", "value"), selected=Input("members", "selectedRows"),
                 **_EDITS),
-    state=_GRIDS,
+    state=dict(_GRIDS),             # a copy: Dash adds the inputs to the dict it gets
 )
 def exact_result(rev, key, lang, selected, changed, src_changed, rows, src_rows):
     """Sharing error of the EDC report (for the ticked members), timing, keys used."""
@@ -315,21 +315,21 @@ def exact_result(rev, key, lang, selected, changed, src_changed, rows, src_rows)
 
 
 @callback(
-    output=dict(result=Output("bill-result", "children"), stale=Output("bill-stale", "children"),
+    output=dict(timing=Output(_BILL["text"], "title"), stale=Output("bill-stale", "children"),
                 table=Output("settle-table", "children")),
     inputs=dict(rev=Input(_BILL["rev"], "data"), key=Input("data-key", "data"),
                 lang=Input("lang", "value"), selected=Input("members", "selectedRows"),
                 feed_in=Input("feed-in", "value"), default=Input("price-default", "value"),
                 **_EDITS),
-    state=_GRIDS,
+    state=dict(_GRIDS),             # a copy: Dash adds the inputs to the dict it gets
 )
 def bill_result(rev, key, lang, selected, feed_in, default, changed, src_changed, rows,
                 src_rows):
-    """Summary of the last billing in its card, the settlement table below the columns,
-    and a note when the prices have changed since."""
+    """The settlement table with its notes, the timing as the hint of the card's "✓ … s",
+    and a note in the card when the prices have changed since the last billing."""
     entry = store.get(key)
     if entry is None or entry.bill is None:
-        return dict(result=[], stale=[], table=[])
+        return dict(timing="", stale=[], table=[])
     data, result = entry.data, entry.bill
     names = members.names(data, lang, src_rows, rows)
     table = views.bill_table(result.settlement, data, names, lang, top_dests(data.frame, data),
@@ -339,7 +339,6 @@ def bill_result(rev, key, lang, selected, feed_in, default, changed, src_changed
     changed = inputs is None or any(
         abs(a - b) > 1e-9 for a, b in zip([*inputs[0], *inputs[1]],
                                           [*totals.prices, *totals.feed_ins]))
-    note = views.negative_payment_note(result.settlement.payment, len(data.source_eans), lang)
-    return dict(result=views.bill_result(result, len(data.source_eans), lang),
-                table=[table, *note],
+    notes = views.bill_notes(result.settlement.payment, len(data.source_eans), lang)
+    return dict(timing=views.bill_timing(result, lang), table=[table, *notes],
                 stale=views.hint(t("bill_stale", lang), "stale") if changed else [])
