@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DIR = Path(__file__).parent
+#: the (pseudonymised) report of the real group both articles use, see data/README.md
+DATA = DIR / "data"
 STYLE = DIR / "styl.css"
 LANGS = ("cs", "en", "de")
 LANG_LABELS = {"cs": "CZ", "en": "EN", "de": "DE"}
@@ -123,7 +125,7 @@ def by_folder(folder: str) -> Article | None:
 NBSP = " "
 # Tags and blocks left alone by the typography pass: markup, code, styles and figures.
 _SKIP = re.compile(r"(<(?:pre|style|svg|script)\b[\s\S]*?</(?:pre|style|svg|script)>|<[^>]+>)")
-_UNITS = (re.compile(r"(?<=\d) (?=(?:kWh|kWp|kW|ms|s|%)(?!\w))"), NBSP)            # 12 kWh, 50 %
+_UNITS = (re.compile(r"(?<=\d) (?=(?:kWh|kWp|kW|Kč|min|ms|s|%)(?!\w))"), NBSP)    # 12 kWh, 50 %, 4 Kč
 _MATH = (re.compile(r"(?<=\S) ([×=−]) (?=\S)"), NBSP + "\\1" + NBSP)                 # 0,5 × 16 = 8
 _DATE = (re.compile(r"\b(\d{1,2}\.) (\d{1,2}\.) (\d{4})\b"),
          "\\1" + NBSP + "\\2" + NBSP + "\\3")                                        # 28. 6. 2026

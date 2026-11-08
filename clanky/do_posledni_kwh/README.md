@@ -27,10 +27,11 @@ Lokální náhled: `python app.py` a otevřít <http://127.0.0.1:8050/clanky/do-
 
 ```bash
 pip install kaleido                         # jen pro export obrázků, aplikace ho nepotřebuje
-python -m clanky.do_posledni_kwh.obrazky REPORT.csv --keys 0.1,0.5,0.1,0.1,0.1   # všechny jazyky; --lang cs|en|de
+python -m clanky.do_posledni_kwh.obrazky clanky/data/skupina.csv --keys 0.1,0.5,0.1,0.1,0.1   # všechny jazyky; --lang cs|en|de
 ```
 
-Report (CSV z portálu EDC) do repozitáře nepatří, obsahuje kódy odběrných míst.
+Report skupiny je v [`../data/skupina.csv`](../data/README.md) se smyšlenými kódy odběrných
+míst (oba články z něj vycházejí); skutečné reporty do repozitáře nepatří.
 `srovnani-vypoctu.png` kreslí `python -m clanky.do_posledni_kwh.srovnani [--lang cs|en|de|all]` z naměřených dat v `srovnani.json`.
 
 ## Samostatná verze (např. pro redakci)
