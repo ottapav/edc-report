@@ -75,6 +75,11 @@ td.loss { color: var(--lost); font-weight: 650; }
 .formula { font: 500 1.02rem/1.6 var(--mono); background: var(--tint); border-left: 3px solid var(--accent); padding: .9rem 1.1rem; margin: 1.3rem 0 .4rem; overflow-x: auto; white-space: nowrap; }
 .formula sub { font-size: .72em; }
 .formula .c { color: var(--muted); font-size: .86em; }
+.formula.numbered { display: flex; align-items: baseline; gap: 1.2rem; overflow-x: visible; }
+.formula.numbered .eq { flex: 1; min-width: 0; overflow-x: auto; white-space: normal; }
+.formula.numbered .m, .formula.numbered .c { white-space: nowrap; }
+.formula.numbered .c { display: inline-block; }
+.formula .eq-no { flex: none; color: var(--muted); font-weight: 400; }
 pre { font: 400 .84rem/1.55 var(--mono); background: var(--tint); padding: 1rem 1.1rem; overflow-x: auto; border-radius: 4px; margin: 1.3rem 0 .4rem; }
 code { font-family: var(--mono); font-size: .9em; }
 

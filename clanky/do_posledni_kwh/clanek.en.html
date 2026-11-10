@@ -66,7 +66,7 @@
 
 <h3>The principle: communicating vessels</h3>
 <p>Imagine each member as a vessel. The width of the vessel corresponds to its key, its volume to its consumption. We pour the production into all the vessels at once. The vessels are connected, so the level rises equally everywhere. A full vessel takes in nothing more, and the water keeps rising in the others. In the end each member gets as much as there is water in its vessel:</p>
-<div class="formula">shared = smaller of ( consumption ; key × H )</div>
+<div class="formula numbered"><span class="eq"><span class="m">shared = smaller of ( consumption ; key × H )</span></span><span class="eq-no">(1)</span></div>
 <p>The letter H denotes the common level. It states how much a member with a key of 100 % would get, which is why we measure it in kWh. The amount of water in a vessel is width × height. For a vessel that is not full it is key × H, and that is the shared energy. In the example H = 16 kWh. At that level Dana could get up to 0.5 × 16 = 8 kWh. She needs only 4 kWh, so she gets 4 kWh. Emil gets 0.3 × 16 = 4.8 kWh and Filip 0.2 × 16 = 3.2 kWh. Fig. 1 shows the whole situation.</p>
 <figure>
   <div class="svgplate">{{NADOBY}}</div>
@@ -74,7 +74,7 @@
 </figure>
 
 <h3>How the level is calculated</h3>
-<p>There is no need to find the level by trial and error. We sort the members by how soon their vessel fills up. Then we go through them one by one. For each we calculate what the level would be if everyone before them had filled up. It is enough to divide the remaining production by the sum of the keys of the remaining members. The correct level is the highest of the values calculated this way. Table 2 shows the procedure for our example. The exact formula is in the box at the end of this section.</p>
+<p>There is no need to find the level by trial and error. We sort the members by how soon their vessel fills up. Then we go through them one by one. For each we calculate what the level would be if everyone before them had filled up. It is enough to divide the remaining production by the sum of the keys of the remaining members. The correct level is the highest of the values calculated this way. Table 2 shows the procedure for our example. Equation (2) gives the level as a formula.</p>
 <div class="tbl"><table>
 <thead><tr><th>Rank</th><th>Member</th><th>Fills up at (kWh)</th><th>Calculation</th><th>Level (kWh)</th></tr></thead>
 <tbody>
@@ -86,7 +86,7 @@
 <p>The keys are taken as ratios. They may therefore add up to less than 100 %. The undistributed share is then redistributed, just as in the later rounds of today's calculation. A group that wants to deliberately sell part of the production can subtract it as a fixed reserve before the calculation.</p>
 
 <h3>The same method, calculated to the end</h3>
-<p>The exact static method does not introduce a new rule. It is today's static method, just calculated to the end. In the theory of fair division it is the well-studied weighted constrained equal awards rule [5, 6] (more in the box below). Each round can be imagined as another dose of water. Members with a vessel that is not yet full take in water in proportion to their keys. After every round the water in these vessels is therefore at the same level. It rises with every round (Fig. 2). It cannot rise above H, however, because more would have to be distributed than was produced.</p>
+<p>The exact static method does not introduce a new rule. It is today's static method, just calculated to the end. In the theory of fair division it is the well-studied weighted constrained equal awards rule [5, 6], whose formula is exactly equation (1). Each round can be imagined as another dose of water. Members with a vessel that is not yet full take in water in proportion to their keys. After every round the water in these vessels is therefore at the same level. It rises with every round (Fig. 2). It cannot rise above H, however, because more would have to be distributed than was produced.</p>
 <figure>
   <div class="svgplate">{{HLADINA}}</div>
   <figcaption><span class="fig-no">Fig. 2</span>The level after the individual rounds of today's calculation: 12; 14; 15; 15.5; 15.75 … kWh. With every round it approaches H = 16 kWh. The exact method calculates H straight away.</figcaption>
@@ -103,14 +103,14 @@
 <ul class="plain">
 <li><strong>Members share everything they can consume,</strong> with the same keys.</li>
 <li><strong>The calculation does not depend on the number of rounds or on the size of the group.</strong> It is equally exact for a family house and for a large community.</li>
-<li><strong>It is fast.</strong> Recalculating a whole year of the sample group (35,040 quarter-hours) took 0.18 s. A comparison with today's calculation for groups of different sizes is shown in Fig. 3 in the box below.</li>
+<li><strong>It is fast.</strong> Recalculating a whole year of the sample group (35,040 quarter-hours) took 0.18 s. A comparison with today's calculation for groups of different sizes is shown in Fig. 3.</li>
 <li><strong>It is easy to verify.</strong> It is enough to know the key and the level H. Everyone can then calculate their own share as the smaller of consumption and key × H.</li>
 </ul>
 
 <aside class="box">
 <p class="box-h">For the curious and for programmers</p>
 <p>The level as a formula. We number the members by how soon their vessel fills up and take the largest of the values:</p>
-<div class="formula">H = max<sub>j</sub> ( P − Σ<sub>i&lt;j</sub> consumption<sub>i</sub> ) / ( Σ<sub>i≥j</sub> key<sub>i</sub> ) &nbsp;<span class="c">P = production (kWh)</span></div>
+<div class="formula numbered"><span class="eq"><span class="m">H = max<sub>j</sub> ( P − Σ<sub>i&lt;j</sub> consumption<sub>i</sub> ) / ( Σ<sub>i≥j</sub> key<sub>i</sub> )</span> <span class="c">P = production (kWh)</span></span><span class="eq-no">(2)</span></div>
 <p>The core of the exact static method in Python. The most demanding step is sorting the members, the rest is a single pass. For a group with 1,000 metering points the calculation of one quarter-hour takes about half a millisecond. The full reference implementation is freely available [7]. It contains integer arithmetic, rounding and tests.</p>
 <pre><code>def exact_static(P, D, k):
     """P production, D consumption, k keys (as ratios). Returns the shared amounts."""
