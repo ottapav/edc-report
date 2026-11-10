@@ -66,7 +66,7 @@
 
 <h3>Das Prinzip: kommunizierende Gefäße</h3>
 <p>Stellen Sie sich jedes Mitglied als Gefäß vor. Die Breite des Gefäßes entspricht seinem Schlüssel, sein Volumen dem Verbrauch. Wir gießen die Erzeugung in alle Gefäße zugleich. Die Gefäße sind verbunden, der Pegel steigt also überall gleich. Ein volles Gefäß nimmt nichts mehr auf, in den anderen steigt das Wasser weiter. Am Ende erhält jedes Mitglied so viel, wie in seinem Gefäß Wasser ist:</p>
-<div class="formula">geteilt = kleinerer Wert aus ( Verbrauch ; Schlüssel × H )</div>
+<div class="formula numbered"><span class="eq"><span class="m">geteilt = kleinerer Wert aus ( Verbrauch ; Schlüssel × H )</span></span><span class="eq-no">(1)</span></div>
 <p>Der Buchstabe H bezeichnet den gemeinsamen Pegel. Er gibt an, wie viel ein Mitglied mit einem Schlüssel von 100 % erhielte, deshalb messen wir ihn in kWh. Die Wassermenge in einem Gefäß ist Breite × Höhe. Bei einem nicht vollen Gefäß ist das Schlüssel × H, und das ist die geteilte Energie. Im Beispiel ist H = 16 kWh. Bei diesem Pegel könnte Dana bis zu 0,5 × 16 = 8 kWh erhalten. Sie braucht nur 4 kWh, also erhält sie 4 kWh. Emil erhält 0,3 × 16 = 4,8 kWh und Filip 0,2 × 16 = 3,2 kWh. Abb. 1 zeigt die ganze Situation.</p>
 <figure>
   <div class="svgplate">{{NADOBY}}</div>
@@ -74,7 +74,7 @@
 </figure>
 
 <h3>Wie der Pegel berechnet wird</h3>
-<p>Den Pegel muss man nicht durch Probieren suchen. Wir sortieren die Mitglieder danach, wie schnell ihr Gefäß voll wird, und gehen sie nacheinander durch. Für jedes berechnen wir, wie hoch der Pegel wäre, wenn alle davor voll wären. Dazu genügt es, die verbleibende Erzeugung durch die Summe der Schlüssel der verbleibenden Mitglieder zu teilen. Der richtige Pegel ist der höchste der so berechneten Werte. Tabelle 2 zeigt das Vorgehen für unser Beispiel. Die genaue Formel steht im Kasten am Ende dieses Abschnitts.</p>
+<p>Den Pegel muss man nicht durch Probieren suchen. Wir sortieren die Mitglieder danach, wie schnell ihr Gefäß voll wird, und gehen sie nacheinander durch. Für jedes berechnen wir, wie hoch der Pegel wäre, wenn alle davor voll wären. Dazu genügt es, die verbleibende Erzeugung durch die Summe der Schlüssel der verbleibenden Mitglieder zu teilen. Der richtige Pegel ist der höchste der so berechneten Werte. Tabelle 2 zeigt das Vorgehen für unser Beispiel. Gleichung (2) gibt den Pegel als Formel an.</p>
 <div class="tbl"><table>
 <thead><tr><th>Rang</th><th>Mitglied</th><th>Voll bei (kWh)</th><th>Berechnung</th><th>Pegel (kWh)</th></tr></thead>
 <tbody>
@@ -86,7 +86,7 @@
 <p>Die Schlüssel werden als Verhältnisse genommen. Sie dürfen deshalb in der Summe weniger als 100 % ergeben. Der nicht zugeteilte Anteil wird dann umverteilt, genau wie in den späteren Runden der heutigen Berechnung. Eine Gruppe, die einen Teil der Erzeugung bewusst verkaufen will, kann ihn vor der Berechnung als feste Reserve abziehen.</p>
 
 <h3>Dieselbe Methode, zu Ende gerechnet</h3>
-<p>Die exakte statische Methode führt keine neue Regel ein. Es ist die heutige statische Methode, nur zu Ende gerechnet. In der Theorie der fairen Verteilung ist sie die gut untersuchte gewichtete Regel der beschränkten gleichen Zuteilung (weighted constrained equal awards) [5, 6] (mehr dazu im Kasten unten). Jede Runde lässt sich als weitere Wasserportion vorstellen. Mitglieder mit einem noch nicht vollen Gefäß nehmen Wasser im Verhältnis ihrer Schlüssel auf. Nach jeder Runde steht das Wasser in diesen Gefäßen deshalb gleich hoch. Es steigt mit jeder Runde (Abb. 2). Über H hinaus kann es aber nicht steigen, denn dazu müsste mehr verteilt werden, als erzeugt wurde.</p>
+<p>Die exakte statische Methode führt keine neue Regel ein. Es ist die heutige statische Methode, nur zu Ende gerechnet. In der Theorie der fairen Verteilung ist sie die gut untersuchte gewichtete Regel der beschränkten gleichen Zuteilung (weighted constrained equal awards) [5, 6], deren Vorschrift genau Gleichung (1) ist. Jede Runde lässt sich als weitere Wasserportion vorstellen. Mitglieder mit einem noch nicht vollen Gefäß nehmen Wasser im Verhältnis ihrer Schlüssel auf. Nach jeder Runde steht das Wasser in diesen Gefäßen deshalb gleich hoch. Es steigt mit jeder Runde (Abb. 2). Über H hinaus kann es aber nicht steigen, denn dazu müsste mehr verteilt werden, als erzeugt wurde.</p>
 <figure>
   <div class="svgplate">{{HLADINA}}</div>
   <figcaption><span class="fig-no">Abb. 2</span>Der Pegel nach den einzelnen Runden der heutigen Berechnung: 12; 14; 15; 15,5; 15,75 … kWh. Mit jeder Runde nähert er sich H = 16 kWh. Die exakte Methode berechnet H sofort.</figcaption>
@@ -103,14 +103,14 @@
 <ul class="plain">
 <li><strong>Die Mitglieder teilen alles, was sie verbrauchen können,</strong> bei gleichen Schlüsseln.</li>
 <li><strong>Die Berechnung hängt weder von der Rundenzahl noch von der Gruppengröße ab.</strong> Sie ist für ein Familienhaus ebenso exakt wie für eine große Gemeinschaft.</li>
-<li><strong>Sie ist schnell.</strong> Die Neuberechnung eines ganzen Jahres der Beispielgruppe (35.040 Viertelstunden) dauerte 0,18 s. Ein Vergleich mit der heutigen Berechnung für Gruppen verschiedener Größe steht in Abb. 3 im Kasten unten.</li>
+<li><strong>Sie ist schnell.</strong> Die Neuberechnung eines ganzen Jahres der Beispielgruppe (35.040 Viertelstunden) dauerte 0,18 s. Ein Vergleich mit der heutigen Berechnung für Gruppen verschiedener Größe steht in Abb. 3.</li>
 <li><strong>Sie ist leicht nachzuprüfen.</strong> Es genügt, den Schlüssel und den Pegel H zu kennen. Jeder kann dann seinen Anteil als kleineren Wert aus Verbrauch und Schlüssel × H selbst berechnen.</li>
 </ul>
 
 <aside class="box">
 <p class="box-h">Für Neugierige und Programmierer</p>
 <p>Der Pegel als Formel. Wir nummerieren die Mitglieder danach, wie schnell ihr Gefäß voll wird, und nehmen den größten der Werte:</p>
-<div class="formula">H = max<sub>j</sub> ( P − Σ<sub>i&lt;j</sub> Verbrauch<sub>i</sub> ) / ( Σ<sub>i≥j</sub> Schlüssel<sub>i</sub> ) &nbsp;<span class="c">P = Erzeugung (kWh)</span></div>
+<div class="formula numbered"><span class="eq"><span class="m">H = max<sub>j</sub> ( P − Σ<sub>i&lt;j</sub> Verbrauch<sub>i</sub> ) / ( Σ<sub>i≥j</sub> Schlüssel<sub>i</sub> )</span> <span class="c">P = Erzeugung (kWh)</span></span><span class="eq-no">(2)</span></div>
 <p>Der Kern der exakten statischen Methode in Python. Der aufwendigste Schritt ist das Sortieren der Mitglieder, der Rest ist ein einziger Durchlauf. Für eine Gruppe mit 1.000 Verbrauchsstellen dauert die Berechnung einer Viertelstunde etwa eine halbe Millisekunde. Die vollständige Referenzimplementierung ist frei verfügbar [7]. Sie enthält Ganzzahlarithmetik, Rundung und Tests.</p>
 <pre><code>def exakte_statische(P, D, k):
     """P Erzeugung, D Verbrauch, k Schlüssel (als Verhältnisse). Liefert die geteilten Mengen."""

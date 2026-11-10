@@ -67,7 +67,7 @@
 
 <h3>Princip: spojené nádoby</h3>
 <p>Představme si každého člena jako nádobu. Šířka nádoby odpovídá jeho klíči, objem jeho spotřebě. Výrobu nalijeme do všech nádob najednou. Nádoby jsou spojené, a tak hladina stoupá všude stejně. Plná nádoba už nic nepřijme a voda stoupá dál v ostatních. Každý člen nakonec dostane tolik, kolik vody je v jeho nádobě:</p>
-<div class="formula">nasdíleno = menší z hodnot ( spotřeba ; klíč × H )</div>
+<div class="formula numbered"><span class="eq"><span class="m">nasdíleno = menší z hodnot ( spotřeba ; klíč × H )</span></span><span class="eq-no">(1)</span></div>
 <p>Písmeno H označuje společnou hladinu. Udává, kolik by dostal člen s klíčem 100 %, a proto ji měříme v kWh. Množství vody v nádobě je šířka × výška. U nenaplněné nádoby je to klíč × H, a to je nasdílená energie. V příkladu vyjde H = 16 kWh. Dana by při ní mohla dostat až 0,5 × 16 = 8 kWh. Potřebuje ale jen 4 kWh, a tak dostane 4 kWh. Emil dostane 0,3 × 16 = 4,8 kWh a Filip 0,2 × 16 = 3,2 kWh. Celou situaci ukazuje obr. 1.</p>
 <figure>
   <div class="svgplate">{{NADOBY}}</div>
@@ -75,7 +75,7 @@
 </figure>
 
 <h3>Jak se hladina spočítá</h3>
-<p>Hladinu není třeba hledat zkoušením. Členy seřadíme podle toho, jak brzy se jejich nádoba naplní. Pak je procházíme jednoho po druhém. U každého spočítáme, jaká by byla hladina, kdyby se všichni před ním naplnili. Stačí vydělit zbývající výrobu součtem klíčů zbývajících členů. Správná hladina je nejvyšší z takto spočtených hodnot. Postup pro náš příklad ukazuje tabulka 2. Přesný zápis vzorcem je v rámečku na konci této části.</p>
+<p>Hladinu není třeba hledat zkoušením. Členy seřadíme podle toho, jak brzy se jejich nádoba naplní. Pak je procházíme jednoho po druhém. U každého spočítáme, jaká by byla hladina, kdyby se všichni před ním naplnili. Stačí vydělit zbývající výrobu součtem klíčů zbývajících členů. Správná hladina je nejvyšší z takto spočtených hodnot. Postup pro náš příklad ukazuje tabulka 2. Hladinu vzorcem zapisuje rovnice (2).</p>
 <div class="tbl"><table>
 <thead><tr><th>Pořadí</th><th>Člen</th><th>Naplní se při (kWh)</th><th>Výpočet</th><th>Hladina (kWh)</th></tr></thead>
 <tbody>
@@ -87,7 +87,7 @@
 <p>Klíče se berou jako poměry. Mohou proto dávat dohromady i méně než 100 %. Nerozdělený podíl se pak přerozdělí, stejně jako v dalších kolech dnešního výpočtu. Skupina, která chce část výroby záměrně prodávat, ji může před výpočtem odečíst jako pevnou rezervu.</p>
 
 <h3>Stejná metoda, jen dopočítaná</h3>
-<p>Přesná statická metoda nezavádí nové pravidlo. Je to dnešní statická metoda, jen dopočítaná do konce. V teorii spravedlivého dělení jde o dobře prozkoumané vážené pravidlo rovných dílů [5, 6] (více v rámečku níže). Každé kolo si můžeme představit jako další dávku vody. Členové s nenaplněnou nádobou přibírají v poměru svých klíčů. Po každém kole je proto v těchto nádobách stejná hladina. Ta s každým kolem roste (obr. 2). Nad H ale vystoupat nemůže, protože by se muselo rozdělit víc, než se vyrobilo.</p>
+<p>Přesná statická metoda nezavádí nové pravidlo. Je to dnešní statická metoda, jen dopočítaná do konce. V teorii spravedlivého dělení jde o dobře prozkoumané vážené pravidlo rovných dílů [5, 6], jehož předpisem je právě rovnice (1). Každé kolo si můžeme představit jako další dávku vody. Členové s nenaplněnou nádobou přibírají v poměru svých klíčů. Po každém kole je proto v těchto nádobách stejná hladina. Ta s každým kolem roste (obr. 2). Nad H ale vystoupat nemůže, protože by se muselo rozdělit víc, než se vyrobilo.</p>
 <figure>
   <div class="svgplate">{{HLADINA}}</div>
   <figcaption><span class="fig-no">Obr. 2</span>Hladina po jednotlivých kolech dnešního výpočtu: 12; 14; 15; 15,5; 15,75 … kWh. S každým kolem se blíží k H = 16 kWh. Přesná metoda spočítá H rovnou.</figcaption>
@@ -104,14 +104,14 @@
 <ul class="plain">
 <li><strong>Členové si rozdělí vše, co mohou spotřebovat,</strong> a to se stejnými klíči.</li>
 <li><strong>Výpočet nezávisí na počtu kol ani na velikosti skupiny.</strong> Stejně přesný je pro rodinný dům i pro velké společenství.</li>
-<li><strong>Je rychlý.</strong> Přepočet celého roku ukázkové skupiny (35 040 čtvrthodin) trval 0,18 s. Srovnání s dnešním výpočtem pro různě velké skupiny ukazuje obr. 3 v rámečku níže.</li>
+<li><strong>Je rychlý.</strong> Přepočet celého roku ukázkové skupiny (35 040 čtvrthodin) trval 0,18 s. Srovnání s dnešním výpočtem pro různě velké skupiny ukazuje obr. 3.</li>
 <li><strong>Je snadno ověřitelný.</strong> Stačí znát klíč a hladinu H. Každý si pak svůj podíl spočítá sám jako menší z hodnot spotřeba a klíč × H.</li>
 </ul>
 
 <aside class="box">
 <p class="box-h">Pro zájemce a programátory</p>
 <p>Hladina jako vzorec. Členy očíslujeme podle toho, jak brzy se jejich nádoba naplní, a vezmeme největší z hodnot:</p>
-<div class="formula">H = max<sub>j</sub> ( P − Σ<sub>i&lt;j</sub> spotřeba<sub>i</sub> ) / ( Σ<sub>i≥j</sub> klíč<sub>i</sub> ) &nbsp;<span class="c">P = výroba (kWh)</span></div>
+<div class="formula numbered"><span class="eq"><span class="m">H = max<sub>j</sub> ( P − Σ<sub>i&lt;j</sub> spotřeba<sub>i</sub> ) / ( Σ<sub>i≥j</sub> klíč<sub>i</sub> )</span> <span class="c">P = výroba (kWh)</span></span><span class="eq-no">(2)</span></div>
 <p>Jádro přesné statické metody v Pythonu. Nejnáročnější krok je seřazení členů, zbytek je jediný průchod. Pro skupinu s 1 000 odběrnými místy trvá výpočet jedné čtvrthodiny asi půl milisekundy. Plná referenční implementace je volně dostupná [7]. Obsahuje celočíselnou aritmetiku, zaokrouhlení a testy.</p>
 <pre><code>def presna_staticka(P, D, k):
     """P výroba, D spotřeby, k klíče (jako poměry). Vrací nasdílená množství."""
