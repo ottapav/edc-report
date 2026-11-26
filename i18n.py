@@ -289,7 +289,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "bt_income": "Producer receives",
         "bt_income_n": "Producers receive",
         "bt_income_sub": "on average {unit} per kWh",
-        "bt_note": "Shares of the benefit of the best sharing, scaled to what the EDC report achieved; always the whole group.",
+        "bt_note": "Shares of the benefit of the best sharing, scaled in every 15 min to what the EDC report achieved in it; always the whole group.",
         # --- export ---
         "x_title": "Export",
         "x_btn": "Download summary (Excel)",
@@ -718,7 +718,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "bt_income": "Výrobce dostane",
         "bt_income_n": "Výrobci dostanou",
         "bt_income_sub": "průměrně {unit} za kWh",
-        "bt_note": "Podíly na úspoře při nejlepším sdílení, přepočtené na to, čeho dosáhl report EDC; vždy za celou skupinu.",
+        "bt_note": "Podíly na úspoře při nejlepším sdílení, přepočtené v každé čtvrthodině na to, čeho v ní dosáhl report EDC; vždy za celou skupinu.",
         # --- export ---
         "x_title": "Export",
         "x_btn": "Stáhnout souhrn (Excel)",

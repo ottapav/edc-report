@@ -23,7 +23,7 @@ import plotly.graph_objects as go
 import figures as F
 from billing import BillResult, compute_shapley
 from edc_data import (SharingData, load_report, per_destination, producer_arrays, shared_cols,
-                      supplied_per_source)
+                      sharing_per_interval, supplied_per_source)
 from figures.base import figure
 from i18n import fmt_num
 
@@ -46,8 +46,10 @@ def spocitej(csv: Path = DATA / "skupina.csv") -> Skupina:
     d = load_report(csv.read_bytes())
     P, D = producer_arrays(d)
     totals = compute_shapley(P, D, [PRICE] * len(d.dest_eans), [FEED_IN])
+    S, Q = sharing_per_interval(d)
     bill = BillResult.build(totals, per_destination(d)["shared"].to_numpy(),
-                            supplied_per_source(d), d.frame.index, d.dest_eans, d.source_eans)
+                            supplied_per_source(d), d.frame.index, d.dest_eans, d.source_eans,
+                            shared_t=S, supplied_t=Q)
     per = bill.per_interval
     Pt = P if P.ndim == 1 else P.sum(axis=1)
     live = (Pt > 0) & (D.sum(axis=1) > 0)

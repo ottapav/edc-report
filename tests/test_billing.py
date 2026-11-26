@@ -4,6 +4,7 @@ from itertools import combinations
 from math import factorial
 
 import numpy as np
+import pandas as pd
 import pytest
 
 import billing as B
@@ -410,3 +411,64 @@ def test_price_columns_only_on_the_tabs_that_use_them(entry_key):
         cols, src_cols, hint_style = panel._grid_columns("cs", entry_key, tab)
         assert hidden(cols) is not shown and hidden(src_cols) is not shown
         assert (hint_style == {}) is shown
+
+
+def test_settlement_scales_every_interval_on_its_own():
+    """Interval 0: the report shares all it can (its shares stay whole); interval 1: it
+    shares a third of what it could (its shares shrink to a third). The shares add up to
+    the realized benefit, and per interval to what was realized there."""
+    P = np.array([1200, 1200])
+    D = np.array([[400, 500, 600], [400, 500, 600]])
+    res = B.compute_shapley(P, D, [4, 4, 4], 1.0)
+    shared_t = np.array([[4.0, 4.8, 3.2], [4.0, 0.0, 0.0]])          # kWh
+    bill = B.settle(res, shared_t.sum(axis=0), shared_t=shared_t)
+    assert bill.by_interval and list(bill.t_scale) == pytest.approx([1.0, 1 / 3])
+    one = np.array([3.75, 5.25, 6.75])                               # one interval, whole
+    assert list(bill.share) == pytest.approx(list(one * (1 + 1 / 3)))
+    assert bill.realized == pytest.approx(36 + 12)
+    assert float(bill.share.sum() + bill.producer_share.sum()) == pytest.approx(48, abs=0.01)
+    # the global factor would shrink both intervals alike
+    whole = B.settle(res, shared_t.sum(axis=0))
+    assert not whole.by_interval and list(whole.t_scale) == pytest.approx([2 / 3, 2 / 3])
+    assert list(whole.share) == pytest.approx(list(one * 2 * 48 / 72))
+    r = B.BillResult.build(res, None, None, pd.date_range("2026-06-01 12:00", periods=2,
+                           freq="15min"), ["a", "b", "c"], ["p"], shared_t=shared_t)
+    per = r.per_interval
+    assert per.sum(axis=1).tolist() == pytest.approx([36.0, 12.0], abs=1e-4)
+    assert per.sum().to_numpy()[:3] == pytest.approx(r.settlement.share)
+
+
+def test_one_interval_scales_alike_both_ways():
+    res = B.compute_shapley(np.array([1200]), np.array([[400, 500, 600]]), [4, 4, 4], 1.0)
+    shared = np.array([4.0, 5.0, 0.0])
+    a = B.settle(res, shared)
+    b = B.settle(res, shared, shared_t=shared[None, :])
+    assert list(b.share) == pytest.approx(list(a.share), abs=1e-5)
+    assert list(b.payment) == pytest.approx(list(a.payment), abs=0.01)
+
+
+def test_an_interval_that_lost_money_gives_no_shares():
+    """Member 2's price is below the feed-in price: an interval where the report shares
+    only to it loses money; it gives no shares, its loss is spread over the rest pro
+    rata, and the shares still add up to the realized benefit."""
+    P = np.array([600, 600])
+    D = np.array([[300, 300], [300, 300]])
+    res = B.compute_shapley(P, D, [4.0, 0.5], 1.0)
+    shared_t = np.array([[3.0, 0.0], [0.0, 3.0]])
+    bill = B.settle(res, None, shared_t=shared_t)
+    realized = 3 * 3.0 - 3 * 0.5
+    assert bill.realized == pytest.approx(realized)
+    assert bill.t_scale[1] == 0.0 and bill.t_scale[0] == pytest.approx(realized / 9)
+    assert float(bill.share.sum() + bill.producer_share.sum()) == pytest.approx(realized,
+                                                                               abs=0.01)
+    assert bill.share[1] == 0.0
+
+
+def test_sharing_per_interval_adds_up_to_the_report(entry_key):
+    """The sharing per interval the job settles with: members' columns add up to the
+    per-destination totals, the producers' to what the members got."""
+    from edc_data import per_destination, sharing_per_interval
+    data = store.get(entry_key).data
+    S, Q = sharing_per_interval(data)
+    assert S.sum(axis=0) == pytest.approx(per_destination(data)["shared"].to_numpy())
+    assert Q.sum(axis=1) == pytest.approx(S.sum(axis=1))

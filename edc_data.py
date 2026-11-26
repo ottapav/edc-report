@@ -595,6 +595,29 @@ def producer_arrays(data: SharingData) -> tuple[np.ndarray, np.ndarray]:
     return np.clip(P, 0, None), np.clip(D, 0, None)
 
 
+def sharing_per_interval(data: SharingData) -> tuple[np.ndarray, np.ndarray]:
+    """(S[T, n] kWh shared to each destination, Q[T, np] kWh shared by each producer) in
+    every 15-min interval (all report). A producer shared its production minus its
+    unshared surplus, scaled per interval to what the members received (they differ by
+    the report's rounding); one producer supplied all of it."""
+    df = data.frame
+    S = np.zeros((len(df), len(data.dest_eans)))
+    col = {e: j for j, e in enumerate(data.dest_eans)}
+    for c in shared_cols(df):
+        j = col.get(key_dest(c))
+        if j is not None:
+            S[:, j] += np.nan_to_num(df[c].to_numpy(dtype=float))
+    total = S.sum(axis=1)
+    if len(data.source_eans) <= 1:
+        return S, total[:, None].copy()
+    w = np.stack([np.clip(np.nan_to_num((data.productions[e] - df[key_unshared(e)])
+                                        .to_numpy(dtype=float)), 0, None)
+                  for e in data.source_eans], axis=1)
+    tot = w.sum(axis=1, keepdims=True)
+    share = np.where(tot > 0, w / np.where(tot > 0, tot, 1), 1.0 / w.shape[1])
+    return S, share * total[:, None]
+
+
 def supplied_per_source(data: SharingData) -> np.ndarray:
     """kWh each producer shared: production − unshared (all report)."""
     return np.array([float((data.productions[e] - data.frame[key_unshared(e)])

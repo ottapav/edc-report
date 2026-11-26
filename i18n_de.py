@@ -276,7 +276,7 @@ STRINGS: dict[str, str] = {
     "bt_income": "Der Erzeuger erhält",
     "bt_income_n": "Die Erzeuger erhalten",
     "bt_income_sub": "im Schnitt {unit} je kWh",
-    "bt_note": "Anteile am Nutzen der besten Teilung, skaliert auf das, was der EDC-Report erreicht hat; immer für die ganze Gruppe.",
+    "bt_note": "Anteile am Nutzen der besten Teilung, in jeder Viertelstunde skaliert auf das, was der EDC-Report in ihr erreicht hat; immer für die ganze Gruppe.",
     # --- export ---
     "x_title": "Export",
     "x_btn": "Zusammenfassung herunterladen (Excel)",

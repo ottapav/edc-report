@@ -194,7 +194,9 @@ def test_the_group_data_give_the_numbers_both_articles_quote():
               f"o {kc(-c['pevna_rozdil'][1])} Kč méně",
               f"o {kc(c['pevna_rozdil'][3])} a {kc(c['pevna_rozdil'][4])} Kč víc",
               f"{kc(c['podil_mesice']['2025-12'] * 100)} a {kc(c['podil_mesice']['2026-01'] * 100)} %",
-              f"{kc(c['leto'][0] * 100)} až {kc(c['leto'][1] * 100)} %",
+              (f"{kc(c['leto'][0] * 100)} až {kc(c['leto'][1] * 100)} %"
+               if kc(c['leto'][0] * 100) != kc(c['leto'][1] * 100)
+               else f"od května do srpna {kc(c['leto'][0] * 100)} %"),
               f"{kc(c['leto_dost'][0] * 100)} až {kc(c['leto_dost'][1] * 100)} % čtvrthodin"]
     for text in quoted:
         assert text in second, text

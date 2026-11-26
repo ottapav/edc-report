@@ -31,7 +31,7 @@ import spot
 import store
 from billing import BillResult, compute_shapley
 from edc_data import (SharingData, load_report, per_destination, producer_arrays,
-                      supplied_per_source)
+                      sharing_per_interval, supplied_per_source)
 from keyfit import estimate_keys, estimate_pair_keys
 from procjob import JobCancelled, JobTimeout, WorkerDied, limit_memory, run_in_child
 from recompute import InvalidKeys, recompute, to_hundredths, to_hundredths_multi
@@ -276,16 +276,19 @@ def _exact_pairs(entry: store.Entry, job: Job, pairs, reserve: float) -> None:
 
 def start_bill(data_key: str, prices: list[float], feed_ins: list[float]) -> str:
     """Billing by the Shapley value of the report's shared energy (supplier price per
-    destination, feed-in price per producer)."""
+    destination, feed-in price per producer), scaled per 15-min interval to the benefit
+    the report realized there."""
     def work(entry: store.Entry, job: Job) -> None:
         job.progress("bill", 0.0)
         data = entry.data
         P, D = producer_arrays(data)
         totals = run_in_child(compute_shapley, (P, D, prices, feed_ins),
                               progress=job.progress, cancelled=job.cancelled)
+        S, Q = sharing_per_interval(data)
         entry.bill = BillResult.build(totals, per_destination(data)["shared"].to_numpy(),
                                       supplied_per_source(data), data.frame.index,
-                                      data.dest_eans, data.source_eans)
+                                      data.dest_eans, data.source_eans,
+                                      shared_t=S, supplied_t=Q)
     return start("bill", data_key, work)
 
 
