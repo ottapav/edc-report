@@ -456,7 +456,12 @@ producers, mixed prices, members without demand, prices below the feed-in price)
 
 **Settlement.** The Shapley values of the best sharing are scaled to the benefit the EDC
 report really achieved, `Σ p_j · s_j − Σ f_i · q_i` (`s_j` shared to member *j*, `q_i`
-shared by producer *i*). Member *j* pays `p_j · s_j − share_j` (in whole haléř); the payments
+shared by producer *i*), in every 15-min interval on its own: `k_t = realized_t / v_t(N)`.
+The loss against the best sharing thus stays in the intervals where it happened, borne pro
+rata by those who took part in them; an interval where the report shared all it could
+keeps its whole shares. An interval where the report's sharing lost money (a member whose
+supplier price is below the feed-in price) gives no shares, and what is left over is spread
+over all shares pro rata, so they add up to the realized benefit exactly. Member *j* pays `p_j · s_j − share_j` (in whole haléř); the payments
 make a pool from which each producer gets the feed-in value of its shared energy plus its
 share (whole haléř, adding up to the payments). The page shows how much of the best possible
 benefit the report achieved.
@@ -526,8 +531,8 @@ Choosing every 15 min where each shared kWh goes (spot when spot − fee is abov
 member's supplier price) gives an upper bound; EDC sharing cannot do that.
 
 **Who gets what.** With the billing by contribution for the same prices, the billing's
-Shapley values per 15 min are summed over the compared intervals and scaled to the benefit
-realized there (Σ p · shared − Σ f · supplied), as its settlement does over the whole report:
+Shapley values per 15 min (already scaled per interval by the settlement) are summed over
+the compared intervals and scaled to the benefit realized there (Σ p · shared − Σ f · supplied):
 with a spot price everywhere the factor is 1 and the members' savings are the billing's
 shares. A producer gets f · its shared energy + its scaled share for the shared electricity, so
 the producers get exactly what the members pay, and the spot price for its unshared

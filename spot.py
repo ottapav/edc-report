@@ -762,7 +762,7 @@ def split(cmp: Comparison, bill: BillResult | None) -> Split | None:
     ms_t = pi[bill.members].to_numpy(dtype=float) * valid[:, None]        # (T, n)
     ps_t = pi[bill.producer_cols].to_numpy(dtype=float) * valid[:, None]  # (T, np)
     # scale the shares to the benefit realized in the compared intervals (the settlement
-    # does so over the whole report: with a spot price everywhere the factor is 1)
+    # scales every interval to its own: with a spot price everywhere the factor is 1)
     realized = float(cmp.at_supplier.sum() - cmp.feed_ins @ cmp.supplied)
     shares = float(ms_t.sum() + ps_t.sum())
     factor = realized / shares if shares > 0 else 0.0

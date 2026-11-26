@@ -38,9 +38,16 @@ Exact algorithm for one interval (hundredths of kWh, like EDC data):
   running sums of Δλ_k · H_k over the layers give all layers with the same lookups.
 
 Settlement: the benchmark's Shapley values are scaled to the benefit the group really got
-from the report's sharing (``realized / maximum``). Each consumer pays the pool
-``price · shared − its share``; each producer gets ``feed-in price · its shared energy +
-its share`` from the pool.
+from the report's sharing, in every 15-min interval on its own: k_t = realized_t / v_t(N),
+so the loss against the best sharing stays in the intervals where it happened (an interval
+where the report shared all it could keeps its whole shares). An interval where the
+report's sharing lost money (k_t < 0, members whose supplier price is below the feed-in
+price) gives no shares, and what the intervals leave over (that, and an interval with
+nothing to gain where the report shared anyway) is spread over all shares pro rata, so the
+shares add up to the realized benefit exactly. Without the sharing per interval the
+whole report is scaled by one factor, ``realized / maximum``. Each consumer pays the
+pool ``price · shared − its share``; each producer gets ``feed-in price · its shared
+energy + its share`` from the pool.
 """
 
 from __future__ import annotations
@@ -326,10 +333,12 @@ class ShapleyTotals:
     n_covered: int = 0             # closed form only
     n_scarce: int = 0              # exact quadrature
     seconds: float = 0.0           # CPU time
-    #: per 15-min interval with something to share: row indices into the report, and
-    #: the Shapley values in Kč (float32, columns = consumers…, producers…) for the plots
+    #: per 15-min interval with something to share: row indices into the report, the
+    #: Shapley values in Kč (float32, columns = consumers…, producers…) for the plots and
+    #: the settlement, and the best benefit v_t(N) in Kč (what the values add up to)
     t_index: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=np.int64))
     t_values: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), dtype=np.float32))
+    t_max: np.ndarray = field(default_factory=lambda: np.zeros(0))
 
     @property
     def producer(self) -> float:
@@ -367,6 +376,7 @@ def compute_shapley(P: np.ndarray, D: np.ndarray, prices, feed_ins,
     pos = np.full(T, -1, dtype=np.int64)
     pos[day] = np.arange(len(day))
     vals = np.zeros((len(day), n + npr))                 # Kč · hundredths of kWh
+    vmaxs = np.zeros(len(day))                           # v_t(N), Kč · hundredths of kWh
     # closed forms for every interval without a hard layer, all at once
     easy = np.flatnonzero(live.any(axis=1) & ~hard_any)
     res.n_covered = len(easy)
@@ -376,7 +386,8 @@ def compute_shapley(P: np.ndarray, D: np.ndarray, prices, feed_ins,
         vc = De * (wp @ Cin.T) / 2 + ((wc * Gl[easy]) @ Cin.T) * (De > 0) / 2
         vp = ((wp * Dl[easy]) @ Fin.T) * (Pe > 0) / 2 + Pe * (wc @ Fin.T) / 2
         vals[pos[easy]] = np.hstack([vc, vp])
-        res.maximum += float((dl * np.minimum(Gl[easy], Dl[easy])).sum())
+        vmaxs[pos[easy]] = (dl * np.minimum(Gl[easy], Dl[easy])).sum(axis=1)
+        res.maximum += float(vmaxs[pos[easy]].sum())
     scarce = np.flatnonzero(hard_any)
     res.n_scarce = len(scarce)
     # progress by the work that costs: grid length × active players
@@ -388,6 +399,7 @@ def compute_shapley(P: np.ndarray, D: np.ndarray, prices, feed_ins,
     for i, t in enumerate(scarce):
         pc, pp, vmax, _ = shapley_interval(P[t], D[t], lay)
         vals[pos[t]] = np.concatenate([pc, pp])
+        vmaxs[pos[t]] = vmax
         res.maximum += vmax
         done += work[i]
         if done - last >= 0.01 * total:
@@ -399,6 +411,7 @@ def compute_shapley(P: np.ndarray, D: np.ndarray, prices, feed_ins,
     res.maximum /= 100
     res.t_index = day
     res.t_values = vals.astype(np.float32)
+    res.t_max = vmaxs / 100
     res.seconds = time.process_time() - c0
     progress("bill", 1.0)
     return res
@@ -435,6 +448,11 @@ class Billing:
     feed_in_value: np.ndarray      # Kč per producer: its shared energy at the feed-in price
     realized: float                # Kč: benefit of the report's sharing
     maximum: float                 # Kč: benefit of the best possible sharing
+    #: the factor each 15-min interval of :attr:`ShapleyTotals.t_index` is scaled by
+    #: (one factor for all of them when the report is scaled as a whole)
+    t_scale: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    #: scaled per 15-min interval (False: the whole report by one factor)
+    by_interval: bool = False
 
     @property
     def efficiency(self) -> float:
@@ -453,31 +471,77 @@ class Billing:
             return np.where(self.supplied > 0, self.producer_income / self.supplied, np.nan)
 
 
-def settle(res: ShapleyTotals, shared_kwh, supplied_kwh=None) -> Billing:
-    """Crowns: Shapley values scaled to the realized benefit, payments in haléř.
+def interval_scale(res: ShapleyTotals, shared_t, supplied_t=None) -> tuple[np.ndarray, float]:
+    """The factor of every interval of ``res.t_index`` and the realized benefit (Kč).
 
-    ``supplied_kwh[np]`` is what each producer shared; it is scaled to add up to the
-    consumers' ``shared_kwh`` (they differ by the report's rounding). With one producer
-    it may be left out."""
+    ``shared_t[T, n]`` kWh shared to each consumer and ``supplied_t[T, np]`` kWh shared by
+    each producer in every 15-min interval of the report (with one producer it may be left
+    out: it supplied all). k_t = realized_t / v_t(N), at least 0; what that leaves over
+    of the realized benefit (intervals that lost money, or shared with nothing to gain) is
+    spread over all shares pro rata, so the scaled shares add up to the realized benefit.
+    """
     p = np.asarray(res.prices, dtype=float)
     f = np.asarray(res.feed_ins, dtype=float)
-    shared = np.asarray(shared_kwh, dtype=float)
-    total = float(shared.sum())
-    supplied = (np.full(len(f), total / max(len(f), 1)) if supplied_kwh is None
-                else np.clip(np.asarray(supplied_kwh, dtype=float), 0, None))
-    if supplied.sum() > 0:
-        supplied = supplied * (total / supplied.sum())
-    realized = float((p * shared).sum() - (f * supplied).sum())
-    scale = realized / res.maximum if res.maximum > 0 else 0.0
-    share = res.consumers * scale
+    S = np.nan_to_num(np.asarray(shared_t, dtype=float))
+    Q = (S.sum(axis=1, keepdims=True) if supplied_t is None
+         else np.nan_to_num(np.asarray(supplied_t, dtype=float)))
+    if S.shape[1] != len(p) or Q.shape[1] != len(f) or len(S) != len(Q):
+        raise ValueError("the sharing per interval does not match the prices")
+    real_t = S @ p - Q @ f
+    realized = float(real_t.sum())
+    vmax = res.t_max
+    k = np.zeros(len(vmax))
+    ok = vmax > 0
+    if len(res.t_index):
+        k[ok] = np.maximum(real_t[res.t_index][ok], 0.0) / vmax[ok]
+    # the scaled shares (float32 values: add up the remainder exactly with the rest)
+    total = float(k @ res.t_values.astype(float).sum(axis=1)) if len(k) else 0.0
+    if total > 0:
+        k *= realized / total
+    else:
+        k[:] = realized / res.maximum if res.maximum > 0 else 0.0
+    return k, realized
+
+
+def settle(res: ShapleyTotals, shared_kwh, supplied_kwh=None, *, shared_t=None,
+           supplied_t=None) -> Billing:
+    """Crowns: Shapley values scaled to the realized benefit, payments in haléř.
+
+    With ``shared_t[T, n]`` (and ``supplied_t[T, np]``, kWh per 15-min interval, see
+    :func:`interval_scale`) every interval is scaled to the benefit realized in it, and
+    the totals shared and supplied are theirs. Without them the whole report is scaled by
+    one factor: ``supplied_kwh[np]`` is what each producer shared; it is scaled to add up
+    to the consumers' ``shared_kwh`` (they differ by the report's rounding). With one
+    producer it may be left out."""
+    p = np.asarray(res.prices, dtype=float)
+    f = np.asarray(res.feed_ins, dtype=float)
+    if shared_t is not None:
+        k, realized = interval_scale(res, shared_t, supplied_t)
+        S = np.nan_to_num(np.asarray(shared_t, dtype=float))
+        shared = S.sum(axis=0)
+        supplied = (np.array([shared.sum()]) if supplied_t is None
+                    else np.nan_to_num(np.asarray(supplied_t, dtype=float)).sum(axis=0))
+        vals = k @ res.t_values.astype(float) if len(k) else np.zeros(len(p) + len(f))
+        share, producers = vals[:len(p)], vals[len(p):]
+    else:
+        shared = np.asarray(shared_kwh, dtype=float)
+        total = float(shared.sum())
+        supplied = (np.full(len(f), total / max(len(f), 1)) if supplied_kwh is None
+                    else np.clip(np.asarray(supplied_kwh, dtype=float), 0, None))
+        if supplied.sum() > 0:
+            supplied = supplied * (total / supplied.sum())
+        realized = float((p * shared).sum() - (f * supplied).sum())
+        scale = realized / res.maximum if res.maximum > 0 else 0.0
+        k = np.full(len(res.t_index), scale)
+        share, producers = res.consumers * scale, res.producers * scale
     saving = p * shared
     payment = np.round(saving - share, 2)
     fiv = f * supplied
-    income = _haler(fiv + res.producers * scale, float(payment.sum()))
+    income = _haler(fiv + producers, float(payment.sum()))
     return Billing(prices=p, feed_ins=f, shared=shared, supplied=supplied, saving=saving,
                    share=share, payment=payment, producer_share=income - fiv,
                    producer_income=income, feed_in_value=fiv, realized=realized,
-                   maximum=res.maximum)
+                   maximum=res.maximum, t_scale=k, by_interval=shared_t is not None)
 
 
 @dataclass
@@ -493,9 +557,13 @@ class BillResult:
 
     @classmethod
     def build(cls, totals: ShapleyTotals, shared_kwh, supplied_kwh, index: pd.DatetimeIndex,
-              members: list[str], producers: list[str]) -> "BillResult":
-        return cls(totals, settle(totals, shared_kwh, supplied_kwh), index, list(members),
-                   list(producers))
+              members: list[str], producers: list[str], *, shared_t=None,
+              supplied_t=None) -> "BillResult":
+        """With ``shared_t`` / ``supplied_t`` (kWh per 15-min interval) the settlement is
+        scaled per interval (:func:`settle`)."""
+        bill = settle(totals, shared_kwh, supplied_kwh, shared_t=shared_t,
+                      supplied_t=supplied_t)
+        return cls(totals, bill, index, list(members), list(producers))
 
     @property
     def producer_cols(self) -> list[str]:
@@ -503,13 +571,12 @@ class BillResult:
 
     @cached_property
     def per_interval(self) -> pd.DataFrame:
-        """Kč per 15 min, scaled like the settlement (to the realized benefit): one
-        column per member and per producer (:func:`producer_col`); 0 in intervals
-        without anything to share."""
+        """Kč per 15 min, scaled like the settlement (to the realized benefit, per
+        interval or as a whole): one column per member and per producer
+        (:func:`producer_col`); 0 in intervals without anything to share."""
         bill, res = self.settlement, self.totals
-        scale = bill.realized / bill.maximum if bill.maximum > 0 else 0.0
         cols = self.members + self.producer_cols
         vals = np.zeros((len(self.index), len(cols)))
         if len(res.t_index):
-            vals[res.t_index] = res.t_values.astype(float) * scale
+            vals[res.t_index] = res.t_values.astype(float) * bill.t_scale[:, None]
         return pd.DataFrame(vals, index=self.index, columns=cols)
